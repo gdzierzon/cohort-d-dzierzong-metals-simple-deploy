@@ -1,0 +1,10 @@
+{
+    "python.terminal.activateEnvironment": false,
+    "python.testing.pytestArgs": [
+        "week_02",
+        "week_03",
+        "week_04"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

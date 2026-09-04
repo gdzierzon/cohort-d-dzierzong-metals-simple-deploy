@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metals
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_metals:/var/lib/postgresql/data
+      - ./sql/metals-db.sql:/docker-entrypoint-initdb.d/metals-db.sql:ro
+
+
+volumes:
+  pgdata_metals:
+
