@@ -1,0 +1,143 @@
+
+
+# db:
+# expeditors-dzierzon-db
+# metalsadmin:P@ssw0rd
+
+
+#################
+# resource group
+#################
+
+az group create `
+  --name expeditors-dzierzon-rg-metals `
+  --location westus2
+
+#################
+# Database
+#################
+
+az postgres flexible-server create `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --name expeditors-dzierzon-pg-metals `
+  --location westus2 `
+  --admin-user metalsadmin `
+  --admin-password 'P@ssw0rd' `
+  --tier Burstable `
+  --sku-name Standard_B1ms `
+  --storage-size 32 `
+  --storage-auto-grow Disabled `
+  --zonal-resiliency Disabled `
+  --backup-retention 7 `
+  --geo-redundant-backup Disabled `
+  --version 16 `
+  --public-access 0.0.0.0 `
+  --tags Environment=Development
+
+
+az postgres flexible-server db create `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --server-name expeditors-dzierzon-pg-metals `
+  --name metals
+
+######################
+# Initialize Database
+######################
+
+$env:PGPASSWORD = 'P@ssw0rd'
+$env:PGSSLMODE = 'require'
+
+psql `
+  --host=expeditors-dzierzon-pg-metals.postgres.database.azure.com `
+  --port=5432 `
+  --username=metalsadmin `
+  --dbname=metals `
+  --file=..\sql\metals-db.sql
+
+Remove-Item Env:\PGPASSWORD
+Remove-Item Env:\PGSSLMODE
+
+# when not in use
+az postgres flexible-server stop `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --name expeditors-dzierzon-pg-metals
+
+########################
+# create the app service
+########################
+
+az appservice plan create `
+  --name expeditors-dzierzon-appservice-plan `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --sku B1 `
+  --is-linux `
+  --location westus2
+
+
+az webapp create `
+  --name expeditors-dzierzon-metals-api `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --plan expeditors-dzierzon-appservice-plan `
+  --runtime "PYTHON:3.11"
+
+az webapp config set `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --name expeditors-dzierzon-metals-api `
+  --startup-file "startup.sh"
+
+az webapp config appsettings set `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --name expeditors-dzierzon-metals-api `
+  --settings DB_HOST="expeditors-dzierzon-pg-metals.postgres.database.azure.com" `
+             DB_NAME="metals" `
+             DB_USER="metalsadmin" `
+             DB_PASSWORD="P@ssw0rd" `
+             SCM_DO_BUILD_DURING_DEPLOYMENT=true
+
+###################
+# Compress / Zip
+###################
+
+Compress-Archive `
+  -Path .\app, .\scripts, .\wsgi.py, .\startup.sh, .\requirements.txt `
+  -DestinationPath .\deploy.zip `
+  -Force
+
+az webapp deploy `
+  --name expeditors-dzierzon-metals-api `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --src-path deploy.zip `
+  --type zip
+
+#####################
+# Logging
+#####################
+az webapp log config --name expeditors-dzierzon-metals-api --resource-group expeditors-dzierzon-rg-metals --application-logging filesystem --level information
+
+
+az webapp log tail --name expeditors-dzierzon-metals-api --resource-group expeditors-dzierzon-rg-metals
+
+###################
+
+
+$appName = 'expeditors-dzierzon-metals-api'
+$dbServer = 'expeditors-dzierzon-pg-metals'
+$dbUser = 'metalsadmin'
+
+$credential = Get-Credential `
+  -UserName $dbUser `
+  -Message 'Enter the PostgreSQL password'
+
+$encodedPassword = [Uri]::EscapeDataString(
+  $credential.GetNetworkCredential().Password
+)
+
+$dbUrl = "postgresql://$dbUser`:$encodedPassword@$dbServer.postgres.database.azure.com:5432/metals?sslmode=require"
+
+az webapp config appsettings set `
+  --resource-group expeditors-dzierzon-rg-metals `
+  --name $appName `
+  --settings "DB_URL=$dbUrl" "FLASK_DEBUG=0" `
+  --output none
+
+Remove-Variable credential, encodedPassword, dbUrl
