@@ -123,6 +123,6 @@ unset appName dbServer dbUser dbUserInput dbPassword encodedPassword dbUrl
 # when not in use, stop the database
 #####################################
 
-az postgres flexible-server stop \
-  --resource-group "expeditors-${userName}-metals-rg" \
-  --name "expeditors-${userName}-metals-pg"
+# az postgres flexible-server stop \
+#   --resource-group "expeditors-${userName}-metals-rg" \
+#   --name "expeditors-${userName}-metals-pg"
