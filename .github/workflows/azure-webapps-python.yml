@@ -1,0 +1,122 @@
+
+name: Build and deploy Python app to Azure Web App
+
+env:
+  AZURE_WEBAPP_NAME: expeditors-dzierzon-metals-api
+  PYTHON_VERSION: '3.11'            # match the Azure App Service runtime
+
+on:
+  push:
+    paths:
+      - 'metals_api/**'
+      - 'sql/**'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python version
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Prepare deployment package
+        run: |
+          mkdir deployment
+          rsync -a --exclude='__pycache__' --exclude='.pytest_cache' metals_api/ deployment/
+          cp requirements.txt deployment/
+
+      - name: Upload artifact for deployment jobs
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-app
+          path: deployment/
+
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_metals
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test_user -d test_metals"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: test_metals
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      PGPASSWORD: test_password
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python version
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Load database schema
+        run: psql --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" --dbname="$DB_NAME" --file=sql/metals-db.sql
+
+      - name: Run unit tests
+        run: pytest metals_api/tests
+
+  deploy:
+    permissions:
+      contents: none
+      id-token: write
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    environment:
+      name: 'Development'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v6
+        with:
+          name: python-app
+          path: .
+
+      - name: Log in to Azure using OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 'Deploy to Azure Web App'
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: .
