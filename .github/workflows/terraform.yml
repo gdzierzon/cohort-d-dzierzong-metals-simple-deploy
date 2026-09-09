@@ -1,0 +1,163 @@
+name: Terraform infrastructure
+
+on:
+  push:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Terraform operation (apply/destroy makes Azure changes)
+        type: choice
+        default: plan
+        options: [plan, apply, destroy]
+      initialize_database:
+        description: After apply, initialize an empty database (preserve existing tables)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One application state across branches; never interrupt an apply/destroy.
+concurrency:
+  group: metals-terraform-infrastructure
+  cancel-in-progress: false
+
+env:
+  TERRAFORM_VERSION: '1.16.0'
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - run: terraform -chdir=terraform fmt -check -recursive
+      - run: terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=terraform validate
+      - run: terraform -chdir=terraform test
+      - run: terraform -chdir=terraform/bootstrap init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=terraform/bootstrap validate
+      - run: terraform -chdir=terraform/bootstrap test
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'psycopg[binary]>=3.0,<4.0'
+      - run: python -m unittest discover -s terraform/tests -p 'test_*.py'
+
+  infrastructure:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: Terraform
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: 'true'
+      ARM_USE_AZUREAD: 'true'
+      ARM_CLIENT_ID: ${{ secrets.TF_AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.TF_AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.TF_AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ secrets.TF_AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_db_password: ${{ secrets.TF_DB_PASSWORD }}
+      TF_VAR_client_ip: ${{ vars.TF_CLIENT_IP }}
+      TF_VAR_user_name: ${{ vars.TF_USER_NAME || 'dzierzon' }}
+      TF_VAR_location: ${{ vars.TF_LOCATION || 'westus2' }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      OPERATION: ${{ inputs.operation }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Check required GitHub settings
+        shell: bash
+        run: |
+          for setting in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID TF_VAR_db_password TF_VAR_client_ip TF_STATE_STORAGE_ACCOUNT; do
+            if [[ -z "${!setting}" ]]; then
+              echo "::error::Missing configuration: $setting. See terraform/README.md."
+              exit 1
+            fi
+          done
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.TF_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.TF_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.TF_AZURE_SUBSCRIPTION_ID }}
+      - name: Initialize remote state
+        run: |
+          terraform -chdir=terraform init -input=false -lockfile=readonly \
+            -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=metals.tfstate"
+      - name: Plan infrastructure changes
+        shell: bash
+        run: |
+          args=()
+          if [[ "$OPERATION" == destroy ]]; then args+=(-destroy); fi
+          terraform -chdir=terraform plan -input=false -lock-timeout=5m "${args[@]}" -out workflow.tfplan
+      - name: Apply the plan from this run
+        if: inputs.operation != 'plan'
+        run: terraform -chdir=terraform apply -input=false -lock-timeout=5m workflow.tfplan
+      - name: Set up Python for database initialization
+        if: inputs.operation == 'apply' && inputs.initialize_database
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install database client
+        if: inputs.operation == 'apply' && inputs.initialize_database
+        run: python -m pip install 'psycopg[binary]>=3.0,<4.0'
+      - name: Temporarily allow this runner to initialize the database
+        id: runner_firewall
+        if: inputs.operation == 'apply' && inputs.initialize_database
+        shell: bash
+        run: |
+          runner_ip=$(curl --fail --silent --show-error --retry 3 https://api4.ipify.org)
+          python -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$runner_ip"
+          az postgres flexible-server firewall-rule create \
+            --resource-group "expeditors-${TF_VAR_user_name}-metals-rg" \
+            --server-name "expeditors-${TF_VAR_user_name}-metals-pg" \
+            --name "GitHubRunner-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
+      - name: Initialize only an empty database
+        if: inputs.operation == 'apply' && inputs.initialize_database
+        run: python terraform/scripts/initialize_database.py --skip-existing
+      - name: Remove the temporary runner firewall rule
+        if: always() && (steps.runner_firewall.outcome == 'success' || steps.runner_firewall.outcome == 'failure')
+        shell: bash
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "expeditors-${TF_VAR_user_name}-metals-rg" \
+            --server-name "expeditors-${TF_VAR_user_name}-metals-pg" \
+            --name "GitHubRunner-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --yes --output none
+      - name: Show application deployment settings
+        if: inputs.operation == 'apply'
+        shell: bash
+        run: |
+          {
+            echo '## Application workflow settings'
+            echo 'Copy these IDs to the AZURE_* repository secrets used by the application workflow.'
+            echo '```json'
+            terraform -chdir=terraform output -json github_secrets
+            echo '```'
+            echo 'Web App name:'
+            terraform -chdir=terraform output -raw webapp_name
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the local plan file
+        if: always()
+        run: rm -f terraform/workflow.tfplan

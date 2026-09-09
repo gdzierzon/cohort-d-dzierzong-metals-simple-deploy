@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and replace both placeholders.
+subscription_id = "YOUR-AZURE-SUBSCRIPTION-ID"
+client_ip       = "YOUR-PUBLIC-IPV4"
+
+user_name = "dzierzon"
+location  = "westus2"
+
+# Supply the database password through TF_VAR_db_password, not this file.
+# The defaults already match this repository's Development OIDC subject.

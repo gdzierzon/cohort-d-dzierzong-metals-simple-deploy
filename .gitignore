@@ -220,3 +220,15 @@ __marimo__/
 # Claude Code
 .claude/
 utility_scripts/deploy.zip
+
+# Terraform local state and inputs (state and plans contain credentials).
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+# Commit .terraform.lock.hcl and *.tfvars.example for reproducible demos.
+terraform/backend.hcl

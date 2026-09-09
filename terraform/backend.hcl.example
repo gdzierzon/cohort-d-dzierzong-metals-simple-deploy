@@ -1,0 +1,3 @@
+storage_account_name = "COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP"
+container_name       = "tfstate"
+key                  = "metals.tfstate"
