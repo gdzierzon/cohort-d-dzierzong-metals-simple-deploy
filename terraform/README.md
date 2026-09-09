@@ -123,6 +123,12 @@ After successful infrastructure apply, open the run summary's **Application work
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
+To display the same values locally from the shared Terraform state, first initialize the remote backend as described in [Optional local Terraform and schema operations](#optional-local-terraform-and-schema-operations), then run:
+
+```powershell
+.\terraform\scripts\show_application_deployment_secrets.ps1
+```
+
 Keep `TF_AZURE_*` secrets unchanged. The workflow prints only identifiers, not the database password. GitHub secret updates are performed manually; the infrastructure workflow is not given repository-secret write permissions.
 
 Ensure `AZURE_WEBAPP_NAME` in `.github/workflows/azure-webapps-python.yml` matches the Web App name shown in the summary, especially if you changed `TF_USER_NAME`.
