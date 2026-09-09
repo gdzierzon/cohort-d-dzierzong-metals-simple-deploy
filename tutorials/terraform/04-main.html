@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>main.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; main.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 4 of 9</p>
+        <h1>main.tf</h1>
+        <p class="lede">
+          The foundation every other file builds on. Computes a handful of shared names once, and
+          creates the <b>resource group</b> &mdash; the labeled Azure folder that every resource this
+          project creates gets placed inside.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Blocks &rarr; <b>locals</b> &middot; <b>resource</b></span>
+      <span class="fact">Resources created &rarr; <b>1</b> (resource group)</span>
+      <span class="fact">Used by &rarr; <b>every other .tf file</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#locals">The locals block</a></li>
+      <li><a href="#resource-group">The resource group</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Compute shared naming values once, and create the resource group that holds every other resource in this project.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>the foundation everything else sits on</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        In Azure, a <b>resource group</b> is a container used to organize related resources and
+        manage them as one unit &mdash; deleting a resource group deletes everything inside it. Every
+        resource this project creates (the database, the web app, the deployment identity)
+        belongs to the one resource group defined here, which is what makes a full teardown with
+        <a href="commands/06-destroy.html"><span class="mono">terraform destroy</span></a> clean and complete.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/main.tf</span>locals {
+  prefix       = "expeditors-${var.user_name}-metals"
+  db_user      = "metalsadmin"
+  db_name      = "metals"
+  oidc_subject = coalesce(var.github_federated_subject, "repo:${var.github_subject_repository}:environment:${replace(var.github_environment, ":", "%3A")}")
+}
+
+resource "azurerm_resource_group" "metals" {
+  name     = "${local.prefix}-rg"
+  location = var.location
+}</pre>
+    </section>
+
+    <section class="block" id="locals">
+      <h2>The locals block <span class="tag">shared values</span></h2>
+      <p class="dek">
+        A <span class="mono">locals</span> block computes named values once, so the rest of the
+        project can reuse them instead of repeating the same expression &mdash; and risking a typo
+        that makes two &ldquo;identical&rdquo; values quietly drift apart.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">local.prefix</span><span class="qnum">the naming backbone</span></div>
+          <pre class="code">prefix = "expeditors-${var.user_name}-metals"</pre>
+          <p class="desc">
+            Builds a string like <span class="mono">"expeditors-dzierzon-metals"</span> by
+            interpolating <span class="mono">var.user_name</span> into the middle of a fixed
+            template using <span class="mono">${...}</span> syntax. Every other file appends its
+            own suffix to this same prefix &mdash; <span class="mono">-rg</span> for the resource
+            group here, <span class="mono">-pg</span> for the database, <span class="mono">-api</span>
+            for the web app &mdash; so all resources in one deployment are instantly recognizable as
+            belonging together, and two different people running this project never collide on
+            the same resource names.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">local.db_user and local.db_name</span><span class="qnum">fixed values</span></div>
+          <p class="desc">
+            Plain constants &mdash; the PostgreSQL administrator username
+            (<span class="mono">"metalsadmin"</span>) and database name
+            (<span class="mono">"metals"</span>). They're declared once here rather than in
+            <a href="05-database.html">database.tf</a> because <a href="06-app-service.html">app_service.tf</a>
+            also needs both values, to build the API's database connection string.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">local.oidc_subject</span><span class="qnum">a computed identity string</span></div>
+          <pre class="code">oidc_subject = coalesce(
+  var.github_federated_subject,
+  "repo:${var.github_subject_repository}:environment:${replace(var.github_environment, ":", "%3A")}"
+)</pre>
+          <p class="desc">
+            This builds the exact text string GitHub Actions must present to prove its identity
+            (used in <a href="07-github-oidc.html">github_oidc.tf</a>). Reading it from the inside
+            out: <span class="mono">replace(...)</span> URL-encodes any colon inside the
+            environment name, then the surrounding string stitches together the fixed
+            <span class="mono">"repo:"</span> and <span class="mono">":environment:"</span> text
+            with the repository and environment values. <span class="mono">coalesce()</span>
+            picks the first argument that isn't <span class="mono">null</span> &mdash; so if
+            <span class="mono">var.github_federated_subject</span> was explicitly set, it's used
+            as-is instead; otherwise the computed value is used.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="resource-group">
+      <h2>The resource group <span class="tag">the first real resource</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">resource "azurerm_resource_group" "metals"</span><span class="qnum">example</span></div>
+          <pre class="code">resource "azurerm_resource_group" "metals" {
+  name     = "${local.prefix}-rg"
+  location = var.location
+}</pre>
+          <ul class="steps">
+            <li><code>resource</code> &mdash; the keyword that tells Terraform this block describes something to actually create.</li>
+            <li><code>"azurerm_resource_group"</code> &mdash; the Azure resource <b>type</b>, defined by the azurerm provider.</li>
+            <li><code>"metals"</code> &mdash; the <b>local name</b> other blocks use to refer to this resource inside Terraform, as <span class="mono">azurerm_resource_group.metals</span>. It never appears in Azure itself.</li>
+            <li><code>name</code> &mdash; the actual name Azure will show, built from <span class="mono">local.prefix</span> plus <span class="mono">-rg</span>.</li>
+            <li><code>location</code> &mdash; which Azure region, taken straight from <span class="mono">var.location</span>.</li>
+          </ul>
+          <p class="note">
+            Every other resource in this project (see <a href="05-database.html">database.tf</a>,
+            <a href="06-app-service.html">app_service.tf</a>, and
+            <a href="07-github-oidc.html">github_oidc.tf</a>) references
+            <span class="mono">azurerm_resource_group.metals.name</span> and
+            <span class="mono">.location</span> rather than repeating
+            <span class="mono">local.prefix</span> or <span class="mono">var.location</span>
+            directly &mdash; one more example of defining a value once and reusing it everywhere.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Resource group</dt>
+            <dd>An Azure container for organizing related resources and managing their lifecycle together &mdash; deleting the group deletes everything inside it.</dd>
+            <dt>Local value</dt>
+            <dd>A named expression computed once inside a <code>locals</code> block and reused elsewhere as <code>local.&lt;name&gt;</code>, similar in spirit to a variable but computed rather than supplied as input.</dd>
+            <dt>String interpolation</dt>
+            <dd>Embedding a value inside a string with <code>${...}</code>, like <code>"expeditors-${var.user_name}-metals"</code>, instead of concatenating pieces manually.</dd>
+            <dt>Resource type vs. local name</dt>
+            <dd>A resource block always has two labels: the Azure resource type (fixed by the provider) and a local name you choose, used only within Terraform to reference that resource elsewhere.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="03-variables.html"><span class="pn-label">&larr; Back</span>variables.tf</a>
+      <a class="next" href="05-database.html"><span class="pn-label">Next &rarr;</span>database.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The resource group is down &mdash; next, the database everything else depends on.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/main.tf</span>
+</footer>
+
+</body>
+</html>

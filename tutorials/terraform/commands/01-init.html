@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform init</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform init</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 1 of 8</p>
+        <h1>terraform init</h1>
+        <p class="lede">
+          Prepares a Terraform working directory to actually be used: downloads the Azure provider
+          named in <a href="../01-versions.html">versions.tf</a>, and connects to the remote state
+          location described in <a href="../02-backend.html">backend.tf</a>. It's always the first
+          command run in a fresh checkout, and the only one that talks to neither Azure resources
+          nor the state's contents &mdash; just to the provider registry and the backend storage
+          account itself.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Run first &rarr; <b>always</b></span>
+      <span class="fact">Touches real Azure resources &rarr; <b>no</b></span>
+      <span class="fact">Needs network access &rarr; <b>yes</b> (provider registry, state storage)</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Three separate jobs, one command</span><span class="qnum">breakdown</span></div>
+          <ol class="steps">
+            <li><b>Downloads the provider.</b> Reads <a href="../01-versions.html">versions.tf</a>'s <span class="mono">required_providers</span> block, and downloads the matching <span class="mono">azurerm</span> provider plugin into a local <span class="mono">.terraform/</span> folder.</li>
+            <li><b>Locks the provider version.</b> Writes (or checks, if it already exists) <span class="mono">.terraform.lock.hcl</span>, recording the exact provider version and checksums downloaded, so every future run uses the identical version.</li>
+            <li><b>Configures the backend.</b> Reads <a href="../02-backend.html">backend.tf</a> and connects to the configured remote state location, so later commands know where to read and write state.</li>
+          </ol>
+          <p class="note">
+            Init does not read or evaluate any <span class="mono">resource</span> blocks, and it
+            does not contact Azure's resource APIs at all &mdash; it only needs to reach the Terraform
+            provider registry and, if a backend is configured, the state storage account.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            Run it from inside the folder containing the <span class="mono">.tf</span> files you
+            want to work with. This project has <b>two separate root modules</b>, and each needs
+            its own independent <span class="mono">init</span>:
+          </p>
+          <pre class="code">terraform -chdir=terraform init
+terraform -chdir=terraform/bootstrap init</pre>
+          <p class="desc">
+            <span class="mono">-chdir=&lt;path&gt;</span> tells Terraform to run as if you'd
+            <span class="mono">cd</span>'d into that folder first, without actually changing your
+            shell's working directory &mdash; useful from a repository root, and the pattern this
+            project's README and GitHub Actions workflow use throughout.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Terraform CLI is installed, at a version satisfying <a href="../01-versions.html">versions.tf</a>'s <span class="mono">required_version</span> (1.7 or later, below 2.0).</li>
+            <li>Network access to <span class="mono">registry.terraform.io</span> (or an internal mirror) to download the provider.</li>
+            <li>If initializing with a real backend: the state storage account and container already exist &mdash; created once by <a href="../09-bootstrap.html">bootstrap/main.tf</a> &mdash; and you're authenticated (<span class="mono">az login</span>) as an identity with the <span class="mono">Storage Blob Data Contributor</span> role on that container.</li>
+            <li>For offline / structural checks only, that last requirement can be skipped entirely with <span class="mono">-backend=false</span>.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>A local <span class="mono">.terraform/</span> folder exists, containing the downloaded provider plugin.</li>
+            <li><span class="mono">.terraform.lock.hcl</span> is present and up to date &mdash; commit this file to Git so everyone uses the same provider version.</li>
+            <li>If a backend was configured, Terraform is connected to it: later commands (<span class="mono">plan</span>, <span class="mono">apply</span>, <span class="mono">output</span>) will read and write state there instead of a local file.</li>
+            <li>No Azure resources have been created, changed, or inspected yet.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Local, with a backend file</span><span class="qnum">terraform/README.md</span></div>
+          <pre class="code">terraform -chdir=terraform init -backend-config backend.hcl</pre>
+          <p class="desc">Uses the partial-configuration file described on the <a href="../02-backend.html">backend.tf page</a> to supply the storage account, container, and state file name.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">In GitHub Actions</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">terraform -chdir=terraform init -input=false -lockfile=readonly \
+  -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=metals.tfstate"</pre>
+          <p class="desc">
+            <span class="mono">-input=false</span> stops Terraform from pausing for interactive
+            prompts in a non-interactive CI job. <span class="mono">-lockfile=readonly</span>
+            uses the committed <span class="mono">.terraform.lock.hcl</span> exactly as-is,
+            without letting the workflow silently upgrade provider versions on its own.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Offline, for validation only</span><span class="qnum">CI's validate job &amp; local checks</span></div>
+          <pre class="code">terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly</pre>
+          <p class="desc">Downloads the provider so <a href="03-validate.html">terraform validate</a> and <a href="08-test.html">terraform test</a> can run, without ever touching the real state backend &mdash; used by this project's CI checks on every push and pull request.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Migrating existing local state</span><span class="qnum">one-time, per README step 3</span></div>
+          <pre class="code">terraform -chdir=terraform init -migrate-state -backend-config backend.hcl</pre>
+          <p class="desc">Used only when someone previously ran Terraform locally (with local state) and needs to copy that state into the new shared backend, instead of starting from an empty remote state against already-existing resources.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Backend configuration changed&rdquo;</td><td>The backend settings on disk (in <span class="mono">.terraform/</span>) don't match what you just supplied.</td><td>Re-run with <span class="mono">-reconfigure</span> to discard the old settings, or <span class="mono">-migrate-state</span> if you actually want to move existing state.</td></tr>
+            <tr><td>Authorization / 403 error reaching the storage account</td><td>Your Azure identity doesn't have the <span class="mono">Storage Blob Data Contributor</span> role on the <span class="mono">tfstate</span> container.</td><td>Run <span class="mono">az login</span> with the correct account, and confirm the role assignment from <a href="../09-bootstrap.html">bootstrap/main.tf</a> was actually applied.</td></tr>
+            <tr><td>Storage account or container not found</td><td>Bootstrap hasn't been run yet, or the storage account name in <span class="mono">backend.hcl</span> / <span class="mono">-backend-config</span> is wrong.</td><td>Run <a href="../09-bootstrap.html">bootstrap/main.tf</a> first, then copy its <span class="mono">TF_STATE_STORAGE_ACCOUNT</span> output exactly.</td></tr>
+            <tr><td>&ldquo;Failed to install provider&rdquo;</td><td>No network access to the provider registry, or a corporate proxy/firewall is blocking it.</td><td>Check your internet connection; if behind a proxy, configure Terraform's provider installation settings accordingly.</td></tr>
+            <tr><td>&ldquo;Unsupported Terraform Core version&rdquo;</td><td>The installed <span class="mono">terraform</span> CLI doesn't satisfy <a href="../01-versions.html">versions.tf</a>'s <span class="mono">required_version</span>.</td><td>Install a Terraform CLI version between 1.7 and 2.0 (this project's workflows use 1.16.0).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>All commands</a>
+      <a class="next" href="02-fmt.html"><span class="pn-label">Next &rarr;</span>terraform fmt</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The workspace is ready &mdash; next, a command that just tidies things up.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">terraform/README.md</span>, <span class="mono">.github/workflows/terraform.yml</span>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>app_service.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; app_service.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 6 of 9</p>
+        <h1>app_service.tf</h1>
+        <p class="lede">
+          Creates the Azure Web App that actually runs the Flask API, along with the App Service Plan
+          that hosts it, and tells the app everything it needs to know to connect to the database.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Resources created &rarr; <b>2</b></span>
+      <span class="fact">Runtime &rarr; <b>Linux &middot; Python 3.11</b></span>
+      <span class="fact">Plan tier &rarr; <b>B1 (Basic)</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#plan">The App Service Plan</a></li>
+      <li><a href="#webapp">The web app resource</a></li>
+      <li><a href="#site-config">Site config: how the app starts</a></li>
+      <li><a href="#app-settings">App settings: passing in the database connection</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Provision the hosting plan and the web app that runs the Flask API, and configure it to connect to the database created in <a href="05-database.html">database.tf</a>.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>where the API actually runs</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        This is the piece of infrastructure the API's own code (covered by a future tutorial)
+        actually runs on top of. Terraform's job here stops at creating the empty, configured
+        hosting environment &mdash; the application code itself gets deployed into it separately by
+        the <span class="mono">azure-webapps-python.yml</span> GitHub Actions workflow.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/app_service.tf</span>resource "azurerm_service_plan" "metals" {
+  name                = "${local.prefix}-appservice-plan"
+  resource_group_name = azurerm_resource_group.metals.name
+  location            = azurerm_resource_group.metals.location
+  os_type             = "Linux"
+  sku_name            = "B1"
+}
+
+resource "azurerm_linux_web_app" "metals" {
+  name                = "${local.prefix}-api"
+  resource_group_name = azurerm_resource_group.metals.name
+  location            = azurerm_service_plan.metals.location
+  service_plan_id     = azurerm_service_plan.metals.id
+
+  # Deployment authenticates through OIDC, not a publish profile.
+  ftp_publish_basic_authentication_enabled       = false
+  webdeploy_publish_basic_authentication_enabled = false
+
+  site_config {
+    always_on        = false
+    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 app:app"
+
+    application_stack {
+      python_version = "3.11"
+    }
+  }
+
+  app_settings = {
+    DB_HOST                        = azurerm_postgresql_flexible_server.metals.fqdn
+    DB_NAME                        = azurerm_postgresql_flexible_server_database.metals.name
+    DB_USER                        = local.db_user
+    DB_PASSWORD                    = var.db_password
+    DB_URL                         = "postgresql://${local.db_user}:${replace(urlencode(var.db_password), "+", "%20")}@${azurerm_postgresql_flexible_server.metals.fqdn}:5432/${local.db_name}?sslmode=require"
+    SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
+    FLASK_DEBUG                    = "0"
+  }
+}</pre>
+    </section>
+
+    <section class="block" id="plan">
+      <h2>The App Service Plan <span class="tag">azurerm_service_plan</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What a service plan is</span><span class="qnum">the hosting slot</span></div>
+          <p class="desc">
+            An App Service Plan is the actual compute capacity &mdash; think of it as renting a slot
+            of server hardware. The web app resource below doesn't include its own hardware; it
+            gets deployed <i>onto</i> a plan. One plan can even host multiple web apps, though this
+            project only puts one app on it.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">os_type = "Linux"</span><span class="qnum">operating system</span></div>
+          <p class="desc">Runs Linux rather than Windows. Azure App Service supports both; Python apps on Azure typically run on Linux.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">sku_name = "B1"</span><span class="qnum">pricing tier</span></div>
+          <p class="desc">
+            The <b>Basic</b> tier, size 1 &mdash; enough compute for development and light traffic,
+            at a lower cost than the Standard or Premium tiers meant for production workloads.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="webapp">
+      <h2>The web app resource <span class="tag">azurerm_linux_web_app</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">service_plan_id</span><span class="qnum">attaching to its plan</span></div>
+          <p class="desc">
+            <span class="mono">service_plan_id = azurerm_service_plan.metals.id</span> is the
+            reference that actually places this app onto the plan created above &mdash; the same
+            reference pattern used throughout this project to connect resources without
+            hardcoding IDs.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">ftp_publish_basic_authentication_enabled = false<br>webdeploy_publish_basic_authentication_enabled = false</span><span class="qnum">security</span></div>
+          <p class="desc">
+            Azure Web Apps normally support deploying code over FTP or WebDeploy using a simple
+            username/password (a &ldquo;publish profile&rdquo;). Both are turned off here, because
+            this project's deployment instead authenticates using the OIDC identity built in
+            <a href="07-github-oidc.html">github_oidc.tf</a> &mdash; one less password-style
+            credential that could leak.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="site-config">
+      <h2>Site config: how the app starts <span class="tag">site_config</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">always_on = false</span><span class="qnum">cost vs. responsiveness</span></div>
+          <p class="desc">
+            When <span class="mono">false</span>, Azure can let the app go idle after a period of
+            no traffic, and it takes a moment to wake back up on the next request. Turning this
+            <span class="mono">true</span> keeps the app running (and billed) continuously; this
+            project accepts the occasional cold start to save cost in a development environment.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">app_command_line</span><span class="qnum">how the app actually starts</span></div>
+          <pre class="code">app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 app:app"</pre>
+          <p class="desc">
+            The exact command Azure runs to start the application. <span class="mono">gunicorn</span>
+            is a production-grade Python web server; <span class="mono">--bind=0.0.0.0</span>
+            listens on all network interfaces (required so Azure can route traffic to it),
+            <span class="mono">--timeout 600</span> allows up to 10 minutes for a single request
+            before giving up, and <span class="mono">app:app</span> tells Gunicorn to run the
+            Flask application object named <span class="mono">app</span> inside the Python module
+            <span class="mono">app.py</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">application_stack { python_version = "3.11" }</span><span class="qnum">runtime</span></div>
+          <p class="desc">Tells Azure which managed language runtime to install and run the app under &mdash; Python 3.11.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="app-settings">
+      <h2>App settings: passing in the database connection <span class="tag">app_settings</span></h2>
+      <p class="dek">
+        <span class="mono">app_settings</span> becomes environment variables inside the running
+        app &mdash; this is how the Flask API, without any hardcoded values of its own, learns how to
+        reach the database that <a href="05-database.html">database.tf</a> created.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">DB_HOST, DB_NAME, DB_USER, DB_PASSWORD</span><span class="qnum">individual pieces</span></div>
+          <p class="desc">
+            Four separate values the app can read individually if it prefers to build its own
+            connection: the database server's address
+            (<span class="mono">azurerm_postgresql_flexible_server.metals.fqdn</span>), the
+            database name, the admin username, and the password &mdash; each pulled from the same
+            resources and variables used to create the database itself, so they can never drift
+            out of sync with the real values.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">DB_URL</span><span class="qnum">one ready-to-use connection string</span></div>
+          <pre class="code">DB_URL = "postgresql://${local.db_user}:${replace(urlencode(var.db_password), "+", "%20")}@${azurerm_postgresql_flexible_server.metals.fqdn}:5432/${local.db_name}?sslmode=require"</pre>
+          <p class="desc">
+            The same information as the four settings above, pre-assembled into one standard
+            PostgreSQL connection URL, for code that prefers a single connection string.
+            <span class="mono">urlencode()</span> escapes any characters in the password that
+            would otherwise break the URL's structure (like <span class="mono">@</span> or
+            <span class="mono">:</span>); the surrounding <span class="mono">replace()</span> then
+            swaps <span class="mono">urlencode()</span>'s <span class="mono">+</span> (its way of
+            encoding a space) for <span class="mono">%20</span>, the encoding most PostgreSQL
+            client libraries expect instead. <span class="mono">?sslmode=require</span> at the end
+            forces the connection to use encryption.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">SCM_DO_BUILD_DURING_DEPLOYMENT = "true"</span><span class="qnum">deployment behavior</span></div>
+          <p class="desc">
+            Tells Azure's deployment engine (Kudu) to run its normal Python build steps &mdash;
+            installing <span class="mono">requirements.txt</span> dependencies &mdash; every time new
+            code is deployed, rather than expecting a pre-built package.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">FLASK_DEBUG = "0"</span><span class="qnum">production-style behavior</span></div>
+          <p class="desc">Disables Flask's debug mode. Debug mode is convenient locally (auto-reload, detailed error pages) but is a security risk if left on for anything reachable from the internet.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>App Service Plan</dt>
+            <dd>The compute capacity a web app runs on in Azure &mdash; its size and pricing tier. Distinct from the web app resource itself, which is the application configuration deployed onto that capacity.</dd>
+            <dt>Environment variable</dt>
+            <dd>A named value made available to a running program by its operating environment, rather than hardcoded in its source code. Terraform's <code>app_settings</code> map becomes these inside the web app.</dd>
+            <dt>Gunicorn</dt>
+            <dd>A widely-used production web server for Python applications, responsible for actually receiving HTTP requests and handing them to the Flask app.</dd>
+            <dt>URL encoding</dt>
+            <dd>Converting characters that have special meaning inside a URL (like <code>@</code>, <code>:</code>, or a space) into a safe escaped form, so the URL still parses correctly.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="05-database.html"><span class="pn-label">&larr; Back</span>database.tf</a>
+      <a class="next" href="07-github-oidc.html"><span class="pn-label">Next &rarr;</span>github_oidc.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The API has somewhere to run and knows how to reach the database &mdash; next, how GitHub gets in.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/app_service.tf</span>
+</footer>
+
+</body>
+</html>

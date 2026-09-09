@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>backend.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; backend.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 2 of 9</p>
+        <h1>backend.tf</h1>
+        <p class="lede">
+          Tells Terraform to store its memory of what it built &mdash; its <b>state</b> &mdash; in a shared
+          Azure Storage location instead of a file on one person's laptop, so anyone on the team, or
+          GitHub Actions, sees the same up-to-date picture of the infrastructure.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Backend type &rarr; <b>azurerm</b></span>
+      <span class="fact">Auth method &rarr; <b>Microsoft Entra ID</b></span>
+      <span class="fact">Filled in via &rarr; <b>backend.hcl</b> (not committed)</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#why-remote">Why not just use a local file?</a></li>
+      <li><a href="#partial-config">Why the file looks so empty</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Configure where Terraform stores its state, using a shared Azure Storage location instead of a local file.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>where the memory lives</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Terraform's state file is the single most important thing it manages besides your actual
+        cloud resources &mdash; it's the record of what Terraform believes already exists. This file
+        decides where that record lives.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/backend.tf</span># Backend location is supplied by the workflow or a local backend.hcl file.
+# The bootstrap configuration has separate local state and is not destroyed here.
+terraform {
+  backend "azurerm" {
+    use_azuread_auth = true
+  }
+}</pre>
+      <p class="desc" style="max-width:44rem;">
+        That's the entire file &mdash; and that's intentional. Most of the information a backend
+        needs (which storage account, which container, which file name) is deliberately
+        <i>not</i> written here.
+      </p>
+    </section>
+
+    <section class="block" id="why-remote">
+      <h2>Why not just use a local state file? <span class="tag">the problem this solves</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The default: state on your own laptop</span><span class="qnum">local backend</span></div>
+          <p class="desc">
+            If a project doesn't configure a backend at all, Terraform quietly writes its state to
+            a local <span class="mono">terraform.tfstate</span> file. That works fine for one
+            person experimenting alone, but it breaks down the moment a second person, or an
+            automated process like GitHub Actions, also needs to run Terraform &mdash; there's no
+            single, current copy of the state everyone shares.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The fix: a shared remote backend</span><span class="qnum">azurerm backend</span></div>
+          <p class="desc">
+            The <span class="mono">azurerm</span> backend type stores state as a blob inside an
+            Azure Storage account instead. Whoever runs Terraform &mdash; a teammate locally, or the
+            GitHub Actions workflow &mdash; reads and writes the exact same state file. Azure
+            Storage also locks the state file while a run is in progress, so two runs can't
+            corrupt it by writing at the same time.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">use_azuread_auth = true</span><span class="qnum">the one setting here</span></div>
+          <p class="desc">
+            This tells Terraform to authenticate to the storage account using your (or the
+            workflow's) Azure identity, rather than a separate storage access key that would need
+            to be generated, stored as a secret, and rotated on its own. One less secret to manage.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="partial-config">
+      <h2>Why the file looks so empty <span class="tag">partial configuration</span></h2>
+      <p class="dek">
+        A full <span class="mono">azurerm</span> backend configuration also needs a storage
+        account name, a container name, and a file name (called the state <b>key</b>). None of
+        those appear in <span class="mono">backend.tf</span> &mdash; they're supplied separately,
+        every time Terraform is initialized. This pattern is called <b>partial configuration</b>.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Locally: backend.hcl</span><span class="qnum">terraform/backend.hcl.example</span></div>
+          <pre class="code"><span class="filename">terraform/backend.hcl.example</span>storage_account_name = "COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP"
+container_name       = "tfstate"
+key                  = "metals.tfstate"</pre>
+          <p class="desc">
+            You copy this example file to <span class="mono">backend.hcl</span>, fill in the real
+            storage account name, and run:
+          </p>
+          <pre class="code">terraform -chdir=terraform init -backend-config backend.hcl</pre>
+          <p class="note"><span class="mono">backend.hcl</span> is listed in <span class="mono">.gitignore</span> and never committed &mdash; the storage account name isn't secret, but keeping the real file out of Git avoids every clone needing its own edit merged back in.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">In GitHub Actions: command-line flags</span><span class="qnum">no file needed</span></div>
+          <pre class="code">terraform -chdir=terraform init -input=false -lockfile=readonly \
+  -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=metals.tfstate"</pre>
+          <p class="desc">
+            The workflow supplies the same three values as individual
+            <span class="mono">-backend-config</span> flags instead of a file, pulling the storage
+            account name from a GitHub Actions variable. Same backend, same partial-configuration
+            pattern, just filled in a different way.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Where the storage account itself comes from</span><span class="qnum">chicken-and-egg</span></div>
+          <p class="desc">
+            The storage account referenced here has to exist <i>before</i> this backend can use
+            it &mdash; but this project's main Terraform configuration is what creates most Azure
+            resources. That's exactly what <a href="09-bootstrap.html">bootstrap/main.tf</a> is
+            for: a separate, one-time setup that creates the state storage account first, with its
+            own independent state.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>State</dt>
+            <dd>Terraform's record of exactly what it has created and how those pieces relate to each other. Terraform compares this record to your <code>.tf</code> files, and to real Azure, every time it runs.</dd>
+            <dt>Backend</dt>
+            <dd>The place Terraform stores its state. The default is a local file; this project uses the <code>azurerm</code> backend to store it remotely instead.</dd>
+            <dt>Partial configuration</dt>
+            <dd>Writing only some backend settings in <code>backend.tf</code>, and supplying the rest later at <a href="commands/01-init.html"><code>terraform init</code></a> time &mdash; useful when a value (like a storage account name) shouldn't be hardcoded into a committed file.</dd>
+            <dt>State locking</dt>
+            <dd>A safety mechanism that prevents two Terraform runs from writing to the same state at the same time, avoiding a corrupted or conflicting record.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-versions.html"><span class="pn-label">&larr; Back</span>versions.tf</a>
+      <a class="next" href="03-variables.html"><span class="pn-label">Next &rarr;</span>variables.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>State has a safe home &mdash; now let's fill in the inputs Terraform needs from you.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/backend.tf</span>, <span class="mono">terraform/backend.hcl.example</span>
+</footer>
+
+</body>
+</html>

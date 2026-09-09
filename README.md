@@ -17,3 +17,14 @@ Follow the [step-by-step Terraform guide](terraform/README.md):
 The application **destroy** operation preserves the bootstrap identity and state storage so the demo can be recreated through Actions. Recreating the application identity requires updating its `AZURE_CLIENT_ID`; the infrastructure `TF_AZURE_*` secrets remain unchanged.
 
 The original Azure CLI scripts belong to the manual-provisioning lesson. Terraform now manages the application resources in this branch. Switching Git branches does not delete or import Azure resources.
+
+## Manual-provisioning scripts
+
+The manual Azure CLI lesson has equivalent PowerShell and Bash scripts. Authenticate first with `az login`, then choose the command for your shell:
+
+| Task | PowerShell | Bash |
+| --- | --- | --- |
+| Create resources | `.\utility_scripts\az_create_resources.ps1` | `bash utility_scripts/az_create_resources.sh` |
+| Deploy the application | `.\utility_scripts\az_deploy.ps1` | `bash utility_scripts/az_deploy.sh` |
+| Preview deletion | `.\utility_scripts\az_delete_resources.ps1 -WhatIf` | `bash utility_scripts/az_delete_resources.sh --what-if` |
+| Delete resources | `.\utility_scripts\az_delete_resources.ps1` | `bash utility_scripts/az_delete_resources.sh` |

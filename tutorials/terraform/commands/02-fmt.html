@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform fmt</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform fmt</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 2 of 8</p>
+        <h1>terraform fmt</h1>
+        <p class="lede">
+          Rewrites <span class="mono">.tf</span> files into Terraform's canonical formatting &mdash;
+          consistent indentation, aligned <span class="mono">=</span> signs, consistent spacing.
+          It never changes what a configuration <i>means</i>, only how it looks on the page.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Changes meaning &rarr; <b>never</b></span>
+      <span class="fact">Needs init first &rarr; <b>no</b></span>
+      <span class="fact">Used in CI as &rarr; <b>a check, not a rewrite</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            <span class="mono">fmt</span> is purely cosmetic. It parses each
+            <span class="mono">.tf</span> file, and rewrites it using Terraform's standard style
+            rules: two-space indentation, argument values aligned into neat columns inside a
+            block, consistent blank lines. Two people writing the same configuration by hand might
+            format it slightly differently &mdash; <span class="mono">fmt</span> removes that
+            variation, so every file in the project reads the same way no matter who last edited it.
+          </p>
+          <p class="note">Unlike every other command on this page, <span class="mono">fmt</span> never contacts Azure, never reads state, and doesn't even need <a href="01-init.html">terraform init</a> to have been run first &mdash; it only needs valid HCL syntax to parse.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform fmt -recursive</pre>
+          <p class="desc">
+            <span class="mono">-recursive</span> also formats files in subdirectories &mdash; in
+            this project, that includes <a href="../09-bootstrap.html">terraform/bootstrap/</a>.
+            Without it, <span class="mono">fmt</span> only touches <span class="mono">.tf</span>
+            files directly inside the folder you ran it from.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Terraform CLI is installed. Nothing else &mdash; no <span class="mono">init</span>, no Azure login, no state.</li>
+            <li>Every file being formatted has to be syntactically valid HCL. <span class="mono">fmt</span> can fix spacing around broken syntax in some cases, but it cannot invent missing braces or fix a genuinely malformed file.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Every <span class="mono">.tf</span> file in scope is rewritten in place to canonical formatting (unless <span class="mono">-check</span> was used &mdash; see below).</li>
+            <li>No resources, state, or configuration <i>meaning</i> changed at all &mdash; only whitespace and alignment.</li>
+            <li>The command prints the names of any files it changed, or nothing if everything was already formatted.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">In CI: check, don't rewrite</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">terraform -chdir=terraform fmt -check -recursive</pre>
+          <p class="desc">
+            <span class="mono">-check</span> changes the command's behavior: instead of rewriting
+            files, it only reports whether any file <i>would</i> be changed, and exits with a
+            non-zero status if so &mdash; which fails the CI job. This is deliberate: an automated
+            pipeline shouldn't silently rewrite and commit code on your behalf; it should tell a
+            human the formatting is off so they can fix it locally.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Locally: actually fix it</span><span class="qnum">before committing</span></div>
+          <pre class="code">terraform -chdir=terraform fmt -recursive</pre>
+          <p class="desc">Run this (without <span class="mono">-check</span>) any time before committing, so the CI check above passes on the first try.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>CI fails on <span class="mono">fmt -check -recursive</span></td><td>Someone committed a <span class="mono">.tf</span> file that wasn't run through <span class="mono">fmt</span> first.</td><td>Run <span class="mono">terraform fmt -recursive</span> locally, review the diff, and commit the result.</td></tr>
+            <tr><td>&ldquo;Argument or block definition required&rdquo; / parse error</td><td>The file has an actual HCL syntax error &mdash; a missing brace, quote, or equals sign &mdash; not just messy formatting.</td><td><span class="mono">fmt</span> can't fix broken syntax; open the file and correct the structure by hand, then re-run <span class="mono">fmt</span>.</td></tr>
+            <tr><td>Nothing happens / no files listed</td><td>Everything was already correctly formatted.</td><td>Nothing to fix &mdash; this is the expected, successful result.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-init.html"><span class="pn-label">&larr; Back</span>terraform init</a>
+      <a class="next" href="03-validate.html"><span class="pn-label">Next &rarr;</span>terraform validate</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Tidy files, same meaning &mdash; next, a command that actually checks that meaning is correct.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>
+</footer>
+
+</body>
+</html>

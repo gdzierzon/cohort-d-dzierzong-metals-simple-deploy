@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform destroy</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform destroy</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 6 of 8</p>
+        <h1>terraform destroy</h1>
+        <p class="lede">
+          Removes every resource Terraform is tracking in state. It's the mirror image of
+          <a href="05-apply.html">terraform apply</a> &mdash; instead of making reality match the
+          configuration, it makes reality match an <i>empty</i> configuration.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>yes, deletes</b></span>
+      <span class="fact">Reversible &rarr; <b>no</b> (data included)</span>
+      <span class="fact">In this project &rarr; <b>plan -destroy, then apply</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            Running <span class="mono">terraform destroy</span> directly is shorthand for two
+            steps combined: it computes a plan where every resource in state is marked for
+            deletion (the same as <a href="04-plan.html">terraform plan</a><span class="mono"> -destroy</span>),
+            shows it to you, and &mdash; after you confirm &mdash; applies that plan, deleting each
+            resource from Azure in an order that respects dependencies (in reverse of how they
+            were created).
+          </p>
+          <p class="warn">
+            This is the one command on this page with real, permanent consequences beyond
+            infrastructure: destroying <a href="../05-database.html">database.tf</a>'s PostgreSQL
+            server deletes every row of data inside it, with no built-in undo. Back up anything
+            that matters before running this against a database you care about.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform destroy</pre>
+          <p class="desc">
+            Note that this only ever affects the resources tracked by <i>that folder's</i> state.
+            Running it inside <span class="mono">terraform/</span> never touches
+            <a href="../09-bootstrap.html">terraform/bootstrap/</a>'s resources &mdash; the state
+            storage account and the Terraform deployment identity &mdash; because they live in a
+            completely separate state file. Destroying bootstrap requires deliberately running
+            the same command inside that folder instead.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> completed, connected to the same backend the resources were created through.</li>
+            <li>Azure credentials with delete permission for every resource being removed.</li>
+            <li>Any data you want to keep has already been backed up &mdash; destroy does not prompt you to export anything first.</li>
+            <li>Nothing outside Terraform's knowledge still depends on the resources being removed (for example, a manually-created resource pointing at one of them).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Every resource that was tracked in this folder's state has been deleted from Azure.</li>
+            <li>State is updated to reflect that nothing remains &mdash; an empty (or near-empty) state file.</li>
+            <li>Any outputs that depended on the destroyed resources are no longer available.</li>
+            <li>Resources belonging to a <i>different</i> state (like <a href="../09-bootstrap.html">bootstrap</a>'s storage account and identity) are completely untouched.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Not a literal &ldquo;destroy&rdquo; command</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">args=()
+if [[ "$OPERATION" == destroy ]]; then args+=(-destroy); fi
+terraform -chdir=terraform plan -input=false -lock-timeout=5m "${args[@]}" -out workflow.tfplan
+...
+terraform -chdir=terraform apply -input=false -lock-timeout=5m workflow.tfplan</pre>
+          <p class="desc">
+            Selecting <b>destroy</b> in this project's GitHub Actions workflow never actually runs
+            the bare <span class="mono">terraform destroy</span> command. Instead it runs
+            <a href="04-plan.html">terraform plan</a><span class="mono"> -destroy</span> to
+            produce a destroy-flavored plan, then <a href="05-apply.html">terraform apply</a>'s
+            that exact plan &mdash; the same reviewed-plan-then-apply pattern used for every other
+            operation, so a destroy gets the identical safety guarantees (a plan captured in the
+            job log, locking, no stale-plan risk) as a normal apply.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What survives a destroy</span><span class="qnum">by design</span></div>
+          <p class="desc">
+            After the application infrastructure is destroyed, the bootstrap resource group, state
+            storage account, and Terraform deployment identity are all still there &mdash; ready for
+            the same project to be re-applied later without repeating the one-time bootstrap setup.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>A resource fails to delete with a dependency conflict</td><td>Something outside Terraform's knowledge still references the resource (a manually created resource, or a lingering firewall rule).</td><td>Remove the external dependency first, then re-run <span class="mono">destroy</span>.</td></tr>
+            <tr><td>A resource is &ldquo;not found&rdquo; during destroy</td><td>It was already deleted outside of Terraform (for example, manually in the Portal).</td><td>Terraform generally treats this as already-satisfied and removes it from state; if it errors instead, run <span class="mono">terraform state rm &lt;address&gt;</span> to drop it from tracking manually.</td></tr>
+            <tr><td>&ldquo;Error acquiring the state lock&rdquo;</td><td>Another run is using the same state concurrently.</td><td>Wait for it to finish; this project's workflow concurrency group prevents overlapping infrastructure runs.</td></tr>
+            <tr><td>Data is gone after running this against the database</td><td>This is expected, correct behavior &mdash; destroy permanently deletes the PostgreSQL server and all its data.</td><td>Restore from a backup made beforehand; there is no way to recover data after the fact through Terraform.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="05-apply.html"><span class="pn-label">&larr; Back</span>terraform apply</a>
+      <a class="next" href="07-output.html"><span class="pn-label">Next &rarr;</span>terraform output</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Torn down cleanly, bootstrap untouched &mdash; next, reading back what a run actually produced.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>, <span class="mono">terraform/README.md</span>
+</footer>
+
+</body>
+</html>

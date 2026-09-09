@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform apply</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform apply</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 5 of 8</p>
+        <h1>terraform apply</h1>
+        <p class="lede">
+          Executes a plan for real: creates, changes, or destroys actual Azure resources so they
+          match the configuration, and updates the stored state to reflect the new reality. This
+          is the only command on this page that permanently changes anything.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>yes, creates/changes</b></span>
+      <span class="fact">Reversible &rarr; <b>only via another apply/destroy</b></span>
+      <span class="fact">Confirmation &rarr; <b>interactive prompt, unless a saved plan or -auto-approve</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Two ways to run it</span><span class="qnum">breakdown</span></div>
+          <ul class="steps">
+            <li><b>Without a saved plan</b> (<span class="mono">terraform apply</span> alone): Terraform computes a fresh plan itself, shows it, and pauses for you to type <span class="mono">yes</span> before doing anything.</li>
+            <li><b>With a saved plan</b> (<span class="mono">terraform apply workflow.tfplan</span>): Terraform executes exactly that plan, with no further confirmation prompt &mdash; the confirmation already happened implicitly when the plan was reviewed and chosen to be applied.</li>
+          </ul>
+          <p class="desc">Either way, once it starts, Terraform calls the Azure APIs to actually create, modify, or delete each resource in the plan, in an order that respects dependencies between them (the resource group before anything inside it, for example), and writes the result back to state as it goes &mdash; not just at the very end.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform apply</pre>
+          <p class="desc">Same folder as the matching <a href="04-plan.html">terraform plan</a>. If applying a saved plan file, that file has to be one this exact folder's <span class="mono">plan</span> produced &mdash; you can't apply a plan file generated somewhere else.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> completed, with a real backend connection.</li>
+            <li>Either a fresh, valid plan can be computed, or a previously saved plan file exists and reality hasn't changed since it was generated.</li>
+            <li>Azure credentials with <i>write</i> permission for every resource in the plan &mdash; not just read access, which was enough for <a href="04-plan.html">terraform plan</a>'s refresh step.</li>
+            <li>Every required variable still has the same values it had when the plan was generated (if applying a saved plan, these are baked into the plan file itself).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Real Azure resources now match the configuration: created, updated, or removed exactly as the plan described.</li>
+            <li>State is updated and saved back to the backend, reflecting the new reality &mdash; this is what later commands (another <span class="mono">plan</span>, or <a href="07-output.html">terraform output</a>) will read.</li>
+            <li>Any <a href="../08-outputs.html">outputs.tf</a> values are (re)computed and available.</li>
+            <li>If it fails partway through, resources it already successfully created remain tracked in state &mdash; re-running <span class="mono">apply</span> after fixing the problem picks up from there rather than starting over.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Applying the plan from the same run</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">terraform -chdir=terraform apply -input=false -lock-timeout=5m workflow.tfplan</pre>
+          <p class="desc">
+            Only runs when the workflow's chosen operation isn't <span class="mono">plan</span>.
+            Every apply (and destroy) in this project applies a plan generated moments earlier in
+            the very same job &mdash; never an old, possibly stale plan from a previous run &mdash; so
+            what gets applied always matches what was just reviewed.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What happens right after</span><span class="qnum">database init &amp; summary</span></div>
+          <p class="desc">
+            Once apply succeeds for a real (non-destroy) run, the workflow optionally runs
+            <span class="mono">terraform/scripts/initialize_database.py</span> to load starting
+            data into the now-existing, empty database, then prints
+            <a href="07-output.html">terraform output</a> values to the job summary for the next
+            setup step.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Saved plan is stale&rdquo;</td><td>Real infrastructure or state changed between when the plan file was generated and when you tried to apply it.</td><td>Discard the old plan file and run <a href="04-plan.html">terraform plan</a> again to get a current one.</td></tr>
+            <tr><td>&ldquo;A resource with this name already exists&rdquo;</td><td>An Azure resource name (often one requiring global uniqueness, like a storage account) collides with something that already exists.</td><td>Choose a different name, or reuse/import the existing resource if it's actually meant to be the same one.</td></tr>
+            <tr><td>Authorization / 403 during apply</td><td>The identity has read access but not enough write permission for a specific resource type.</td><td>Check the role assignments in <a href="../07-github-oidc.html">github_oidc.tf</a> or <a href="../09-bootstrap.html">bootstrap/main.tf</a> cover the resource being changed.</td></tr>
+            <tr><td>Quota exceeded</td><td>The Azure subscription has hit its limit for a resource type or region.</td><td>In a shared teaching subscription, ask whoever manages it before switching regions or retrying &mdash; changing region without coordination can cause more confusion mid-class.</td></tr>
+            <tr><td>Database password rejected by Azure</td><td>The password passed this project's own length validation in <a href="../03-variables.html">variables.tf</a>, but doesn't meet Azure PostgreSQL's own complexity rules.</td><td>Choose a password mixing uppercase, lowercase, digits, and symbols, within the required length.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="04-plan.html"><span class="pn-label">&larr; Back</span>terraform plan</a>
+      <a class="next" href="06-destroy.html"><span class="pn-label">Next &rarr;</span>terraform destroy</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Real infrastructure now exists &mdash; next, how to take it away again cleanly.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>
+</footer>
+
+</body>
+</html>

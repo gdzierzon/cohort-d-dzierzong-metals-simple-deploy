@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform plan</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform plan</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 4 of 8</p>
+        <h1>terraform plan</h1>
+        <p class="lede">
+          Compares the configuration against the real state of Azure, and shows exactly what it
+          would create, change, or destroy &mdash; without touching anything yet. This is Terraform's
+          preview step, and the single most important safety net in the whole workflow.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>reads only</b></span>
+      <span class="fact">Needs Azure login &rarr; <b>yes</b></span>
+      <span class="fact">Can be saved &rarr; <b>-out &lt;file&gt;</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Three steps, in order</span><span class="qnum">breakdown</span></div>
+          <ol class="steps">
+            <li><b>Refresh.</b> Reads the current state, and checks the real Azure resources it describes, to see if anything has drifted (for example, someone editing a resource by hand in the Portal).</li>
+            <li><b>Diff.</b> Compares the refreshed picture of reality against what the <span class="mono">.tf</span> files say <i>should</i> exist.</li>
+            <li><b>Report.</b> Prints a human-readable list of every resource that would be created (<span class="mono">+</span>), changed in place (<span class="mono">~</span>), destroyed (<span class="mono">-</span>), or replaced (destroy then re-create, shown as <span class="mono">-/+</span>).</li>
+          </ol>
+          <p class="note">Nothing is created, changed, or destroyed by <span class="mono">plan</span> itself &mdash; it only computes and displays what <i>would</i> happen. Nothing is real until <a href="05-apply.html">terraform apply</a> runs.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform plan</pre>
+          <p class="desc">Same working-directory pattern as every other command: run it against the folder holding the configuration you want to preview, after that folder has already been initialized.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> has completed, with a real backend connection (not <span class="mono">-backend=false</span>) &mdash; plan needs to read the current state.</li>
+            <li>You're authenticated to Azure (<span class="mono">az login</span> locally, or the OIDC identity in CI) with at least read access to the resources involved, so the refresh step can check their current status.</li>
+            <li>Every required variable without a default &mdash; <span class="mono">subscription_id</span>, <span class="mono">db_password</span>, <span class="mono">client_ip</span> &mdash; has a value supplied, whether from <span class="mono">terraform.tfvars</span>, <span class="mono">TF_VAR_*</span> environment variables, or <span class="mono">-var</span> flags. See <a href="../03-variables.html">variables.tf</a> for the full list.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>No Azure resources are created, changed, or destroyed &mdash; plan only reads.</li>
+            <li>State is <i>not</i> permanently updated by a plain <span class="mono">plan</span> (the refresh happens in memory for the comparison, but nothing is written back to the stored state file).</li>
+            <li>If <span class="mono">-out &lt;file&gt;</span> was used, a binary plan file is written to disk. Treat it as sensitive &mdash; it can contain values like the database password in plain form &mdash; and this project's workflow deletes it at the end of every run.</li>
+            <li>With <span class="mono">-detailed-exitcode</span>, the exit code itself communicates the result: <span class="mono">0</span> = no changes, <span class="mono">1</span> = error, <span class="mono">2</span> = changes are pending.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Building the plan the workflow will apply</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">args=()
+if [[ "$OPERATION" == destroy ]]; then args+=(-destroy); fi
+terraform -chdir=terraform plan -input=false -lock-timeout=5m "${args[@]}" -out workflow.tfplan</pre>
+          <p class="desc">
+            The workflow always runs <span class="mono">plan</span> first, saving its result to
+            <span class="mono">workflow.tfplan</span>. The <span class="mono">-destroy</span> flag
+            turns this into a <i>destroy plan</i> instead of a normal one &mdash; this project doesn't
+            call a separate <span class="mono">terraform destroy</span> command at all; it reuses
+            this exact same plan-then-apply pattern for both directions, so both operations get
+            the same review-before-apply treatment. See <a href="06-destroy.html">terraform destroy</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Locally, for a quick look</span><span class="qnum">terraform/README.md</span></div>
+          <pre class="code">terraform -chdir=terraform plan</pre>
+          <p class="desc">Without <span class="mono">-out</span>, this is a read-only preview with nothing saved &mdash; useful for a quick sanity check, but not something a later <span class="mono">apply</span> can replay exactly.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;No value for required variable&rdquo;</td><td>A required variable (like <span class="mono">db_password</span> or <span class="mono">client_ip</span>) wasn't supplied anywhere.</td><td>Set it via <span class="mono">TF_VAR_&lt;name&gt;</span>, <span class="mono">terraform.tfvars</span>, or <span class="mono">-var</span>. See <a href="../03-variables.html">variables.tf</a>.</td></tr>
+            <tr><td>Authentication / authorization error during refresh</td><td>Not logged in to Azure, logged in as the wrong account, or missing read permission on an existing resource.</td><td>Run <span class="mono">az login</span> (or check the OIDC secrets in CI); confirm the identity has at least read access to the resource group.</td></tr>
+            <tr><td>&ldquo;Error acquiring the state lock&rdquo;</td><td>Another Terraform run (a teammate, or an overlapping CI job) is already using this state.</td><td>Wait for the other run to finish. This project's workflow also serializes runs with a concurrency group so overlapping jobs queue instead of colliding.</td></tr>
+            <tr><td>Unexpected changes to resources you didn't touch</td><td>Someone edited a resource manually in the Azure Portal, and Terraform's refresh detected the drift.</td><td>Decide whether to accept Terraform's plan to fix the drift, or update the <span class="mono">.tf</span> files to match the manual change &mdash; but avoid manual Portal edits on Terraform-managed resources going forward.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="03-validate.html"><span class="pn-label">&larr; Back</span>terraform validate</a>
+      <a class="next" href="05-apply.html"><span class="pn-label">Next &rarr;</span>terraform apply</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The preview looks right &mdash; next, making it real.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>, <span class="mono">terraform/README.md</span>
+</footer>
+
+</body>
+</html>

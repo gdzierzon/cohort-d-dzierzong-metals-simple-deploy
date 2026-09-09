@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform validate</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform validate</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 3 of 8</p>
+        <h1>terraform validate</h1>
+        <p class="lede">
+          Checks that a configuration is internally consistent &mdash; correct argument types,
+          required arguments present, references that actually resolve &mdash; without contacting
+          Azure or requiring valid Azure credentials. It catches a whole class of mistakes before
+          they ever reach a real cloud API call.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>no</b></span>
+      <span class="fact">Needs Azure login &rarr; <b>no</b></span>
+      <span class="fact">Needs init first &rarr; <b>yes</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            <span class="mono">validate</span> checks a configuration against the rules the
+            provider's schema defines, using only the files and the already-downloaded provider
+            plugin &mdash; it never calls out to Azure's APIs. It catches things like: a required
+            argument left out of a resource block, an argument that doesn't exist for that
+            resource type (often from a typo, or a provider version upgrade that renamed
+            something), a reference to a resource or variable that was never declared, or a value
+            of the wrong type.
+          </p>
+          <p class="note">
+            It's the fast, cheap check &mdash; it can run in a second or two, entirely offline, which
+            is why this project runs it on every push and pull request, before anything slower
+            like <a href="04-plan.html">terraform plan</a> is even attempted.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform validate
+terraform -chdir=terraform/bootstrap validate</pre>
+          <p class="desc">Run separately for each of this project's two independent root modules &mdash; validating one tells you nothing about the other.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> must have already run successfully in this folder &mdash; <span class="mono">validate</span> needs the provider's schema, downloaded during init, to know what arguments each resource type accepts.</li>
+            <li>A real backend connection is <i>not</i> required &mdash; <span class="mono">init -backend=false</span> is enough, which is exactly how this project's offline checks run it.</li>
+            <li>No Azure login, subscription access, or real variable values (like the database password) are required just to validate the structure.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>No changes to any file, state, or Azure resource &mdash; this command is read-only.</li>
+            <li>Prints <span class="mono">Success! The configuration is valid.</span>, or a list of specific errors, each pointing to the exact file and line responsible.</li>
+            <li>A successful <span class="mono">validate</span> does <i>not</i> guarantee a later <a href="04-plan.html">terraform plan</a> or <a href="05-apply.html">terraform apply</a> will succeed &mdash; it only confirms the configuration is structurally sound, not that Azure will accept every value (a taken resource name, for example, can still fail later).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">In CI, right after an offline init</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly
+terraform -chdir=terraform validate
+terraform -chdir=terraform test
+terraform -chdir=terraform/bootstrap init -backend=false -input=false -lockfile=readonly
+terraform -chdir=terraform/bootstrap validate</pre>
+          <p class="desc">This is this project's <span class="mono">validate</span> job: it runs on every push and pull request touching <span class="mono">terraform/**</span>, entirely without Azure credentials, so a broken configuration is caught immediately &mdash; long before anyone would try an actual <a href="05-apply.html">apply</a>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Could not load plugin&rdquo;</td><td><a href="01-init.html">terraform init</a> hasn't been run in this folder yet.</td><td>Run <span class="mono">terraform init</span> (<span class="mono">-backend=false</span> is fine) first.</td></tr>
+            <tr><td>&ldquo;Reference to undeclared resource&rdquo;</td><td>A block references another resource's local name that doesn't exist &mdash; usually a typo.</td><td>Check the resource's actual local name (the second label in its <span class="mono">resource</span> block) and correct the reference.</td></tr>
+            <tr><td>&ldquo;Missing required argument&rdquo;</td><td>A resource block is missing an argument the provider requires.</td><td>Check the corresponding file's tutorial page for that resource, or the provider documentation, for the full list of required arguments.</td></tr>
+            <tr><td>&ldquo;Unsupported argument&rdquo;</td><td>An argument name is misspelled, or was renamed/removed by a provider version upgrade.</td><td>Compare against <a href="../01-versions.html">versions.tf</a>'s pinned provider version and its changelog.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-fmt.html"><span class="pn-label">&larr; Back</span>terraform fmt</a>
+      <a class="next" href="04-plan.html"><span class="pn-label">Next &rarr;</span>terraform plan</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Structurally sound &mdash; now let's actually preview what it would do against real Azure.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>
+</footer>
+
+</body>
+</html>

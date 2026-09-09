@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terraform Commands</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; Commands</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; Commands</p>
+        <h1>The Terraform Commands, One at a Time</h1>
+        <p class="lede">
+          Knowing what each <span class="mono">.tf</span> file means only gets you halfway &mdash;
+          Terraform is a command-line tool, and every one of those files only matters once a
+          command reads it. This section slows down on the eight commands this project actually
+          uses: what each one does, where to run it from, what has to already be true before you
+          run it, what becomes true after it succeeds, and the errors people run into most often.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Commands covered &rarr; <b>8</b></span>
+      <span class="fact">Core workflow &rarr; <b>init &middot; fmt &middot; validate &middot; plan &middot; apply / destroy</b></span>
+      <span class="fact">Also covered &rarr; <b>output &middot; test</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns: 1fr;">
+  <main>
+
+    <section class="block" id="order">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The order these usually run in <span class="tag">a typical session</span></h2>
+          <p class="dek">
+            You won't run all eight every time, but when you do use several together, this is the
+            order they tend to happen in &mdash; each one assumes the one before it already succeeded.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one command leads to the next</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><a href="01-init.html"><b>terraform init</b></a> &mdash; set up the working directory once, before anything else.</li>
+            <li><a href="02-fmt.html"><b>terraform fmt</b></a> &mdash; tidy up formatting before committing changes.</li>
+            <li><a href="03-validate.html"><b>terraform validate</b></a> &mdash; catch structural mistakes early, without touching Azure.</li>
+            <li><a href="04-plan.html"><b>terraform plan</b></a> &mdash; preview exactly what would change.</li>
+            <li><a href="05-apply.html"><b>terraform apply</b></a> &mdash; make the real Azure changes.</li>
+            <li><a href="06-destroy.html"><b>terraform destroy</b></a> &mdash; remove everything, when you're done.</li>
+            <li><a href="07-output.html"><b>terraform output</b></a> &mdash; read back the values a completed run produced.</li>
+            <li><a href="08-test.html"><b>terraform test</b></a> &mdash; run automated checks any time, independent of the steps above.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="commands">
+      <h2>Pick a command <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-init.html"><span class="mnum">Command 1 of 8</span><h3>terraform init</h3><p>Prepares the working directory: downloads the provider and connects to state.</p></a>
+        <a class="module-card" href="02-fmt.html"><span class="mnum">Command 2 of 8</span><h3>terraform fmt</h3><p>Rewrites files into consistent, canonical formatting.</p></a>
+        <a class="module-card" href="03-validate.html"><span class="mnum">Command 3 of 8</span><h3>terraform validate</h3><p>Checks the configuration for structural mistakes, offline.</p></a>
+        <a class="module-card" href="04-plan.html"><span class="mnum">Command 4 of 8</span><h3>terraform plan</h3><p>Previews exactly what would change, before anything happens.</p></a>
+        <a class="module-card" href="05-apply.html"><span class="mnum">Command 5 of 8</span><h3>terraform apply</h3><p>Actually creates or updates the real Azure resources.</p></a>
+        <a class="module-card" href="06-destroy.html"><span class="mnum">Command 6 of 8</span><h3>terraform destroy</h3><p>Removes everything Terraform created, cleanly.</p></a>
+        <a class="module-card" href="07-output.html"><span class="mnum">Command 7 of 8</span><h3>terraform output</h3><p>Reads back the values published in outputs.tf.</p></a>
+        <a class="module-card" href="08-test.html"><span class="mnum">Command 8 of 8</span><h3>terraform test</h3><p>Runs automated checks against a mock provider, no Azure required.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Pick a command above &mdash; each page ends with the errors people actually hit, and how to fix them.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">terraform/README.md</span> shows these commands as they're actually
+  run in this project, locally and in GitHub Actions.
+</footer>
+
+</body>
+</html>

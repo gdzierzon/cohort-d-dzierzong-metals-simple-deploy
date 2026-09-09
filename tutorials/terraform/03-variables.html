@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>variables.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; variables.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 3 of 9</p>
+        <h1>variables.tf</h1>
+        <p class="lede">
+          A fill-in-the-blank form. It lists every piece of information Terraform needs from a
+          person, or from GitHub Actions, before it can run &mdash; things that change per-user or
+          per-environment, like the database password, instead of being hardcoded into the files.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Variables defined &rarr; <b>7</b></span>
+      <span class="fact">Sensitive &rarr; <b>db_password</b></span>
+      <span class="fact">With validation &rarr; <b>3</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#anatomy">Anatomy of a variable</a></li>
+      <li><a href="#each">Each variable, explained</a></li>
+      <li><a href="#supplying">Supplying values</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Declare every input Terraform needs, along with a description, a type, and (where it matters) a default value or a validation rule.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>filling in the blanks</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Nothing here is hardcoded to one person's Azure subscription, one password, or one IP
+        address &mdash; because those things are different for every person who runs this project.
+        <span class="mono">variables.tf</span> is the single place all of that &ldquo;it
+        depends&rdquo; information is declared, so the rest of the files can reference it by name
+        instead of repeating it.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/variables.tf</span>variable "subscription_id" {
+  description = "Azure subscription to use; authenticate locally with az login."
+  type        = string
+}
+
+variable "user_name" {
+  description = "Name segment shared by the original PowerShell scripts."
+  type        = string
+  default     = "dzierzon"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,24}$", var.user_name))
+    error_message = "Use 1&ndash;25 lowercase letters, digits, or hyphens, starting with a letter."
+  }
+}
+
+variable "location" {
+  description = "Azure region used by the original resource script."
+  type        = string
+  default     = "westus2"
+}
+
+variable "db_password" {
+  description = "PostgreSQL administrator password. Supply using TF_VAR_db_password."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.db_password) >= 8 && length(var.db_password) <= 128
+    error_message = "Use a password between 8 and 128 characters that meets Azure PostgreSQL password requirements."
+  }
+}
+
+variable "client_ip" {
+  description = "Your public IPv4 address, allowed to initialize the database."
+  type        = string
+
+  validation {
+    condition     = can(cidrnetmask("${var.client_ip}/32")) && var.client_ip != "0.0.0.0"
+    error_message = "Supply one nonzero IPv4 address, without a CIDR suffix."
+  }
+}
+
+variable "github_environment" {
+  description = "Must match the environment selected by the deployment workflow."
+  type        = string
+  default     = "Development"
+}
+
+variable "github_subject_repository" {
+  description = "Repository portion of the exact GitHub OIDC subject, including immutable IDs when present."
+  type        = string
+  default     = "gdzierzon@9723466/cohort-d-dzierzong-metals-simple-deploy@1361521533"
+}
+
+variable "github_federated_subject" {
+  description = "Optional full subject override for repositories with a custom OIDC format."
+  type        = string
+  default     = null
+}</pre>
+    </section>
+
+    <section class="block" id="anatomy">
+      <h2>Anatomy of a variable block <span class="tag">structure</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">variable "name" { ... }</span><span class="qnum">example</span></div>
+          <pre class="code">variable "location" {
+  description = "Azure region used by the original resource script."
+  type        = string
+  default     = "westus2"
+}</pre>
+          <ul class="steps">
+            <li><code>variable "location"</code> &mdash; declares an input named <span class="mono">location</span>, referenced elsewhere as <span class="mono">var.location</span>.</li>
+            <li><code>description</code> &mdash; documentation shown when someone runs <a href="commands/04-plan.html"><span class="mono">terraform plan</span></a> without supplying a value, or looks at the file directly.</li>
+            <li><code>type</code> &mdash; the kind of value expected. Every variable in this file is a <span class="mono">string</span>.</li>
+            <li><code>default</code> &mdash; the value used automatically if nobody supplies one. Not every variable has one &mdash; that's deliberate, covered below.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="each">
+      <h2>Each variable, explained <span class="tag">walkthrough</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">subscription_id</span><span class="qnum">required, no default</span></div>
+          <p class="desc">
+            Which Azure subscription to create resources in. There's no default because there
+            isn't a sensible one &mdash; every person's subscription ID is different, so leaving this
+            out forces you to supply your own rather than accidentally deploying into someone
+            else's.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">user_name</span><span class="qnum">default + validation</span></div>
+          <p class="desc">
+            A short name segment used to build resource names throughout the project (see
+            <a href="04-main.html">main.tf</a>'s <span class="mono">local.prefix</span>). Defaults
+            to <span class="mono">"dzierzon"</span>. The <span class="mono">validation</span>
+            block rejects anything that isn't 1&ndash;25 lowercase letters, digits, or hyphens
+            starting with a letter &mdash; the same character restrictions Azure resource names
+            themselves tend to require, checked here instead of failing partway through a real
+            deployment.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">location</span><span class="qnum">default, no validation</span></div>
+          <p class="desc">Which Azure region to deploy into. Defaults to <span class="mono">"westus2"</span>. Any valid Azure region name works if it's overridden.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">db_password</span><span class="qnum">sensitive + validation</span></div>
+          <p class="desc">
+            The PostgreSQL administrator password. Marked <span class="mono">sensitive = true</span>,
+            which tells Terraform to hide its value in <span class="mono">plan</span> and
+            <span class="mono">apply</span> output &mdash; it still ends up in the state file, which
+            is exactly why the state file is protected in a private, access-controlled storage
+            location rather than committed to Git. The validation enforces an 8&ndash;128 character
+            length, matching what Azure Database for PostgreSQL requires.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">client_ip</span><span class="qnum">required + validation</span></div>
+          <p class="desc">
+            Your own public IPv4 address, used later to open a firewall rule so you can connect
+            to the database. The validation uses Terraform's <span class="mono">cidrnetmask()</span>
+            function as a trick to confirm the value parses as a real IPv4 address, and separately
+            rejects the placeholder value <span class="mono">"0.0.0.0"</span>, which would mean
+            &ldquo;every address on the internet&rdquo; if it slipped through.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_environment</span><span class="qnum">default</span></div>
+          <p class="desc">Which GitHub Actions <b>environment</b> name the deployment identity should trust. Defaults to <span class="mono">"Development"</span>, matching the environment configured in this repository's GitHub settings.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_subject_repository</span><span class="qnum">default</span></div>
+          <p class="desc">
+            The repository identity portion used to build the exact string GitHub presents when
+            it authenticates to Azure (covered in detail on the
+            <a href="07-github-oidc.html">github_oidc.tf page</a>). Defaults to this repository's
+            own value, so someone forking or copying the project for a different repository would
+            override it.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_federated_subject</span><span class="qnum">optional override, default null</span></div>
+          <p class="desc">
+            An escape hatch: if a repository's OIDC subject doesn't follow the standard pattern
+            this project assumes, this variable can override the whole computed value directly.
+            <span class="mono">default = null</span> means &ldquo;not set&rdquo; &mdash; when left alone,
+            <a href="04-main.html">main.tf</a>'s <span class="mono">coalesce()</span> falls back to
+            building the subject from <span class="mono">github_subject_repository</span> instead.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="supplying">
+      <h2>Supplying values <span class="tag">how the blanks get filled in</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">terraform.tfvars</span><span class="qnum">local, everyday values</span></div>
+          <pre class="code"><span class="filename">terraform/terraform.tfvars.example</span># Copy to terraform.tfvars and replace both placeholders.
+subscription_id = "YOUR-AZURE-SUBSCRIPTION-ID"
+client_ip       = "YOUR-PUBLIC-IPV4"
+
+user_name = "dzierzon"
+location  = "westus2"
+
+# Supply the database password through TF_VAR_db_password, not this file.
+# The defaults already match this repository's Development OIDC subject.</pre>
+          <p class="desc">
+            Terraform automatically loads a file named <span class="mono">terraform.tfvars</span>
+            if one exists, so copying this example and filling in your own values is the normal
+            local workflow. It's listed in <span class="mono">.gitignore</span> and never
+            committed, since it can contain personal or environment-specific values.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">TF_VAR_ environment variables</span><span class="qnum">secrets</span></div>
+          <p class="desc">
+            Terraform also reads any environment variable named <span class="mono">TF_VAR_&lt;name&gt;</span>
+            as that variable's value &mdash; for example, <span class="mono">TF_VAR_db_password</span>
+            sets <span class="mono">var.db_password</span>. This project deliberately keeps the
+            password out of any file, tvars included, and relies on this mechanism instead, both
+            locally and as a GitHub Actions secret exposed the same way.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Variable</dt>
+            <dd>A named input a Terraform configuration accepts, declared with a <code>variable</code> block and referenced elsewhere as <code>var.&lt;name&gt;</code>.</dd>
+            <dt>Default value</dt>
+            <dd>The value Terraform uses automatically if nothing else supplies one. A variable with no default becomes required &mdash; Terraform will stop and ask for it.</dd>
+            <dt>Validation block</dt>
+            <dd>An extra rule attached to a variable that rejects bad input immediately, with a clear error message, instead of letting an invalid value cause a confusing failure later.</dd>
+            <dt>Sensitive</dt>
+            <dd>A flag that hides a variable's value from Terraform's normal console output. It does not encrypt the value in the state file &mdash; that's why protecting the state file itself still matters.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-backend.html"><span class="pn-label">&larr; Back</span>backend.tf</a>
+      <a class="next" href="04-main.html"><span class="pn-label">Next &rarr;</span>main.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Every blank is accounted for &mdash; time to build the resource group everything else lives in.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/variables.tf</span>, <span class="mono">terraform/terraform.tfvars.example</span>
+</footer>
+
+</body>
+</html>

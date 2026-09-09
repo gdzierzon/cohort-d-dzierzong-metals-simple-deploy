@@ -109,7 +109,7 @@ Invoke-Az postgres flexible-server db create `
 Invoke-Az postgres flexible-server firewall-rule create `
     --resource-group $resourceGroup `
     --server-name $dbServer `
-    --rule-name "LocalClient-$($ClientIp.Replace('.', '-'))" `
+    --name "LocalClient-$($ClientIp.Replace('.', '-'))" `
     --start-ip-address $ClientIp `
     --end-ip-address $ClientIp `
     --output none

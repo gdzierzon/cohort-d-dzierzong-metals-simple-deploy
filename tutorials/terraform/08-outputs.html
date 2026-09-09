@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>outputs.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; outputs.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 8 of 9</p>
+        <h1>outputs.tf</h1>
+        <p class="lede">
+          The receipt. After Terraform finishes creating or updating everything, this file decides
+          which details get printed back &mdash; the web app's URL, the identifiers needed to configure
+          application deployment, and the database connection details other tooling needs.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Outputs defined &rarr; <b>5</b></span>
+      <span class="fact">Contains secrets &rarr; <b>no</b> (IDs only)</span>
+      <span class="fact">Read with &rarr; <b>terraform output</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#each">Each output, explained</a></li>
+      <li><a href="#reading">Reading outputs after apply</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Expose the specific values people and other tools need after Terraform runs &mdash; without requiring anyone to dig through the state file directly.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>here's what got built</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Terraform's state file contains far more detail than anyone actually needs to read by
+        hand. Outputs are a deliberate, curated summary: exactly the handful of values someone
+        setting up application deployment, or writing a script, would actually want.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/outputs.tf</span>output "resource_group_name" {
+  value = azurerm_resource_group.metals.name
+}
+
+output "webapp_name" {
+  description = "Must match AZURE_WEBAPP_NAME in the GitHub Actions workflow."
+  value       = azurerm_linux_web_app.metals.name
+}
+
+output "webapp_url" {
+  value = "https://${azurerm_linux_web_app.metals.default_hostname}"
+}
+
+output "database" {
+  description = "Connection details for the schema loader; password is supplied separately."
+  value = {
+    host    = azurerm_postgresql_flexible_server.metals.fqdn
+    port    = 5432
+    user    = local.db_user
+    dbname  = azurerm_postgresql_flexible_server_database.metals.name
+    sslmode = "require"
+  }
+}
+
+output "github_secrets" {
+  description = "Copy these IDs to GitHub repository secrets. These are identifiers, not passwords."
+  value = {
+    AZURE_CLIENT_ID       = azurerm_user_assigned_identity.github.client_id
+    AZURE_TENANT_ID       = azurerm_user_assigned_identity.github.tenant_id
+    AZURE_SUBSCRIPTION_ID = var.subscription_id
+  }
+}
+
+output "github_federated_subject" {
+  value = azurerm_federated_identity_credential.github.subject
+}</pre>
+    </section>
+
+    <section class="block" id="each">
+      <h2>Each output, explained <span class="tag">walkthrough</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">resource_group_name</span><span class="qnum">simple value</span></div>
+          <p class="desc">The name of the resource group created in <a href="04-main.html">main.tf</a> &mdash; useful for scripting anything that needs to target it, like the Azure CLI commands the GitHub Actions workflow runs directly.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">webapp_name</span><span class="qnum">must stay in sync</span></div>
+          <p class="desc">
+            The web app's name. The <span class="mono">description</span> is a pointed reminder:
+            this value must match <span class="mono">AZURE_WEBAPP_NAME</span> hardcoded in
+            <span class="mono">.github/workflows/azure-webapps-python.yml</span>, since that
+            separate workflow deploys application code to the app by name, not by looking it up
+            through Terraform.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">webapp_url</span><span class="qnum">computed value</span></div>
+          <pre class="code">value = "https://${azurerm_linux_web_app.metals.default_hostname}"</pre>
+          <p class="desc">
+            An output's value doesn't have to be a plain attribute &mdash; here it's a small
+            expression, wrapping the web app's auto-generated hostname in a full, clickable
+            <span class="mono">https://</span> URL.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">database</span><span class="qnum">a structured output</span></div>
+          <p class="desc">
+            An output's value can also be a whole object, not just a single string &mdash; here, a
+            small map of connection details (<span class="mono">host</span>,
+            <span class="mono">port</span>, <span class="mono">user</span>,
+            <span class="mono">dbname</span>, <span class="mono">sslmode</span>). Notice the
+            password is deliberately left out; this output is consumed by
+            <span class="mono">terraform/scripts/initialize_database.py</span>, which loads the
+            password separately from the same <span class="mono">TF_VAR_db_password</span> source
+            Terraform itself uses, rather than round-tripping it through an output.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_secrets</span><span class="qnum">setup instructions, as data</span></div>
+          <p class="desc">
+            The three identifiers someone needs to paste into the application deployment
+            workflow's GitHub environment secrets (<span class="mono">AZURE_CLIENT_ID</span>,
+            <span class="mono">AZURE_TENANT_ID</span>, <span class="mono">AZURE_SUBSCRIPTION_ID</span>),
+            grouped into one output so a single command prints exactly what's needed. As the
+            description notes, these are identifiers that describe <i>which</i> identity to use
+            &mdash; not secrets that grant access on their own; the OIDC trust relationship from
+            <a href="07-github-oidc.html">github_oidc.tf</a> is what actually authorizes access.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_federated_subject</span><span class="qnum">for troubleshooting</span></div>
+          <p class="desc">Echoes back the exact OIDC subject string Azure was configured to trust, so it can be compared directly against a GitHub Actions error message if authentication ever fails &mdash; a quick way to spot a mismatch.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="reading">
+      <h2>Reading outputs after apply <span class="tag">how they get used</span></h2>
+      <p class="dek">This is a quick preview &mdash; <a href="commands/07-output.html">terraform output</a> has its own full page covering preconditions, postconditions, and common errors. <a href="commands/07-output.html">(dig deeper)</a></p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Command</th><th>What it shows</th></tr></thead>
+          <tbody>
+            <tr><td><a href="commands/07-output.html"><code>terraform output</code></a></td><td>All outputs, formatted for a person to read.</td></tr>
+            <tr><td><a href="commands/07-output.html"><code>terraform output -raw webapp_url</code></a></td><td>One output's value only, with no extra formatting &mdash; useful in scripts.</td></tr>
+            <tr><td><a href="commands/07-output.html"><code>terraform output -json github_secrets</code></a></td><td>One structured output as JSON, so another program can parse it directly.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        The GitHub Actions workflow in this project uses exactly this pattern: after
+        <a href="commands/05-apply.html"><span class="mono">apply</span></a>, it runs
+        <span class="mono">terraform output -json github_secrets</span> and
+        <span class="mono">terraform output -raw webapp_name</span> and writes both into the
+        workflow's job summary, so whoever ran it can copy the values straight into GitHub
+        settings without opening a terminal.
+      </p>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Output</dt>
+            <dd>A named value a Terraform configuration exposes after running, chosen deliberately by the file's author rather than requiring someone to read the raw state file.</dd>
+            <dt>Structured output</dt>
+            <dd>An output whose value is an object or map (multiple named fields) rather than a single string or number.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="07-github-oidc.html"><span class="pn-label">&larr; Back</span>github_oidc.tf</a>
+      <a class="next" href="09-bootstrap.html"><span class="pn-label">Next &rarr;</span>bootstrap/main.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That covers the main project &mdash; one more page for the one-time setup that comes before it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/outputs.tf</span>
+</footer>
+
+</body>
+</html>

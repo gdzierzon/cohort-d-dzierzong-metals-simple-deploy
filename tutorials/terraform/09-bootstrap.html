@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bootstrap/main.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; bootstrap/main.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 9 of 9</p>
+        <h1>bootstrap/main.tf</h1>
+        <p class="lede">
+          A separate, one-time setup that has to run <i>before</i> everything covered so far. It
+          creates the safe, shared storage location where the main project's state lives, and a
+          dedicated identity that GitHub Actions uses to run the main project's Terraform &mdash; solving
+          the chicken-and-egg problem of &ldquo;where does Terraform's own memory live before Terraform
+          has anywhere to put it?&rdquo;
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Run &rarr; <b>once, locally, by an administrator</b></span>
+      <span class="fact">State &rarr; <b>separate from the main project</b></span>
+      <span class="fact">Folder &rarr; <b>terraform/bootstrap/</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#why-separate">Why this is a separate configuration</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#state-storage">The state storage account</a></li>
+      <li><a href="#identity">The Terraform identity</a></li>
+      <li><a href="#roles">The role assignments</a></li>
+      <li><a href="#outputs">The outputs</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Create the storage account that holds the main project's Terraform state, and a dedicated Azure identity that GitHub Actions uses to run that main project &mdash; before the main project itself can exist.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey hugging a rubber duck">
+          <figcaption>solving the chicken-and-egg problem</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Every file covered earlier in this tutorial describes infrastructure that <i>uses</i> a
+        remote state backend (<a href="02-backend.html">backend.tf</a>) and an OIDC identity
+        (<a href="07-github-oidc.html">github_oidc.tf</a>). Something has to create that storage
+        account and that first identity in the first place &mdash; and it can't be the main project's
+        own Terraform run, because that run needs somewhere to store its state before it even
+        starts. Bootstrap breaks that cycle.
+      </p>
+    </section>
+
+    <section class="block" id="why-separate">
+      <h2>Why this is a separate configuration <span class="tag">not part of the main project</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Its own state, its own lifecycle</span><span class="qnum">independence</span></div>
+          <p class="desc">
+            <span class="mono">terraform/bootstrap/</span> is a completely separate Terraform
+            root module, with its own local <span class="mono">terraform.tfstate</span> file
+            (deliberately <i>not</i> stored remotely &mdash; there's nowhere remote for it to go yet).
+            It is run manually, once, by someone with broad Azure permissions (like a subscription
+            Owner), and the main application workflow never touches it. Running
+            <a href="commands/06-destroy.html"><span class="mono">terraform destroy</span></a> on the main project in
+            <span class="mono">terraform/</span> removes the application resources, but leaves
+            the bootstrap resources &mdash; the state storage and the deployment identity &mdash;
+            completely alone.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Broader permissions, on purpose</span><span class="qnum">a security boundary</span></div>
+          <p class="desc">
+            The identity created here needs subscription-level permissions, because it has to be
+            able to create and destroy the application's entire resource group. That's
+            meaningfully broader than the narrow, single-web-app permission granted in
+            <a href="07-github-oidc.html">github_oidc.tf</a>. Keeping that broader-privilege setup
+            in a separate, manually-run configuration &mdash; rather than something any application
+            code change could trigger &mdash; is a deliberate safety boundary.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/bootstrap/main.tf</span># Run once locally with an Azure administrator account.
+# This root module deliberately has separate state from the application.
+terraform {
+  required_version = ">= 1.7, < 2.0"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 5.2.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id
+  resource_providers_to_register = [
+    "Microsoft.Storage", "Microsoft.ManagedIdentity",
+    "Microsoft.Web", "Microsoft.DBforPostgreSQL",
+  ]
+}
+
+variable "subscription_id" {
+  type = string
+}
+
+variable "user_name" {
+  type    = string
+  default = "dzierzon"
+}
+
+variable "location" {
+  type    = string
+  default = "westus2"
+}
+
+variable "github_subject_repository" {
+  type    = string
+  default = "gdzierzon@9723466/cohort-d-dzierzong-metals-simple-deploy@1361521533"
+}
+
+data "azurerm_client_config" "current" {}
+
+locals {
+  subscription_scope = "/subscriptions/${var.subscription_id}"
+}
+
+resource "azurerm_resource_group" "bootstrap" {
+  name     = "expeditors-${var.user_name}-terraform-rg"
+  location = var.location
+}
+
+resource "azurerm_storage_account" "state" {
+  name                            = "tfmetals${substr(sha256("${var.subscription_id}/${var.user_name}"), 0, 16)}"
+  resource_group_name             = azurerm_resource_group.bootstrap.name
+  location                        = azurerm_resource_group.bootstrap.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  shared_access_key_enabled       = false
+  allow_nested_items_to_be_public = false
+  min_tls_version                 = "TLS1_2"
+
+  blob_properties {
+    versioning_enabled = true
+    delete_retention_policy {
+      days = 7
+    }
+  }
+}
+
+resource "azurerm_storage_container" "state" {
+  name                  = "tfstate"
+  storage_account_id    = azurerm_storage_account.state.id
+  container_access_type = "private"
+}
+
+resource "azurerm_user_assigned_identity" "terraform" {
+  name                = "expeditors-${var.user_name}-terraform-github"
+  resource_group_name = azurerm_resource_group.bootstrap.name
+  location            = azurerm_resource_group.bootstrap.location
+}
+
+resource "azurerm_federated_identity_credential" "terraform" {
+  name                      = "github-terraform"
+  user_assigned_identity_id = azurerm_user_assigned_identity.terraform.id
+  issuer                    = "https://token.actions.githubusercontent.com"
+  audience                  = ["api://AzureADTokenExchange"]
+  subject                   = "repo:${var.github_subject_repository}:environment:Terraform"
+}
+
+# Subscription scope is needed because the application resource group itself
+# is created/destroyed by the workflow. Use a dedicated teaching subscription.
+resource "azurerm_role_assignment" "infrastructure" {
+  scope                = local.subscription_scope
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_user_assigned_identity.terraform.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+# Permit assigning/removing ONLY Website Contributor to service principals.
+# The workflow cannot use this assignment to grant Owner or Contributor.
+resource "azurerm_role_assignment" "deployment_roles" {
+  scope                = local.subscription_scope
+  role_definition_name = "Role Based Access Control Administrator"
+  principal_id         = azurerm_user_assigned_identity.terraform.principal_id
+  principal_type       = "ServicePrincipal"
+  condition_version    = "2.0"
+  condition            = <<-CONDITION
+    (
+      (!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}))
+      OR
+      (
+        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}
+        AND @Request[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
+      )
+    )
+    AND
+    (
+      (!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}))
+      OR
+      (
+        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}
+        AND @Resource[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
+      )
+    )
+  CONDITION
+}
+
+resource "azurerm_role_assignment" "state_workflow" {
+  scope                = azurerm_storage_container.state.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.terraform.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+# Allows the bootstrap operator to migrate existing state and run Terraform locally.
+resource "azurerm_role_assignment" "state_operator" {
+  scope                = azurerm_storage_container.state.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+output "github_secrets" {
+  value = {
+    TF_AZURE_CLIENT_ID       = azurerm_user_assigned_identity.terraform.client_id
+    TF_AZURE_TENANT_ID       = azurerm_user_assigned_identity.terraform.tenant_id
+    TF_AZURE_SUBSCRIPTION_ID = var.subscription_id
+  }
+}
+
+output "github_variables" {
+  value = {
+    TF_STATE_STORAGE_ACCOUNT = azurerm_storage_account.state.name
+    TF_USER_NAME             = var.user_name
+    TF_LOCATION              = var.location
+  }
+}</pre>
+    </section>
+
+    <section class="block" id="state-storage">
+      <h2>The state storage account <span class="tag">where everyone's Terraform memory lives</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">A unique, predictable name</span><span class="qnum">azurerm_storage_account name</span></div>
+          <pre class="code">name = "tfmetals${substr(sha256("${var.subscription_id}/${var.user_name}"), 0, 16)}"</pre>
+          <p class="desc">
+            Azure Storage account names must be globally unique across <i>all</i> of Azure, all
+            lowercase letters and digits, and short. This builds a name by hashing the
+            subscription ID and user name together with <span class="mono">sha256()</span>, then
+            taking the first 16 characters of that hash with <span class="mono">substr()</span>.
+            The result is effectively unique to this subscription and user, and &mdash; unlike a
+            random name &mdash; it's the <i>same</i> every time this file runs for the same inputs,
+            so re-running bootstrap doesn't create a second, orphaned storage account.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">shared_access_key_enabled = false</span><span class="qnum">no master key</span></div>
+          <p class="desc">
+            Azure Storage accounts normally have simple access keys that grant full control to
+            anyone holding them &mdash; effectively a master password. Disabling them entirely means
+            the only way in is through Microsoft Entra ID identities and explicit role
+            assignments, which is exactly how <a href="02-backend.html">backend.tf</a>'s
+            <span class="mono">use_azuread_auth = true</span> is able to work.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">allow_nested_items_to_be_public = false</span><span class="qnum">no accidental public access</span></div>
+          <p class="desc">Blocks any container inside this storage account from ever being made publicly readable over the internet, even by a future misconfiguration.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">blob_properties { versioning_enabled = true, delete_retention_policy { days = 7 } }</span><span class="qnum">protecting state from mistakes</span></div>
+          <p class="desc">
+            <span class="mono">versioning_enabled</span> keeps every previous version of the
+            state file, not just the latest one &mdash; so a bad Terraform run that corrupts state
+            can be rolled back. <span class="mono">delete_retention_policy</span> means even a
+            <i>deleted</i> state file is recoverable for 7 days before it's gone for good. Together
+            they turn a single mistaken overwrite or delete into something recoverable, not
+            catastrophic.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">azurerm_storage_container "state"</span><span class="qnum">tfstate container</span></div>
+          <p class="desc">
+            The actual folder-like container inside the storage account where state blobs live,
+            named <span class="mono">"tfstate"</span> &mdash; matching the container name referenced
+            in <a href="02-backend.html">backend.tf</a>'s configuration.
+            <span class="mono">container_access_type = "private"</span> means it can't be browsed
+            or read anonymously.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="identity">
+      <h2>The Terraform identity <span class="tag">a second, separate identity</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            <span class="mono">azurerm_user_assigned_identity.terraform</span> and its matching
+            <span class="mono">azurerm_federated_identity_credential.terraform</span> follow the
+            exact same OIDC pattern explained in detail on the
+            <a href="07-github-oidc.html">github_oidc.tf page</a> &mdash; a GitHub Actions identity
+            trusted only for tokens matching a specific subject. The key difference is the
+            subject itself: <span class="mono">"repo:${var.github_subject_repository}:environment:Terraform"</span>
+            trusts the <b>Terraform</b> GitHub environment, not the <b>Development</b> environment
+            trusted in the main project. This is a deliberately different, more privileged
+            identity from the one the application deployment workflow uses.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="roles">
+      <h2>The role assignments <span class="tag">what this identity is allowed to do</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">infrastructure: Contributor at subscription scope</span><span class="qnum">broad, but scoped to infrastructure</span></div>
+          <p class="desc">
+            <span class="mono">Contributor</span> allows creating, changing, and deleting most
+            types of Azure resources &mdash; but not managing who else has access. It's granted at
+            <span class="mono">local.subscription_scope</span> (the whole subscription) rather
+            than a single resource group, because this identity's job is to create and later
+            destroy the application's <i>entire</i> resource group, which can't be scoped any
+            narrower without already assuming that resource group exists.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">deployment_roles: a carefully limited RBAC Administrator</span><span class="qnum">the most guarded permission here</span></div>
+          <p class="desc">
+            The main project's <a href="07-github-oidc.html">github_oidc.tf</a> needs to grant
+            the application's own deployment identity a role &mdash; and granting roles to others is
+            itself a permission (<span class="mono">Role Based Access Control
+            Administrator</span>), separate from <span class="mono">Contributor</span>. Granting
+            that permission without limits would let this identity grant <i>any</i> role,
+            including full ownership of the subscription, to anyone. The
+            <span class="mono">condition</span> block attached here is Azure's fine-grained
+            permission system (ABAC) restricting exactly what this broad-sounding role is allowed
+            to do in practice.
+          </p>
+          <p class="note">
+            In plain terms, the condition says: this identity may only assign or remove <b>one
+            specific role</b> (the GUID <span class="mono">de139f84-...</span>, which is
+            <span class="mono">Website Contributor</span>) and only when the recipient is a
+            <span class="mono">ServicePrincipal</span> &mdash; never a role that grants broader
+            access, and never assigned to a human account. It cannot use this permission to make
+            itself, or anything else, an Owner or Contributor.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">state_workflow &amp; state_operator: Storage Blob Data Contributor</span><span class="qnum">access to the state container</span></div>
+          <p class="desc">
+            Two nearly identical role assignments granting read/write access to the
+            <span class="mono">tfstate</span> container specifically: one for the Terraform
+            identity itself (<span class="mono">state_workflow</span>, so the GitHub Actions
+            workflow can read and write state), and one for
+            <span class="mono">data.azurerm_client_config.current.object_id</span> &mdash; the Azure
+            identity of whoever is running bootstrap right now
+            (<span class="mono">state_operator</span>), so the same person can also run Terraform
+            locally, for example to migrate existing state per the project's
+            <span class="mono">README.md</span>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="outputs">
+      <h2>The outputs <span class="tag">what to hand to GitHub</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_secrets</span><span class="qnum">go into the Terraform environment's secrets</span></div>
+          <p class="desc">The Terraform identity's client ID, tenant ID, and the subscription ID &mdash; copied into the <b>Terraform</b> GitHub environment as <span class="mono">TF_AZURE_*</span> secrets, so the infrastructure workflow can authenticate as this identity.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">github_variables</span><span class="qnum">go into the Terraform environment's variables</span></div>
+          <p class="desc">The state storage account's name, plus the chosen user name and location &mdash; copied into the same environment as <span class="mono">TF_STATE_STORAGE_ACCOUNT</span>, <span class="mono">TF_USER_NAME</span>, and <span class="mono">TF_LOCATION</span>, which the main project's workflow needs to configure its backend and match its resource naming.</p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        These two outputs are exactly the values the main project's
+        <a href="02-backend.html">backend.tf</a> and GitHub Actions workflow expect to receive
+        &mdash; bootstrap's whole job ends here, handing off a working foundation for everything else
+        in this tutorial to build on.
+      </p>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Root module</dt>
+            <dd>A self-contained Terraform configuration with its own state. This project has two: the main one in <code>terraform/</code>, and this separate one in <code>terraform/bootstrap/</code>.</dd>
+            <dt>Data source</dt>
+            <dd>A block (like <code>data "azurerm_client_config" "current"</code>) that reads existing information instead of creating something new &mdash; here, details about whoever is currently authenticated.</dd>
+            <dt>ABAC condition</dt>
+            <dd>Attribute-Based Access Control: an extra, fine-grained rule attached to a role assignment that narrows a broad-sounding permission down to only specific, allowed actions.</dd>
+            <dt>Access key vs. Entra ID auth</dt>
+            <dd>Two ways to authenticate to Azure Storage: a shared secret key (simple, but powerful and easy to leak), or a Microsoft Entra ID identity checked against specific role assignments (more setup, much narrower blast radius if compromised).</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="08-outputs.html"><span class="pn-label">&larr; Back</span>outputs.tf</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>Terraform overview</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's all nine files &mdash; you now know exactly what every part of this project's Terraform setup does.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/bootstrap/main.tf</span>
+</footer>
+
+</body>
+</html>

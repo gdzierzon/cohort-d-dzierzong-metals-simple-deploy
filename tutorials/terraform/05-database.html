@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>database.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; database.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 5 of 9</p>
+        <h1>database.tf</h1>
+        <p class="lede">
+          Creates the PostgreSQL database server this project's API reads and writes to, the empty
+          database inside it, and the firewall rules that decide which network addresses are allowed
+          to connect.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Resources created &rarr; <b>4</b></span>
+      <span class="fact">Engine &rarr; <b>PostgreSQL 16</b></span>
+      <span class="fact">Tier &rarr; <b>Burstable (B1ms)</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#server">The database server</a></li>
+      <li><a href="#database">The database itself</a></li>
+      <li><a href="#firewall">The firewall rules</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Provision the PostgreSQL server and database the API depends on, and control which network addresses may reach it.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>where the data actually lives</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        This is where the project's persistent data lives. The API (created in
+        <a href="06-app-service.html">app_service.tf</a>) is stateless &mdash; it can restart or
+        redeploy at any time without losing anything, because none of the actual data lives inside
+        it. Everything that needs to survive a restart lives here instead.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/database.tf</span># B_ is Terraform's prefix for the Burstable tier.
+resource "azurerm_postgresql_flexible_server" "metals" {
+  name                          = "${local.prefix}-pg"
+  resource_group_name           = azurerm_resource_group.metals.name
+  location                      = azurerm_resource_group.metals.location
+  version                       = "16"
+  administrator_login           = local.db_user
+  administrator_password        = var.db_password
+  sku_name                      = "B_Standard_B1ms"
+  storage_mb                    = 32768
+  auto_grow_enabled             = false
+  backup_retention_days         = 7
+  geo_redundant_backup_enabled  = false
+  public_network_access_enabled = true
+
+  authentication {
+    password_auth_enabled         = true
+    active_directory_auth_enabled = false
+  }
+
+  # Omitting high_availability keeps HA disabled, as in the PowerShell script.
+  tags = { Environment = "Development" }
+}
+
+resource "azurerm_postgresql_flexible_server_database" "metals" {
+  name      = local.db_name
+  server_id = azurerm_postgresql_flexible_server.metals.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+# Matches --public-access 0.0.0.0: Azure services, not all internet addresses.
+resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
+  name             = "AllowAzureServices"
+  server_id        = azurerm_postgresql_flexible_server.metals.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+
+resource "azurerm_postgresql_flexible_server_firewall_rule" "local_client" {
+  name             = "LocalClient-${replace(var.client_ip, ".", "-")}"
+  server_id        = azurerm_postgresql_flexible_server.metals.id
+  start_ip_address = var.client_ip
+  end_ip_address   = var.client_ip
+}</pre>
+    </section>
+
+    <section class="block" id="server">
+      <h2>The database server <span class="tag">azurerm_postgresql_flexible_server</span></h2>
+      <p class="dek">This is the actual PostgreSQL server &mdash; the running database engine that the database itself and every connection depend on.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Identity and location</span><span class="qnum">name &middot; resource_group_name &middot; location</span></div>
+          <p class="desc">
+            The name is built from the same shared <span class="mono">local.prefix</span> covered
+            in <a href="04-main.html">main.tf</a>. The resource group and location are read
+            straight off the resource group created there
+            (<span class="mono">azurerm_resource_group.metals.name</span> /
+            <span class="mono">.location</span>) rather than repeated as separate values, so this
+            server is guaranteed to land in the exact same resource group and region as everything
+            else.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">version = "16"</span><span class="qnum">engine version</span></div>
+          <p class="desc">Which major version of PostgreSQL to run. Version 16 is a recent, well-supported release at the time this project was written.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">administrator_login / administrator_password</span><span class="qnum">credentials</span></div>
+          <p class="desc">
+            The admin username comes from <span class="mono">local.db_user</span>
+            (<span class="mono">"metalsadmin"</span>), and the password comes from
+            <span class="mono">var.db_password</span> &mdash; the sensitive variable covered on the
+            <a href="03-variables.html">variables.tf page</a>, always supplied through
+            <span class="mono">TF_VAR_db_password</span> rather than written into any file.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">sku_name = "B_Standard_B1ms"</span><span class="qnum">pricing tier</span></div>
+          <p class="desc">
+            The <span class="mono">B_</span> prefix means the <b>Burstable</b> tier &mdash; a
+            lower-cost tier suited to development and light workloads, which can use extra CPU
+            briefly when needed rather than being provisioned for constant peak load.
+            <span class="mono">Standard_B1ms</span> is the specific virtual machine size within
+            that tier.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">storage_mb, auto_grow_enabled, backups</span><span class="qnum">capacity &amp; durability</span></div>
+          <ul class="steps">
+            <li><code>storage_mb = 32768</code> &mdash; 32 GiB of allocated storage.</li>
+            <li><code>auto_grow_enabled = false</code> &mdash; storage stays fixed at that size instead of expanding automatically (and billing) as data grows.</li>
+            <li><code>backup_retention_days = 7</code> &mdash; automatic backups are kept for a week.</li>
+            <li><code>geo_redundant_backup_enabled = false</code> &mdash; backups stay in one Azure region rather than being copied to a second region, which keeps costs down for a non-production environment.</li>
+          </ul>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">authentication { }</span><span class="qnum">how you log in</span></div>
+          <p class="desc">
+            <span class="mono">password_auth_enabled = true</span> allows the standard
+            username/password login used by <span class="mono">administrator_login</span> above.
+            <span class="mono">active_directory_auth_enabled = false</span> turns off the
+            alternative of logging in with a Microsoft Entra ID identity, since this project
+            doesn't use it for database access (Entra ID <i>is</i> used elsewhere &mdash; see the
+            backend and <a href="07-github-oidc.html">github_oidc.tf</a> &mdash; just not here).
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">public_network_access_enabled = true</span><span class="qnum">reachable from the internet</span></div>
+          <p class="desc">
+            Allows connections from outside Azure's private network, gated by the firewall rules
+            described below. Without this, nothing outside Azure &mdash; including your own laptop
+            &mdash; could reach the database at all.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="database">
+      <h2>The database itself <span class="tag">azurerm_postgresql_flexible_server_database</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">A server vs. a database</span><span class="qnum">important distinction</span></div>
+          <p class="desc">
+            The resource above creates the <i>server</i> &mdash; think of it as the whole running
+            PostgreSQL installation. A server can host multiple separate databases inside it. This
+            second resource creates one specific database, named <span class="mono">local.db_name</span>
+            (<span class="mono">"metals"</span>), attached to that server via
+            <span class="mono">server_id = azurerm_postgresql_flexible_server.metals.id</span>.
+            <span class="mono">charset</span> and <span class="mono">collation</span> control text
+            encoding and sort order, set here to standard UTF-8/US-English defaults.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="firewall">
+      <h2>The firewall rules <span class="tag">who's allowed to connect</span></h2>
+      <p class="dek">By default, a PostgreSQL flexible server with public access enabled still rejects every connection &mdash; each allowed source has to be listed explicitly as a firewall rule.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">azure_services</span><span class="qnum">special-case rule</span></div>
+          <pre class="code">start_ip_address = "0.0.0.0"
+end_ip_address   = "0.0.0.0"</pre>
+          <p class="desc">
+            This looks like it should mean &ldquo;every address on the internet,&rdquo; but Azure
+            treats a firewall rule where both the start and end IP are exactly
+            <span class="mono">0.0.0.0</span> as a special case: <i>allow other Azure services</i>
+            to connect, not the public internet. This is what lets the API's web app (which also
+            runs inside Azure, but isn't a fixed IP address itself) reach the database.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">local_client</span><span class="qnum">your own address</span></div>
+          <pre class="code">name             = "LocalClient-${replace(var.client_ip, ".", "-")}"
+start_ip_address = var.client_ip
+end_ip_address   = var.client_ip</pre>
+          <p class="desc">
+            Opens the firewall for exactly one address: <span class="mono">var.client_ip</span>,
+            the value supplied in <a href="03-variables.html">variables.tf</a>. Using the same
+            single address for both <span class="mono">start_ip_address</span> and
+            <span class="mono">end_ip_address</span> allows just that one IP, not a range. The
+            rule's <i>name</i> can't contain dots, so <span class="mono">replace()</span> swaps
+            each <span class="mono">.</span> in the IP address for a <span class="mono">-</span>
+            &mdash; a naming workaround, not a change to which address is actually allowed.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Flexible Server</dt>
+            <dd>Azure's name for its managed PostgreSQL hosting product &mdash; Azure handles patching, backups, and infrastructure, while you manage the schema and data.</dd>
+            <dt>SKU / tier</dt>
+            <dd>Which size and performance class of server to run &mdash; roughly analogous to choosing a size of virtual machine. Bigger tiers cost more and handle more load.</dd>
+            <dt>Firewall rule (database)</dt>
+            <dd>An explicit allow-list entry naming a single IP address or range permitted to connect to the database server. Anything not listed is rejected.</dd>
+            <dt>Collation</dt>
+            <dd>The rules a database uses to sort and compare text &mdash; for example, whether uppercase and lowercase letters sort together.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="04-main.html"><span class="pn-label">&larr; Back</span>main.tf</a>
+      <a class="next" href="06-app-service.html"><span class="pn-label">Next &rarr;</span>app_service.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The database is up and reachable &mdash; now let's build the web app that talks to it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/database.tf</span>
+</footer>
+
+</body>
+</html>

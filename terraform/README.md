@@ -13,12 +13,24 @@ Infrastructure-only commits no longer trigger application deployment. Terraform 
 
 Start with an Azure account that can create resources and assign subscription-level roles, such as a subscription Owner. Install Terraform 1.7 or later and Azure CLI. The workflows use Terraform 1.16.0.
 
-From the repository root in PowerShell:
+From the repository root, use either shell.
 
+**PowerShell**
 ```powershell
 az login
 az account show --output table
-$env:TF_VAR_subscription_id = az account show --query id --output tsv
+$env:TF_VAR_subscription_id = (az account show --query id --output tsv)
+terraform -chdir=terraform/bootstrap init
+terraform -chdir=terraform/bootstrap plan -out bootstrap.tfplan
+terraform -chdir=terraform/bootstrap apply bootstrap.tfplan
+terraform -chdir=terraform/bootstrap output
+```
+
+**Bash**
+```bash
+az login
+az account show --output table
+export TF_VAR_subscription_id="$(az account show --query id --output tsv)"
 terraform -chdir=terraform/bootstrap init
 terraform -chdir=terraform/bootstrap plan -out bootstrap.tfplan
 terraform -chdir=terraform/bootstrap apply bootstrap.tfplan
@@ -69,7 +81,7 @@ Still in **Settings → Environments → Terraform**, add these environment vari
 | `TF_USER_NAME` | Bootstrap output; optional, default `dzierzon` |
 | `TF_LOCATION` | Bootstrap output; optional, default `westus2` |
 
-Find your public IPv4 address with `Invoke-RestMethod https://api4.ipify.org`. If using a VPN/proxy, use your database connection's egress IP. A changing GitHub runner IP is handled separately using a temporary rule.
+Find your public IPv4 address with either `Invoke-RestMethod https://api4.ipify.org` in PowerShell or `curl -fsSL https://api4.ipify.org` in Bash. If using a VPN/proxy, use your database connection's egress IP. A changing GitHub runner IP is handled separately using a temporary rule.
 
 The `TF_AZURE_*` identity provisions infrastructure. It is different from the `AZURE_*` identity used for application deployment; do not replace one set with the other. The storage container and blob key are fixed to `tfstate` and `metals.tfstate` in the workflow, so all branches operate on the same application state. Workflow concurrency and backend locking serialize infrastructure operations.
 
@@ -85,7 +97,13 @@ Allow a few minutes for identity and role assignments to propagate.
 
 Copy `terraform/backend.hcl.example` to `terraform/backend.hcl`, then replace its storage account placeholder with the bootstrap output. Authenticate with the same local operator granted state access during bootstrap:
 
+**PowerShell**
 ```powershell
+terraform -chdir=terraform init -migrate-state -backend-config backend.hcl
+```
+
+**Bash**
+```bash
 terraform -chdir=terraform init -migrate-state -backend-config backend.hcl
 ```
 
@@ -125,8 +143,14 @@ After successful infrastructure apply, open the run summary's **Application work
 
 To display the same values locally from the shared Terraform state, first initialize the remote backend as described in [Optional local Terraform and schema operations](#optional-local-terraform-and-schema-operations). Copy `backend.hcl.example` to the ignored `backend.hcl`, replace `COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP` with the `TF_STATE_STORAGE_ACCOUNT` value from the **Terraform** environment, and run `terraform init`. Then run:
 
+**PowerShell**
 ```powershell
 .\terraform\scripts\show_application_deployment_secrets.ps1
+```
+
+**Bash**
+```bash
+bash terraform/scripts/show_application_deployment_secrets.sh
 ```
 
 Keep `TF_AZURE_*` secrets unchanged. The workflow prints only identifiers, not the database password. GitHub secret updates are performed manually; the infrastructure workflow is not given repository-secret write permissions.
@@ -149,16 +173,32 @@ For complete final cleanup, destroy the application first, then use the retained
 
 Use the same remote backend as Actions. Copy `terraform/backend.hcl.example` to the ignored `terraform/backend.hcl`, replace `COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP` with the `TF_STATE_STORAGE_ACCOUNT` value from the **Terraform** environment, and authenticate with `az login`. Set normal inputs using local `.tfvars` or `TF_VAR_*` environment variables. Supply `TF_VAR_db_password` without committing it. If local state needs migration, use step 3 instead of an ordinary init.
 
+**PowerShell**
 ```powershell
+Copy-Item .\terraform\backend.hcl.example .\terraform\backend.hcl
+terraform -chdir=terraform init -backend-config backend.hcl
+terraform -chdir=terraform plan
+```
+
+**Bash**
+```bash
+cp terraform/backend.hcl.example terraform/backend.hcl
 terraform -chdir=terraform init -backend-config backend.hcl
 terraform -chdir=terraform plan
 ```
 
 Do not run a local apply concurrently with the workflow. `terraform output -json github_secrets` retrieves the application IDs from shared state. The initializer can still be run locally:
 
+**PowerShell**
 ```powershell
 python -m pip install -r requirements.txt
 python terraform/scripts/initialize_database.py --skip-existing
+```
+
+**Bash**
+```bash
+python3 -m pip install -r requirements.txt
+python3 terraform/scripts/initialize_database.py --skip-existing
 ```
 
 `--reset` explicitly drops and reloads existing demo tables; it is never passed by the workflow.
@@ -167,6 +207,7 @@ python terraform/scripts/initialize_database.py --skip-existing
 
 After downloading the providers, these checks do not create Azure resources:
 
+**PowerShell**
 ```powershell
 terraform -chdir=terraform init -backend=false
 terraform -chdir=terraform fmt -check -recursive
@@ -175,6 +216,17 @@ terraform -chdir=terraform test
 terraform -chdir=terraform/bootstrap init -backend=false
 terraform -chdir=terraform/bootstrap validate
 python -m unittest discover -s terraform/tests -p "test_*.py"
+```
+
+**Bash**
+```bash
+terraform -chdir=terraform init -backend=false
+terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform validate
+terraform -chdir=terraform test
+terraform -chdir=terraform/bootstrap init -backend=false
+terraform -chdir=terraform/bootstrap validate
+python3 -m unittest discover -s terraform/tests -p 'test_*.py'
 ```
 
 The Terraform tests use a mock provider, including their mock apply. They do not establish whether live Azure permissions, name availability, capacity, or OIDC login will succeed; verify those with the real workflow after bootstrap.

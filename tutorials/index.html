@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metals Simple Deploy Tutorials</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Project Tutorials</p>
+        <h1>Learning This Project</h1>
+        <p class="lede">
+          This project has three moving parts that work together: a small web <b>API</b>, a
+          <b>database</b> the API reads and writes, and <b>Terraform</b>, the tool that creates the
+          cloud infrastructure both of them run on. Codey the Sr. Developer will be your guide
+          through this tutorial series, one part at a time, starting with Terraform.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the tutorials">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Cloud provider &rarr; <b>Microsoft Azure</b></span>
+      <span class="fact">Infrastructure tool &rarr; <b>Terraform</b></span>
+      <span class="fact">App language &rarr; <b>Python (Flask)</b></span>
+      <span class="fact">Database &rarr; <b>PostgreSQL</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns: 1fr;">
+  <main>
+
+    <section class="block" id="what-this-is">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>What this project is <span class="tag">start here</span></h2>
+          <p class="dek">
+            <span class="mono">metals-simple-deploy</span> is a small, complete application: a
+            Python API backed by a PostgreSQL database, running in Azure. &ldquo;Complete&rdquo;
+            means it isn't just application code &mdash; it also includes everything needed to
+            actually stand up the cloud resources that code runs on, and to deploy changes to
+            both safely and repeatably.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>three parts, one project</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block" id="components">
+      <h2>The three parts of this project <span class="tag">overview</span></h2>
+      <p class="dek">
+        Each part has a narrow, distinct job. Skimming what each one is <i>for</i> here will make
+        the deeper tutorials easier to follow, since Terraform's whole purpose is to build the
+        infrastructure the other two parts run on.
+      </p>
+      <div class="card-grid">
+        <div class="info-card">
+          <p class="ieyebrow">Part 1</p>
+          <h3>The API</h3>
+          <p>
+            A Python web application (built with Flask) that answers requests over the internet
+            &mdash; for example, looking up or saving metals-pricing data. It contains the actual
+            business logic of the app: what happens when someone calls a given endpoint.
+          </p>
+          <div class="stack"><span class="chip">Python</span><span class="chip">Flask</span><span class="chip">Azure App Service</span></div>
+        </div>
+        <div class="info-card">
+          <p class="ieyebrow">Part 2</p>
+          <h3>The Database</h3>
+          <p>
+            A PostgreSQL database that stores the application's data persistently. The API connects
+            to it to read and write records, so the data survives even if the API itself restarts
+            or redeploys.
+          </p>
+          <div class="stack"><span class="chip">PostgreSQL</span><span class="chip">Azure Flexible Server</span></div>
+        </div>
+        <div class="info-card">
+          <p class="ieyebrow">Part 3</p>
+          <h3>Terraform</h3>
+          <p>
+            The infrastructure layer underneath the other two. Terraform creates the actual Azure
+            resources &mdash; the resource group, the web app hosting the API, and the database
+            server &mdash; and wires them together, before either piece of application code ever runs.
+          </p>
+          <div class="stack"><span class="chip">Terraform</span><span class="chip">Azure</span><span class="chip">GitHub Actions</span></div>
+          <p style="margin-top:0.9rem;"><a href="terraform/index.html"><b>Start the Terraform tutorial &rarr;</b></a></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="how-they-fit">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>How the three parts fit together <span class="tag">the big picture</span></h2>
+          <p class="dek">
+            The order above isn't arbitrary &mdash; it's roughly the order things have to happen in.
+            Terraform runs first and builds the empty, configured Azure environment (the database
+            server, the web app hosting slot, the security identities). Only once that
+            environment exists does it make sense to deploy the API's code into it, or load
+            starting data into the database. Change the infrastructure through Terraform, change
+            the application through its own code &mdash; the two are deployed independently, but
+            neither works without the other.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>infrastructure first, then code</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block" id="start">
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Ready to start?</span><span class="qnum">this guide</span></div>
+          <p class="desc">
+            This tutorial series currently covers <b>Terraform</b> in depth. Guides for the Flask
+            API and the database design will be added here later, using the same step-by-step
+            format.
+          </p>
+          <p class="desc" style="margin-top:0.75rem;">
+            <a href="terraform/index.html"><b>Start the Terraform tutorial &rarr;</b></a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Pick a part above and dig in &mdash; the Terraform tutorial is ready whenever you are.</p>
+</div>
+
+<footer class="page">
+  Part of <span class="mono">cohort-d-dzierzong-metals-simple-deploy</span>. This page is the
+  starting point for all tutorials in <span class="mono">tutorials/</span>.
+</footer>
+
+</body>
+</html>

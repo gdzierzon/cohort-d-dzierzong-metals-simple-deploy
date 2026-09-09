@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terraform Tutorial</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Terraform</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Terraform Tutorial</p>
+        <h1>Terraform: Building This Project's Cloud Infrastructure</h1>
+        <p class="lede">
+          Terraform's job in this project is to automate the creation of every Azure resource the
+          app needs &mdash; and to automate any <i>changes</i> to that infrastructure later &mdash; so nobody has
+          to click through the Azure Portal by hand. Everything Terraform builds is described in the
+          plain-text files inside the <span class="mono">terraform/</span> folder. Codey will walk
+          through what's in that folder on this page, and each file gets its own detailed page
+          after that.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>terraform/</b></span>
+      <span class="fact">Files with resources &rarr; <b>8 .tf files</b></span>
+      <span class="fact">One-time setup &rarr; <b>terraform/bootstrap/</b></span>
+      <span class="fact">Runs from &rarr; <b>your terminal, or GitHub Actions</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="../index.html">&larr; Tutorials home</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#problem">What problem does Terraform solve?</a></li>
+      <li><a href="#state">Terraform remembers what it built</a></li>
+      <li><a href="#structure">The folder, file by file</a></li>
+      <li><a href="#order">Reading order</a></li>
+      <li><a href="#workflow">How it actually gets run</a></li>
+      <li><a href="#commands">Pick a command to learn</a></li>
+      <li><a href="#files">Pick a file to learn</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="problem">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>What problem does Terraform solve? <span class="tag">start here</span></h2>
+          <p class="dek">
+            Before this project used Terraform, creating the Azure resources for this app meant
+            clicking through the Azure Portal, or running a long list of one-off script commands, by
+            hand. That works, but it's slow, easy to get wrong, and hard to repeat exactly the same
+            way twice &mdash; especially months later, or for a teammate who wasn't there the first time.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>infrastructure as code, not clicks</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The goal of Terraform, in one sentence</span><span class="qnum">big idea</span></div>
+          <p class="desc">
+            Terraform lets you describe the cloud infrastructure you want &mdash; a database, a web
+            server, a security identity &mdash; as <b>plain text files</b>, and then it automates the
+            work of creating, updating, or removing that infrastructure to match what the files say.
+          </p>
+          <p class="note">
+            This is called &ldquo;Infrastructure as Code.&rdquo; The infrastructure itself lives in
+            version-controlled files, the same way application code does, instead of only existing
+            as a set of manual clicks someone remembers making.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why that matters</span><span class="qnum">benefits</span></div>
+          <ul class="steps">
+            <li><b>Repeatable.</b> Running the same Terraform files always produces the same result, whether it's the first run or the fiftieth.</li>
+            <li><b>Reviewable.</b> Infrastructure changes go through the same pull-request review as application code, instead of happening silently in a portal.</li>
+            <li><b>Safe to change.</b> Terraform shows you a preview of exactly what it's about to create, change, or delete &mdash; <i>before</i> it touches anything.</li>
+            <li><b>Easy to tear down.</b> The same files that built the environment can remove it cleanly when it's no longer needed.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="state">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Terraform remembers what it built <span class="tag">the shopping list analogy</span></h2>
+          <p class="dek">Think of Terraform like a very detailed shopping list, plus a robot shopper who reads it.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>a list, and a memory of what's already in the cart</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The shopping list analogy</span><span class="qnum">ELI5</span></div>
+          <p class="desc">
+            You write down exactly what you want &mdash; &ldquo;one resource group, one database, one
+            web app&rdquo; &mdash; in files. Terraform reads the list, checks what already exists in
+            Azure, and then goes and creates (or fixes, or removes) whatever is different, so
+            reality matches the list. You never have to remember the individual steps yourself;
+            you just keep the list up to date.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Terraform remembers what it built</span><span class="qnum">state</span></div>
+          <p class="desc">
+            After it runs, Terraform saves a record &mdash; called <b>state</b> &mdash; of everything it
+            created. That's how it knows, the next time it runs, what already exists and what
+            still needs to change. In this project, that record is stored safely in an Azure
+            Storage account instead of on any one person's laptop, so anyone on the team (or the
+            GitHub Actions robot) can run Terraform and get the same, up-to-date picture.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="structure">
+      <h2>The folder, file by file <span class="tag">structure</span></h2>
+      <p class="dek">
+        Every file below lives inside <span class="mono">terraform/</span>. None of them do
+        anything by themselves &mdash; Terraform reads all the <span class="mono">.tf</span> files in
+        the folder together, as one combined description of the infrastructure.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:15rem;">File / folder</th><th>What it's for, in plain terms</th></tr></thead>
+          <tbody>
+            <tr><td class="path"><a href="01-versions.html">versions.tf</a></td><td>The label on the toolbox. Says which version of Terraform and which Azure toolkit (&ldquo;provider&rdquo;) this project needs, so everyone uses matching tools. <a href="01-versions.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="02-backend.html">backend.tf</a></td><td>The address label for Terraform's memory. Tells Terraform to keep its record of what it built in a shared Azure location, not just on one laptop. <a href="02-backend.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="03-variables.html">variables.tf</a></td><td>A fill-in-the-blank form. Lists every piece of information Terraform needs from a person (or from GitHub Actions) before it can run &mdash; like the database password or your Azure subscription. <a href="03-variables.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="04-main.html">main.tf</a></td><td>The foundation. Creates the resource group &mdash; the labeled folder inside Azure that every other resource in this project gets placed into &mdash; and a few shared names used everywhere else. <a href="04-main.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="05-database.html">database.tf</a></td><td>Builds the PostgreSQL database server and the empty database inside it, plus the security rules that decide who's allowed to connect. <a href="05-database.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="06-app-service.html">app_service.tf</a></td><td>Builds the web app that runs the Flask API, and tells it how to connect to the database. <a href="06-app-service.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="07-github-oidc.html">github_oidc.tf</a></td><td>Builds a secure digital ID badge that lets GitHub Actions prove who it is to Azure, so it can deploy the app without ever storing a password. <a href="07-github-oidc.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="08-outputs.html">outputs.tf</a></td><td>The receipt. After everything is built, this prints back the important details &mdash; like the app's web address &mdash; so people (and GitHub) know where to find things. <a href="08-outputs.html">(dig deeper)</a></td></tr>
+            <tr><td class="path indent"><a href="09-bootstrap.html">bootstrap/main.tf</a></td><td>A separate, one-time setup. Before any of the files above can run, something has to create the safe storage location for Terraform's memory in the first place &mdash; that's this file's only job. <a href="09-bootstrap.html">(dig deeper)</a></td></tr>
+            <tr><td class="path">terraform.tfvars.example</td><td>A blank copy of the fill-in-the-blank form from <span class="mono">variables.tf</span>. You copy it to <span class="mono">terraform.tfvars</span> and fill in your own answers; it is never committed to Git.</td></tr>
+            <tr><td class="path">backend.hcl.example</td><td>A blank copy of the address label for shared memory. Copied to <span class="mono">backend.hcl</span> and filled in with the real storage account name.</td></tr>
+            <tr><td class="path">.terraform.lock.hcl</td><td>A receipt that pins the <i>exact</i> version of the Azure toolkit that was downloaded, so every run uses the identical version instead of silently drifting over time.</td></tr>
+            <tr><td class="path indent">scripts/</td><td>Small helper programs &mdash; for example, a Python script that loads the starting database tables, and a script that prints the IDs the application deployment needs.</td></tr>
+            <tr><td class="path indent">tests/</td><td>Automated checks that catch mistakes in the <span class="mono">.tf</span> files before they're ever run against real Azure resources.</td></tr>
+            <tr><td class="path">README.md</td><td>The instruction manual: the exact commands to run, and in what order, to set this all up.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>Note:</b> Terraform also creates a local <span class="mono">.terraform/</span> folder
+        and a <span class="mono">terraform.tfstate</span> file the first time it runs. Those are
+        working files Terraform manages for itself &mdash; you won't normally edit them by hand, and
+        this project keeps its real state remotely rather than relying on the local copy.
+      </p>
+    </section>
+
+    <section class="block" id="order">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>A sensible reading order <span class="tag">where to start</span></h2>
+          <p class="dek">
+            Terraform doesn't care what order the files are in &mdash; it reads them all as one unit. But
+            as a human learning the project, it helps to read them in the order infrastructure
+            actually gets described: setup first, then the foundation, then the resources that sit on
+            top of it, then the receipt at the end.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>nine files, one sensible order</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><b><a href="01-versions.html">versions.tf</a></b> &mdash; what tools this project expects.</li>
+            <li><b><a href="02-backend.html">backend.tf</a></b> &mdash; where Terraform keeps its memory.</li>
+            <li><b><a href="03-variables.html">variables.tf</a></b> &mdash; what information you need to supply.</li>
+            <li><b><a href="04-main.html">main.tf</a></b> &mdash; the resource group everything else lives inside.</li>
+            <li><b><a href="05-database.html">database.tf</a></b> &mdash; the PostgreSQL server and database.</li>
+            <li><b><a href="06-app-service.html">app_service.tf</a></b> &mdash; the web app running the API.</li>
+            <li><b><a href="07-github-oidc.html">github_oidc.tf</a></b> &mdash; the deployment identity for GitHub Actions.</li>
+            <li><b><a href="08-outputs.html">outputs.tf</a></b> &mdash; what Terraform reports back when it's done.</li>
+            <li><b><a href="09-bootstrap.html">bootstrap/main.tf</a></b> &mdash; the separate one-time setup that comes before all of the above.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="workflow">
+      <h2>How it actually gets run <span class="tag">quick preview</span></h2>
+      <p class="dek">
+        Whether it's run from a laptop or from GitHub Actions, Terraform is always driven by the
+        same handful of commands. Each file's tutorial page will refer back to these.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><a href="commands/01-init.html"><code>terraform init</code></a></td><td>Downloads the Azure provider and connects to the shared state storage. <a href="commands/01-init.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/02-fmt.html"><code>terraform fmt</code></a></td><td>Auto-formats the files so they're easy to read and consistent. <a href="commands/02-fmt.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/03-validate.html"><code>terraform validate</code></a></td><td>Checks the files for syntax and structural mistakes. <a href="commands/03-validate.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/04-plan.html"><code>terraform plan</code></a></td><td>Previews exactly what would be created, changed, or destroyed &mdash; without touching anything yet. <a href="commands/04-plan.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/05-apply.html"><code>terraform apply</code></a></td><td>Actually creates or updates the Azure resources to match the plan. <a href="commands/05-apply.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/06-destroy.html"><code>terraform destroy</code></a></td><td>Removes everything Terraform created, cleanly. <a href="commands/06-destroy.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/07-output.html"><code>terraform output</code></a></td><td>Prints the values from <a href="08-outputs.html">outputs.tf</a> after a run. <a href="commands/07-output.html">(dig deeper)</a></td></tr>
+            <tr><td><a href="commands/08-test.html"><code>terraform test</code></a></td><td>Runs this project's automated configuration tests, with no real Azure resources involved. <a href="commands/08-test.html">(dig deeper)</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        In this project, the day-to-day <a href="commands/04-plan.html">plan</a> /
+        <a href="commands/05-apply.html">apply</a> / <a href="commands/06-destroy.html">destroy</a>
+        steps are triggered through the
+        <span class="mono">Terraform infrastructure</span> GitHub Actions workflow rather than run
+        by hand every time &mdash; see <span class="mono">terraform/README.md</span> for the full
+        setup. This tutorial focuses on what the <span class="mono">.tf</span> files themselves
+        mean, which is the same either way.
+      </p>
+    </section>
+
+    <section class="block" id="commands">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Pick a command to learn <span class="tag">go deeper</span></h2>
+          <p class="dek">
+            The table above only glosses over what each command does. Each page below covers one
+            command in detail: what it actually does, where to run it from, what has to be true
+            before you run it, what will be true after it succeeds, and the errors people run into
+            most often.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>eight commands, one at a time</figcaption>
+        </figure>
+      </div>
+      <div class="module-grid">
+        <a class="module-card" href="commands/01-init.html"><span class="mnum">Command 1 of 8</span><h3>terraform init</h3><p>Prepares the working directory: downloads the provider and connects to state.</p></a>
+        <a class="module-card" href="commands/02-fmt.html"><span class="mnum">Command 2 of 8</span><h3>terraform fmt</h3><p>Rewrites files into consistent, canonical formatting.</p></a>
+        <a class="module-card" href="commands/03-validate.html"><span class="mnum">Command 3 of 8</span><h3>terraform validate</h3><p>Checks the configuration for structural mistakes, offline.</p></a>
+        <a class="module-card" href="commands/04-plan.html"><span class="mnum">Command 4 of 8</span><h3>terraform plan</h3><p>Previews exactly what would change, before anything happens.</p></a>
+        <a class="module-card" href="commands/05-apply.html"><span class="mnum">Command 5 of 8</span><h3>terraform apply</h3><p>Actually creates or updates the real Azure resources.</p></a>
+        <a class="module-card" href="commands/06-destroy.html"><span class="mnum">Command 6 of 8</span><h3>terraform destroy</h3><p>Removes everything Terraform created, cleanly.</p></a>
+        <a class="module-card" href="commands/07-output.html"><span class="mnum">Command 7 of 8</span><h3>terraform output</h3><p>Reads back the values published in outputs.tf.</p></a>
+        <a class="module-card" href="commands/08-test.html"><span class="mnum">Command 8 of 8</span><h3>terraform test</h3><p>Runs automated checks against a mock provider, no Azure required.</p></a>
+      </div>
+    </section>
+
+    <section class="block" id="files">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Pick a file to learn <span class="tag">go deeper</span></h2>
+          <p class="dek">Each page below covers one file: its purpose, a fuller explanation, the full code, and a breakdown of what each piece means.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>pick any card below</figcaption>
+        </figure>
+      </div>
+      <div class="module-grid">
+        <a class="module-card" href="01-versions.html"><span class="mnum">File 1 of 9</span><h3>versions.tf</h3><p>Pinning the Terraform and provider versions this project needs.</p></a>
+        <a class="module-card" href="02-backend.html"><span class="mnum">File 2 of 9</span><h3>backend.tf</h3><p>Where Terraform stores its memory of what it built.</p></a>
+        <a class="module-card" href="03-variables.html"><span class="mnum">File 3 of 9</span><h3>variables.tf</h3><p>The inputs Terraform needs before it can run.</p></a>
+        <a class="module-card" href="04-main.html"><span class="mnum">File 4 of 9</span><h3>main.tf</h3><p>The resource group and shared names everything else builds on.</p></a>
+        <a class="module-card" href="05-database.html"><span class="mnum">File 5 of 9</span><h3>database.tf</h3><p>The PostgreSQL server, database, and firewall rules.</p></a>
+        <a class="module-card" href="06-app-service.html"><span class="mnum">File 6 of 9</span><h3>app_service.tf</h3><p>The web app that runs the Flask API.</p></a>
+        <a class="module-card" href="07-github-oidc.html"><span class="mnum">File 7 of 9</span><h3>github_oidc.tf</h3><p>The secure identity GitHub Actions uses to deploy.</p></a>
+        <a class="module-card" href="08-outputs.html"><span class="mnum">File 8 of 9</span><h3>outputs.tf</h3><p>What Terraform reports back once it's finished.</p></a>
+        <a class="module-card" href="09-bootstrap.html"><span class="mnum">File 9 of 9</span><h3>bootstrap/main.tf</h3><p>The one-time setup that runs before everything else.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Nine files, one folder &mdash; pick a card above and Codey will walk you through it.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">terraform/README.md</span> in this repository has the exact,
+  copy-pasteable commands for running this project end to end.
+</footer>
+
+</body>
+</html>

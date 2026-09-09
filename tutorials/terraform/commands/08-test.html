@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform test</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform test</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 8 of 8</p>
+        <h1>terraform test</h1>
+        <p class="lede">
+          Runs automated test files that assert specific facts about the configuration &mdash; using a
+          <b>mock</b> Azure provider, so nothing here ever creates, reads, or touches a real Azure
+          resource. It's how this project catches a broken assumption in the <span class="mono">.tf</span>
+          files before anyone ever runs a real <a href="04-plan.html">plan</a> or <a href="05-apply.html">apply</a>.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>no</b> (mock provider)</span>
+      <span class="fact">Test files &rarr; <b>*.tftest.hcl</b></span>
+      <span class="fact">Location &rarr; <b>terraform/tests/</b>, <b>terraform/bootstrap/tests/</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            Terraform's native test framework looks for <span class="mono">*.tftest.hcl</span>
+            files (by default in a <span class="mono">tests/</span> subfolder) and runs each
+            <span class="mono">run</span> block inside them in order. Each <span class="mono">run</span>
+            block behaves like a miniature <span class="mono">plan</span> or
+            <span class="mono">apply</span> against the configuration, then checks one or more
+            <span class="mono">assert</span> conditions against the result &mdash; if a condition is
+            false, that run fails and prints its <span class="mono">error_message</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The trick that keeps it offline</span><span class="qnum">mock_provider</span></div>
+          <pre class="code"><span class="filename">terraform/tests/infrastructure.tftest.hcl</span># Uses a mock provider: even the apply below never creates Azure resources.
+mock_provider "azurerm" {
+  mock_resource "azurerm_postgresql_flexible_server" {
+    defaults = {
+      id   = "/subscriptions/.../flexibleServers/test-pg"
+      fqdn = "test-pg.postgres.database.azure.com"
+    }
+  }
+  # ...more mocked resource types
+}</pre>
+          <p class="desc">
+            <span class="mono">mock_provider</span> stands in for the real
+            <span class="mono">azurerm</span> provider, returning fake but realistic values (like
+            a made-up server ID and hostname) instead of calling Azure. Even a test
+            <span class="mono">run</span> block using <span class="mono">command = apply</span> is
+            completely safe &mdash; it &ldquo;applies&rdquo; only against this fake provider.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform test
+terraform -chdir=terraform/bootstrap test</pre>
+          <p class="desc">Run separately for each root module &mdash; this project has test files for both the main configuration and <a href="../09-bootstrap.html">bootstrap/main.tf</a>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> has run in this folder &mdash; <span class="mono">-backend=false</span> is enough, since tests use the mock provider and never touch real state.</li>
+            <li>Test files exist under <span class="mono">tests/</span> (Terraform's default location) using the <span class="mono">.tftest.hcl</span> extension.</li>
+            <li>Each test file supplies its own <span class="mono">variables</span> block with values for anything the configuration requires &mdash; a test doesn't read your real <span class="mono">terraform.tfvars</span> or <span class="mono">TF_VAR_*</span> environment variables; it needs its own.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>No real Azure resources or real state are affected at all &mdash; everything ran against the mock provider.</li>
+            <li>Each <span class="mono">run</span> block is reported as passed or failed, with a summary at the end.</li>
+            <li>A passing test suite means the configuration's structure and computed values match the assumptions the tests encode &mdash; it does not confirm Azure will actually accept those values (name availability, quota, and live permissions are still only proven by a real <a href="04-plan.html">plan</a>/<a href="05-apply.html">apply</a>).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What the tests actually check</span><span class="qnum">terraform/tests/infrastructure.tftest.hcl</span></div>
+          <pre class="code">run "matches_powershell_resources" {
+  command = apply
+
+  assert {
+    condition     = azurerm_postgresql_flexible_server.metals.sku_name == "B_Standard_B1ms"
+      && azurerm_postgresql_flexible_server.metals.storage_mb == 32768
+      && azurerm_postgresql_flexible_server.metals.version == "16"
+    error_message = "Database sizing and version must match the PowerShell demo."
+  }
+  assert {
+    condition     = strcontains(azurerm_linux_web_app.metals.app_settings["DB_URL"], "Test%20%40Password%2B123@")
+    error_message = "Database URL must percent-encode spaces, @, and + in the password."
+  }
+  # ...more assertions, covering the firewall rule, OIDC subject, and role assignment
+}</pre>
+          <p class="desc">
+            These assertions catch exactly the kind of mistake that's easy to introduce while
+            editing <a href="../05-database.html">database.tf</a>,
+            <a href="../06-app-service.html">app_service.tf</a>, or
+            <a href="../07-github-oidc.html">github_oidc.tf</a> &mdash; for example, the URL-encoding
+            logic covered on the <a href="../06-app-service.html">app_service.tf page</a> failing
+            silently for a password containing spaces or symbols.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Alongside a separate Python test suite</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">terraform -chdir=terraform test
+terraform -chdir=terraform/bootstrap test
+...
+python -m unittest discover -s terraform/tests -p 'test_*.py'</pre>
+          <p class="desc">
+            This project's CI <span class="mono">validate</span> job runs
+            <span class="mono">terraform test</span> for both root modules, and separately runs a
+            Python unit test suite (<span class="mono">test_initialize_database.py</span>) against
+            <span class="mono">terraform/scripts/initialize_database.py</span> &mdash; two different
+            test frameworks, for two different languages, in the same job.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Error: Test assertion failed&rdquo;</td><td>An <span class="mono">assert</span> condition evaluated to false &mdash; the actual computed value doesn't match what the test expects.</td><td>Read the <span class="mono">error_message</span> and the reported actual value; either fix the configuration, or update the test if the expected behavior genuinely changed on purpose.</td></tr>
+            <tr><td>&ldquo;No value for required variable&rdquo; inside a test</td><td>The test's own <span class="mono">variables</span> block doesn't supply every variable the configuration requires.</td><td>Add the missing variable to the <span class="mono">variables</span> block in that test file (or the <span class="mono">run</span> block, which can override it per-run).</td></tr>
+            <tr><td>A test tries to reach real Azure</td><td>A <span class="mono">run</span> block's provider wasn't actually overridden by <span class="mono">mock_provider</span> (for example, a missing <span class="mono">providers</span> mapping on the run block in a more complex test file).</td><td>Confirm the test file's <span class="mono">mock_provider</span> block is defined and wired up before any <span class="mono">run</span> block that uses <span class="mono">command = apply</span>.</td></tr>
+            <tr><td>&ldquo;Could not load plugin&rdquo;</td><td>Same root cause as every other command: <a href="01-init.html">terraform init</a> hasn't run in this folder yet.</td><td>Run <span class="mono">terraform init -backend=false</span> first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="07-output.html"><span class="pn-label">&larr; Back</span>terraform output</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>All commands</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's all eight commands &mdash; from a first init to a fully automated test suite, entirely offline.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">terraform/tests/infrastructure.tftest.hcl</span>, <span class="mono">terraform/bootstrap/tests/bootstrap.tftest.hcl</span>
+</footer>
+
+</body>
+</html>

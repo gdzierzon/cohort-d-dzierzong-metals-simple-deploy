@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>versions.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; versions.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 1 of 9</p>
+        <h1>versions.tf</h1>
+        <p class="lede">
+          Pins which version of Terraform itself, and which version of the Azure toolkit
+          (&ldquo;provider&rdquo;), this project is built for &mdash; and tells that toolkit which Azure
+          subscription and Azure services to work with.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Blocks &rarr; <b>terraform</b> &middot; <b>provider</b></span>
+      <span class="fact">Defines resources &rarr; <b>no</b></span>
+      <span class="fact">Read first &rarr; <b>yes</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#terraform-block">The terraform block</a></li>
+      <li><a href="#provider-block">The provider block</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Pin the required Terraform and provider versions, and configure the Azure provider.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>the tools this project expects</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Every other file in this folder assumes a particular version of Terraform and a
+        particular version of the Azure provider are available &mdash; <span class="mono">versions.tf</span>
+        is where that assumption is written down and enforced. Without it, two people (or a
+        person and a GitHub Actions robot) could quietly end up running slightly different tools
+        against the same infrastructure, which is exactly the kind of inconsistency Terraform is
+        supposed to eliminate.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/versions.tf</span>terraform {
+  required_version = ">= 1.7, < 2.0"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 5.2.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+
+  subscription_id = var.subscription_id
+  resource_providers_to_register = [
+    "Microsoft.DBforPostgreSQL",
+    "Microsoft.ManagedIdentity",
+    "Microsoft.Web",
+  ]
+}</pre>
+    </section>
+
+    <section class="block" id="terraform-block">
+      <h2>The <span class="mono">terraform</span> block <span class="tag">tooling requirements</span></h2>
+      <p class="dek">This block doesn't create anything in Azure. It only sets rules for the tools Terraform uses to run this project.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">required_version</span><span class="qnum">Terraform CLI</span></div>
+          <pre class="code">required_version = ">= 1.7, < 2.0"</pre>
+          <p class="desc">
+            Requires Terraform version 1.7 or newer, but stops short of the untested 2.0 major
+            version. If someone tries to run this project with Terraform 1.5, or with a future
+            2.x release, Terraform refuses to continue and explains why &mdash; instead of running
+            anyway and possibly behaving unexpectedly.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">required_providers &rarr; azurerm</span><span class="qnum">Azure toolkit</span></div>
+          <pre class="code">azurerm = {
+  source  = "hashicorp/azurerm"
+  version = "~> 5.2.0"
+}</pre>
+          <p class="desc">
+            Terraform itself doesn't know how to talk to Azure &mdash; that knowledge lives in a
+            plugin called a <b>provider</b>. This says: download the official
+            <span class="mono">azurerm</span> provider, published by HashiCorp, and use a version
+            compatible with <span class="mono">5.2.0</span>. The <span class="mono">~&gt;</span>
+            symbol means &ldquo;this version or a later patch/minor release, but not the next major
+            version&rdquo; &mdash; small bug-fix updates are fine, big breaking changes are not applied
+            automatically.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="provider-block">
+      <h2>The <span class="mono">provider</span> block <span class="tag">configuration</span></h2>
+      <p class="dek">Where <span class="mono">required_providers</span> says <i>which</i> provider to download, the <span class="mono">provider</span> block configures <i>how</i> to use it.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">features {}</span><span class="qnum">required, empty</span></div>
+          <p class="desc">
+            The azurerm provider requires a <span class="mono">features</span> block to be
+            present, even when there's nothing to customize inside it. Leaving it empty just
+            means &ldquo;use the provider's default behavior.&rdquo;
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">subscription_id = var.subscription_id</span><span class="qnum">which account</span></div>
+          <p class="desc">
+            Azure subscriptions are how Azure separates one customer's (or one team's) resources
+            and billing from everyone else's. This line tells the provider exactly which
+            subscription to create resources in. The actual value comes from a variable (covered
+            on the <a href="03-variables.html">variables.tf page</a>) rather than being typed
+            directly here, so the same file works for anyone's subscription.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">resource_providers_to_register</span><span class="qnum">turning on Azure services</span></div>
+          <pre class="code">resource_providers_to_register = [
+  "Microsoft.DBforPostgreSQL",
+  "Microsoft.ManagedIdentity",
+  "Microsoft.Web",
+]</pre>
+          <p class="desc">
+            Azure subscriptions don't have every possible service switched on by default &mdash; each
+            service (PostgreSQL databases, managed identities, web apps, and so on) is its own
+            &ldquo;resource provider&rdquo; that has to be registered first. Listing them here tells
+            Terraform to make sure they're registered automatically, instead of leaving a person
+            to discover the missing registration only when a later step fails.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Provider</dt>
+            <dd>A plugin that teaches Terraform how to talk to a specific platform &mdash; here, Azure. Terraform also has providers for AWS, GitHub, and many others; this project only uses the Azure one.</dd>
+            <dt>Version constraint</dt>
+            <dd>A rule like <code>~&gt; 5.2.0</code> or <code>&gt;= 1.7, &lt; 2.0</code> that limits which versions of a tool are acceptable, so upgrades happen deliberately instead of by accident.</dd>
+            <dt>Resource provider (Azure term)</dt>
+            <dd>Not to be confused with a Terraform provider. This is an Azure-side concept: a category of Azure service (like <code>Microsoft.Web</code> for web apps) that a subscription must register before it can create that kind of resource.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Terraform overview</a>
+      <a class="next" href="02-backend.html"><span class="pn-label">Next &rarr;</span>backend.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Tools pinned and the provider configured &mdash; next up is where Terraform keeps its memory.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/versions.tf</span>
+</footer>
+
+</body>
+</html>

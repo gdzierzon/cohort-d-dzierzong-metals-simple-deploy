@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>terraform output</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Terraform</a> &rsaquo; <a href="index.html">Commands</a> &rsaquo; terraform output</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Commands &middot; Command 7 of 8</p>
+        <h1>terraform output</h1>
+        <p class="lede">
+          Reads the current state and prints the values published by
+          <a href="../08-outputs.html">outputs.tf</a>. It never contacts Azure and never changes
+          anything &mdash; it's just a window into what a completed <a href="05-apply.html">apply</a>
+          already recorded.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Touches real Azure resources &rarr; <b>no</b></span>
+      <span class="fact">Reads &rarr; <b>state only</b></span>
+      <span class="fact">Formats &rarr; <b>human, -json, -raw</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; All commands</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What this command does</a></li>
+      <li><a href="#where">Where to run it from</a></li>
+      <li><a href="#pre">Precondition</a></li>
+      <li><a href="#post">Postcondition</a></li>
+      <li><a href="#project">How this project uses it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <h2>What this command does <span class="tag">in detail</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            Every <span class="mono">output</span> block in <a href="../08-outputs.html">outputs.tf</a>
+            (or <a href="../09-bootstrap.html">bootstrap/main.tf</a>'s own outputs) gets computed and
+            saved into state during <a href="05-apply.html">terraform apply</a>. This command simply
+            reads those saved values back out and prints them &mdash; nothing more. It's the
+            equivalent of checking a receipt after a purchase, rather than making a new one.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="where">
+      <h2>Where to run it from <span class="tag">working directory &amp; output formats</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <pre class="code">terraform -chdir=terraform output
+terraform -chdir=terraform output -raw webapp_url
+terraform -chdir=terraform output -json github_secrets</pre>
+          <ul class="steps">
+            <li>No arguments &mdash; prints every output, formatted for a person to read.</li>
+            <li><code>-raw &lt;name&gt;</code> &mdash; one output's value, with no quotes or extra formatting; only works for a plain string or number, not an object.</li>
+            <li><code>-json [name]</code> &mdash; structured JSON, either everything or one named output; the right choice for objects like <a href="../08-outputs.html">outputs.tf</a>'s <span class="mono">database</span> or <span class="mono">github_secrets</span>, and for feeding into another script.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pre">
+      <h2>Precondition <span class="tag">what must already be true</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li><a href="01-init.html">terraform init</a> completed, connected to the same backend the resources were created through.</li>
+            <li>At least one successful <a href="05-apply.html">terraform apply</a> has already run &mdash; before that, state has no output values to show.</li>
+            <li>No Azure login is strictly required just to read state, but you do need the same <span class="mono">Storage Blob Data Contributor</span> access to the state container that <a href="01-init.html">init</a> needed.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="post">
+      <h2>Postcondition <span class="tag">what becomes true after it succeeds</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Nothing changes &mdash; this is a pure read.</li>
+            <li>The requested value(s) are printed to standard output, in the requested format.</li>
+            <li>An output marked <span class="mono">sensitive</span> is hidden (shown as <span class="mono">&lt;sensitive&gt;</span>) when listing <i>all</i> outputs at once, but its real value <i>is</i> shown if you ask for that one output by name directly &mdash; a deliberate &ldquo;you asked for it specifically&rdquo; exception worth knowing about. None of this project's current outputs are marked sensitive (the database password is intentionally left out of every output).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="project">
+      <h2>How this project uses it <span class="tag">real examples</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Publishing the GitHub Actions job summary</span><span class="qnum">.github/workflows/terraform.yml</span></div>
+          <pre class="code">echo '## Application workflow settings'
+echo '```json'
+terraform -chdir=terraform output -json github_secrets
+echo '```'
+echo 'Web App name:'
+terraform -chdir=terraform output -raw webapp_name</pre>
+          <p class="desc">Right after a successful apply, the workflow uses exactly these two forms &mdash; structured JSON for the identifiers someone needs to paste into GitHub secrets, and a raw string for the web app name &mdash; to write a copy-pasteable summary at the end of the run.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Locally, before running the app-settings script</span><span class="qnum">terraform/README.md</span></div>
+          <pre class="code">terraform output -json github_secrets</pre>
+          <p class="desc">
+            The same command works locally after connecting to the shared backend, which is how
+            <span class="mono">terraform/scripts/show_application_deployment_secrets.ps1</span>
+            /<span class="mono">.sh</span> retrieve the values they print.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Warning: No outputs found&rdquo;</td><td>No <a href="05-apply.html">apply</a> has succeeded yet in this state, so there's nothing to read.</td><td>Run <span class="mono">terraform apply</span> first.</td></tr>
+            <tr><td>&ldquo;Output ... not found&rdquo;</td><td>The output name was misspelled, or doesn't exist in <a href="../08-outputs.html">outputs.tf</a>.</td><td>Check the exact output names defined in the file, or run <span class="mono">terraform output</span> with no arguments to list them all.</td></tr>
+            <tr><td>Error using <span class="mono">-raw</span> on an output</td><td><span class="mono">-raw</span> only works for a plain string or number; the requested output (like <span class="mono">database</span> or <span class="mono">github_secrets</span>) is a structured object.</td><td>Use <span class="mono">-json &lt;name&gt;</span> instead.</td></tr>
+            <tr><td>Authorization error reading state</td><td>Missing <span class="mono">Storage Blob Data Contributor</span> access to the state container.</td><td>Same fix as <a href="01-init.html">terraform init</a>'s equivalent error &mdash; verify your Azure login and the bootstrap role assignments.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="06-destroy.html"><span class="pn-label">&larr; Back</span>terraform destroy</a>
+      <a class="next" href="08-test.html"><span class="pn-label">Next &rarr;</span>terraform test</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The receipt is easy to read &mdash; last up, the command that checks your work without touching Azure at all.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">.github/workflows/terraform.yml</span>, <span class="mono">terraform/scripts/show_application_deployment_secrets.ps1</span>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>github_oidc.tf</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Terraform</a> &rsaquo; github_oidc.tf</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Terraform Tutorial &middot; File 7 of 9</p>
+        <h1>github_oidc.tf</h1>
+        <p class="lede">
+          Builds a secure digital identity that lets the GitHub Actions deployment workflow prove who
+          it is to Azure, and grants that identity permission to deploy code to this project's web
+          app &mdash; without ever storing a password or long-lived secret.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Resources created &rarr; <b>3</b></span>
+      <span class="fact">Auth method &rarr; <b>OIDC (OpenID Connect)</b></span>
+      <span class="fact">Permission scope &rarr; <b>this one web app only</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Terraform overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#full-file">The full file</a></li>
+      <li><a href="#why-oidc">Why not just use a password?</a></li>
+      <li><a href="#identity">The identity itself</a></li>
+      <li><a href="#credential">The federated identity credential</a></li>
+      <li><a href="#role">The role assignment</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this file</p>
+          <p>Create a passwordless identity GitHub Actions can use to authenticate to Azure, and grant it just enough permission to deploy this one web app.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>proving identity, without a password</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Every automated deployment needs some way to prove to Azure that it's allowed to make
+        changes. This file sets up that proof &mdash; using a modern approach (OIDC) instead of a
+        traditional stored password or key.
+      </p>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The full file <span class="tag">code sample</span></h2>
+      <pre class="code"><span class="filename">terraform/github_oidc.tf</span>resource "azurerm_user_assigned_identity" "github" {
+  name                = "${local.prefix}-github"
+  resource_group_name = azurerm_resource_group.metals.name
+  location            = azurerm_resource_group.metals.location
+}
+
+resource "azurerm_federated_identity_credential" "github" {
+  name                      = "github-development"
+  user_assigned_identity_id = azurerm_user_assigned_identity.github.id
+  issuer                    = "https://token.actions.githubusercontent.com"
+  audience                  = ["api://AzureADTokenExchange"]
+  subject                   = local.oidc_subject
+}
+
+resource "azurerm_role_assignment" "github_deployment" {
+  scope                = azurerm_linux_web_app.metals.id
+  role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}</pre>
+    </section>
+
+    <section class="block" id="why-oidc">
+      <h2>Why not just use a password? <span class="tag">the problem this solves</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The old way: a stored secret</span><span class="qnum">what this avoids</span></div>
+          <p class="desc">
+            A simple approach would be to generate an Azure password or key once, and paste it
+            into a GitHub secret. It works, but that secret is long-lived: if it ever leaks, it
+            keeps working until someone notices and manually rotates it.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The OIDC way: prove it, per run</span><span class="qnum">what this does instead</span></div>
+          <p class="desc">
+            With <b>OIDC (OpenID Connect)</b>, GitHub issues a short-lived, cryptographically
+            signed token for each individual workflow run, describing exactly which repository and
+            environment it came from. Azure trusts GitHub's signature and checks that description
+            against rules configured here &mdash; if it matches, Azure hands back temporary access.
+            Nothing durable is ever stored as a GitHub secret; there's nothing long-lived to leak.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="identity">
+      <h2>The identity itself <span class="tag">azurerm_user_assigned_identity</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            This creates an empty Azure identity &mdash; on its own, an
+            <span class="mono">azurerm_user_assigned_identity</span> can't do anything. It's just
+            a named &ldquo;account&rdquo; that the next two resources give a way to log in to, and
+            permission to use.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="credential">
+      <h2>The federated identity credential <span class="tag">azurerm_federated_identity_credential</span></h2>
+      <p class="dek">This is the actual trust relationship: the rule that decides which GitHub tokens Azure will accept as proof of identity for the resource above.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">issuer</span><span class="qnum">who's allowed to vouch</span></div>
+          <p class="desc">
+            <span class="mono">"https://token.actions.githubusercontent.com"</span> &mdash; the
+            fixed address GitHub Actions uses to issue its identity tokens. This tells Azure
+            &ldquo;only trust tokens signed by GitHub Actions,&rdquo; not tokens from anywhere else.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">audience</span><span class="qnum">who the token is for</span></div>
+          <p class="desc">
+            <span class="mono">["api://AzureADTokenExchange"]</span> &mdash; a fixed value that
+            marks the token as intended for exchanging with Microsoft Entra ID specifically,
+            rather than some other service GitHub could also issue tokens for.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">subject</span><span class="qnum">exactly which workflow run</span></div>
+          <p class="desc">
+            <span class="mono">local.oidc_subject</span> &mdash; the computed string from
+            <a href="04-main.html">main.tf</a>, something like
+            <span class="mono">repo:owner/repo:environment:Development</span>. This is the most
+            important line: it means Azure will only accept tokens that say &ldquo;I am the GitHub
+            Actions workflow running in this exact repository, in this exact
+            environment.&rdquo; A workflow from a different repository, or the same repository but
+            a different environment, presents a different subject and is rejected.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="role">
+      <h2>The role assignment <span class="tag">azurerm_role_assignment</span></h2>
+      <p class="dek">Being able to log in as this identity still wouldn't let it do anything &mdash; Azure permissions are granted separately, by role assignment.</p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">scope = azurerm_linux_web_app.metals.id</span><span class="qnum">the most important line here</span></div>
+          <p class="desc">
+            The <span class="mono">scope</span> is <i>what</i> the permission applies to. Here,
+            it's scoped to one specific resource &mdash; this one web app &mdash; not the resource
+            group, and not the whole subscription. This is the principle of <b>least
+            privilege</b>: if the GitHub Actions identity were ever compromised, the damage it
+            could do is limited to this single web app, not the database, not any other resource.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">role_definition_name = "Website Contributor"</span><span class="qnum">what it's allowed to do</span></div>
+          <p class="desc">
+            A built-in Azure role that permits managing and deploying to web apps, without
+            granting broader permissions like deleting the resource or changing its network
+            configuration. The permission matches the job: deploying application code.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">principal_id / principal_type</span><span class="qnum">who's receiving the permission</span></div>
+          <p class="desc">
+            <span class="mono">principal_id</span> identifies the identity created above, and
+            <span class="mono">principal_type = "ServicePrincipal"</span> tells Azure this
+            principal is an application/service identity, not a human user &mdash; which avoids an
+            extra Azure lookup and a small delay Terraform would otherwise need to resolve the
+            principal's type on its own.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>OIDC (OpenID Connect)</dt>
+            <dd>A standard way for one system (like GitHub Actions) to prove its identity to another (like Azure) using short-lived, verifiable tokens, instead of a shared long-lived secret.</dd>
+            <dt>Managed identity</dt>
+            <dd>An Azure identity that applications or automated processes can authenticate as, without a human ever typing a password for it.</dd>
+            <dt>Federated identity credential</dt>
+            <dd>The specific trust rule connecting an external token issuer (GitHub) to an Azure identity, defining exactly which tokens are acceptable.</dd>
+            <dt>Role assignment</dt>
+            <dd>The Azure record that grants a specific identity a specific role (a bundle of permissions) at a specific scope &mdash; the combination of <i>who</i>, <i>what they can do</i>, and <i>where</i>.</dd>
+            <dt>Least privilege</dt>
+            <dd>The security practice of granting only the minimum permissions needed for a task, so that if an identity is ever misused, the possible damage is limited.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="06-app-service.html"><span class="pn-label">&larr; Back</span>app_service.tf</a>
+      <a class="next" href="08-outputs.html"><span class="pn-label">Next &rarr;</span>outputs.tf</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>GitHub can now prove who it is &mdash; last stop, the receipt Terraform hands back when it's done.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">terraform/github_oidc.tf</span>
+</footer>
+
+</body>
+</html>
