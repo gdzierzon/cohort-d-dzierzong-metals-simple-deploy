@@ -11,7 +11,6 @@ on:
       - 'metals_api/**'
       - 'sql/**'
       - 'requirements.txt'
-      - '.github/workflows/azure-webapps-python.yml'
   workflow_dispatch:
 
 permissions:

@@ -150,7 +150,7 @@ jobs:
         run: |
           {
             echo '## Application workflow settings'
-            echo 'Copy these IDs to the AZURE_* repository secrets used by the application workflow.'
+            echo 'Add these IDs as AZURE_* secrets in the Development environment for the application workflow.'
             echo '```json'
             terraform -chdir=terraform output -json github_secrets
             echo '```'

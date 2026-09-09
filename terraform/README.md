@@ -127,7 +127,7 @@ Keep `TF_AZURE_*` secrets unchanged. The workflow prints only identifiers, not t
 
 Ensure `AZURE_WEBAPP_NAME` in `.github/workflows/azure-webapps-python.yml` matches the Web App name shown in the summary, especially if you changed `TF_USER_NAME`.
 
-Now push application code changes or select **Run workflow** on **Build and deploy Python app to Azure Web App**. Build and test run in parallel; deploy waits for both and authenticates using the Development identity. Running Terraform does not automatically trigger this workflow. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
+Now push application code changes or select **Run workflow** on **Build and deploy Python app to Azure Web App**. Build and test run in parallel; deploy waits for both and authenticates using the Development identity. Running Terraform does not automatically trigger this workflow. Updates to the application workflow file itself are run manually so an infrastructure-setup commit cannot accidentally deploy before its Development identity exists. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
 
 ## 6. Update or destroy infrastructure independently
 
