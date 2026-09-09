@@ -86,7 +86,7 @@ Allow a few minutes for identity and role assignments to propagate.
 Copy `terraform/backend.hcl.example` to `terraform/backend.hcl`, then replace its storage account placeholder with the bootstrap output. Authenticate with the same local operator granted state access during bootstrap:
 
 ```powershell
-terraform -chdir=terraform init -migrate-state -backend-config=backend.hcl
+terraform -chdir=terraform init -migrate-state -backend-config backend.hcl
 ```
 
 Confirm the state-copy prompt. Verify `terraform -chdir=terraform state list` shows the existing resources. Match `TF_DB_PASSWORD` to the password used previously, and match the GitHub variables to your existing local inputs. Keep the local backup until migration is verified.
@@ -123,7 +123,7 @@ After successful infrastructure apply, open the run summary's **Application work
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-To display the same values locally from the shared Terraform state, first initialize the remote backend as described in [Optional local Terraform and schema operations](#optional-local-terraform-and-schema-operations), then run:
+To display the same values locally from the shared Terraform state, first initialize the remote backend as described in [Optional local Terraform and schema operations](#optional-local-terraform-and-schema-operations). Copy `backend.hcl.example` to the ignored `backend.hcl`, replace `COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP` with the `TF_STATE_STORAGE_ACCOUNT` value from the **Terraform** environment, and run `terraform init`. Then run:
 
 ```powershell
 .\terraform\scripts\show_application_deployment_secrets.ps1
@@ -147,10 +147,10 @@ For complete final cleanup, destroy the application first, then use the retained
 
 ## Optional local Terraform and schema operations
 
-Use the same remote backend as Actions. Copy and edit `terraform/backend.hcl.example`, authenticate with `az login`, and set the normal inputs using local `.tfvars` or `TF_VAR_*` environment variables. Supply `TF_VAR_db_password` without committing it. If local state needs migration, use step 3 instead of an ordinary init.
+Use the same remote backend as Actions. Copy `terraform/backend.hcl.example` to the ignored `terraform/backend.hcl`, replace `COPY-TF_STATE_STORAGE_ACCOUNT-FROM-BOOTSTRAP` with the `TF_STATE_STORAGE_ACCOUNT` value from the **Terraform** environment, and authenticate with `az login`. Set normal inputs using local `.tfvars` or `TF_VAR_*` environment variables. Supply `TF_VAR_db_password` without committing it. If local state needs migration, use step 3 instead of an ordinary init.
 
 ```powershell
-terraform -chdir=terraform init -backend-config=backend.hcl
+terraform -chdir=terraform init -backend-config backend.hcl
 terraform -chdir=terraform plan
 ```
 
