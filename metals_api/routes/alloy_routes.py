@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from auth import require_auth, require_roles
 from dtos import CreateAlloyDTO, UpdateAlloyDTO
 from services import alloy_service as service
 from services.exceptions import BusinessValidationError
@@ -14,6 +15,7 @@ alloy_blueprint = Blueprint(
 
 # http://localhost:5000/api/alloys
 @alloy_blueprint.get("")
+@require_auth
 def get_all_alloys():
     alloys = service.list_alloys(
         name=request.args.get("name"),
@@ -24,6 +26,7 @@ def get_all_alloys():
 
 # http://localhost:5000/api/alloys/2
 @alloy_blueprint.get("/<int:alloy_id>")
+@require_auth
 def get_alloy(alloy_id: int):
     dto = service.find_alloy(alloy_id)
     if dto is None:
@@ -34,6 +37,8 @@ def get_alloy(alloy_id: int):
 
 # http://localhost:5000/api/alloys
 @alloy_blueprint.post("")
+@require_auth
+@require_roles("Admin")
 def create_alloy():
     data = request.get_json(silent=True)
     errors = CreateAlloyDTO.validate(data)
@@ -51,6 +56,8 @@ def create_alloy():
 
 # http://localhost:5000/api/alloys/2
 @alloy_blueprint.put("/<int:alloy_id>")
+@require_auth
+@require_roles("Admin")
 def update_alloy(alloy_id: int):
     data = request.get_json(silent=True)
     errors = UpdateAlloyDTO.validate(data)
@@ -71,6 +78,8 @@ def update_alloy(alloy_id: int):
 
 # http://localhost:5000/api/alloys/2
 @alloy_blueprint.delete("/<int:alloy_id>")
+@require_auth
+@require_roles("Admin")
 def delete_alloy(alloy_id: int):
     if not service.remove_alloy(alloy_id):
         return jsonify({"error": "Alloy not found"}), 404

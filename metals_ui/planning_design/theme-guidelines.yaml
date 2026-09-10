@@ -1,0 +1,71 @@
+project: Metals Atlas
+purpose: >
+  A calm, educational metallurgy catalog where customers explore elements,
+  alloys, and coins.
+
+visual_direction:
+  overall_feeling:
+    - simple
+    - refined
+    - calm
+    - elegant
+    - educational
+  inspiration:
+    - the beauty of precious metals
+    - newly minted coins
+    - polished gold, silver, and alloy surfaces
+    - the controlled process of melting and pouring an alloy
+  avoid:
+    - industrial or factory styling
+    - steampunk or cyberpunk motifs
+    - gritty machinery
+    - sparks, smoke, pipes, rivets, and hazard-stripe imagery
+    - visually noisy pages
+    - cluttered dashboards
+    - excessive gradients, animation, or decoration
+
+theme:
+  preferred_direction: subdued_dark
+  dark_theme_rules:
+    - Use graphite, charcoal, or deep bronze rather than pure black.
+    - Keep text high-contrast and comfortable to read.
+    - Use dark surfaces sparingly with clear visual hierarchy.
+    - Let gold and silver details provide gentle luminance, not glare.
+    - Use soft gallery-like lighting rather than dramatic high contrast.
+  light_theme_fallback:
+    - Use warm ivory, champagne, and pale silver rather than stark white.
+    - Preserve the same calm hierarchy and restrained metallic accents.
+
+color_and_materials:
+  primary_materials:
+    - brushed silver
+    - satin gold
+    - polished coin edges
+    - subtle molten-metal glow
+  accent_usage:
+    - Use gold and silver as small highlights for calls to action, dividers, and key details.
+    - Do not use metallic colors everywhere; leave room for calm neutral surfaces.
+  texture:
+    - Prefer restrained, soft material texture.
+    - Avoid decorative textures behind readable text.
+
+layout:
+  principles:
+    - Use generous whitespace.
+    - Keep each page focused on one primary task.
+    - Favor a small number of meaningful actions.
+    - Use clear typography and thin, quiet dividers.
+    - Prefer simple card grids for catalog entry points.
+    - Keep navigation compact and easy to scan.
+  imagery:
+    - Use one strong hero image or a small number of supporting details.
+    - Provide sufficient negative space around images and copy.
+    - Use molten-pour imagery as a refined process detail, not a busy scene.
+    - Use minted coins as a symbol of craftsmanship and finished beauty.
+
+accessibility:
+  - Preserve readable contrast in both light and dark themes.
+  - Do not communicate meaning through color alone.
+  - Respect keyboard navigation and visible focus states.
+  - Keep motion subtle and optional.
+  - Do not place important text over busy imagery.

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API File Structure</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Metals API</a> &rsaquo; File Structure</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals API &middot; Section 3 of 3</p>
+        <h1>How the Code Is Organized</h1>
+        <p class="lede">
+          <span class="mono">metals_api/</span> is split into layers, each with one job: routes
+          handle HTTP, services hold business rules, repositories talk to the database, and models
+          describe the tables. DTOs sit at the edges, shaping what comes in and goes out as JSON.
+          Nothing here changed structurally to add authentication &mdash; it just added one more
+          resource (<span class="mono">auth</span>) that follows the same pattern as everything
+          else, plus one shared file, <span class="mono">auth.py</span>, that every route can use.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>metals_api/</b></span>
+      <span class="fact">Pattern &rarr; <b>routes &rarr; services &rarr; repositories &rarr; models</b></span>
+      <span class="fact">ORM &rarr; <b>SQLAlchemy</b></span>
+      <span class="fact">Tests mirror &rarr; <b>the same folders, under tests/</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Metals API overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#tree">The folder, top to bottom</a></li>
+      <li><a href="#trace">One request, traced through every layer</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="tree">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Show what each file and folder in <span class="mono">metals_api/</span> is responsible for, and how a request actually moves through them.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one job per layer</figcaption>
+        </figure>
+      </div>
+      <h2>The folder, top to bottom <span class="tag">structure</span></h2>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:16rem;">File / folder</th><th>What it's for, in plain terms</th></tr></thead>
+          <tbody>
+            <tr><td class="path">app.py</td><td>Creates the Flask app, reads <span class="mono">JWT_SECRET_KEY</span> / <span class="mono">JWT_EXPIRATION_MINUTES</span> from the environment, and registers every blueprint (auth, elements, alloys, alloy elements, coins).</td></tr>
+            <tr><td class="path">auth.py</td><td>The two decorators covered in <a href="02-authentication.html#how-this-api-uses-it">Section 2</a>: <span class="mono">require_auth</span> and <span class="mono">require_roles</span>. Shared by every route file below.</td></tr>
+            <tr><td class="path indent">database/connection.py</td><td>Builds the SQLAlchemy <span class="mono">engine</span> and <span class="mono">SessionFactory</span> from the <span class="mono">DB_*</span> variables in <span class="mono">.env</span>.</td></tr>
+            <tr><td class="path indent">models/</td><td>One SQLAlchemy class per table (<span class="mono">Element</span>, <span class="mono">Alloy</span>, <span class="mono">AlloyElement</span>, <span class="mono">Coin</span>, <span class="mono">User</span>, <span class="mono">Role</span>), plus <span class="mono">user_role.py</span> for the users&harr;roles join table and <span class="mono">base.py</span> for the shared declarative base.</td></tr>
+            <tr><td class="path indent">dtos/</td><td>Plain dataclasses shaping request and response JSON &mdash; a <span class="mono">Create*DTO</span>, <span class="mono">Update*DTO</span>, and <span class="mono">*ResponseDTO</span> per resource, each with its own <span class="mono">validate()</span>. <span class="mono">base.py</span> holds the shared <span class="mono">to_dictionary</span> / <span class="mono">from_dictionary</span> conversion logic.</td></tr>
+            <tr><td class="path indent">repositories/</td><td>Plain functions that run the actual SQLAlchemy queries &mdash; get, add, update, delete &mdash; one file per table. <span class="mono">user_repository.py</span> is what <span class="mono">auth_service.py</span> uses to look up accounts and roles.</td></tr>
+            <tr><td class="path indent">services/</td><td>Business logic: opens a session, calls the repository, enforces rules (like &ldquo;no duplicate element name&rdquo;), and converts between models and DTOs. <span class="mono">auth_service.py</span> additionally hashes/verifies passwords with Argon2id and issues JWTs. <span class="mono">exceptions.py</span> defines <span class="mono">BusinessValidationError</span>, the one exception every service raises for a rule violation.</td></tr>
+            <tr><td class="path indent">routes/</td><td>Flask <span class="mono">Blueprint</span>s &mdash; one per resource &mdash; wiring HTTP verb + path to a service call, applying <span class="mono">@require_auth</span> / <span class="mono">@require_roles</span>, and turning DTO validation errors or <span class="mono">BusinessValidationError</span> into the JSON error shapes from <a href="01-endpoints.html#errors">Section 1</a>.</td></tr>
+            <tr><td class="path indent">tests/</td><td>A pytest suite mirroring the folders above (<span class="mono">models/</span>, <span class="mono">dtos/</span>, <span class="mono">repositories/</span>, <span class="mono">services/</span>, <span class="mono">routes/</span>), plus <span class="mono">conftest.py</span>, which sets test-only environment variables and a <span class="mono">make_token()</span> helper for building a valid JWT without actually calling <span class="mono">/api/auth/login</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Every file in <span class="mono">routes/</span>, <span class="mono">services/</span>,
+        <span class="mono">repositories/</span>, and <span class="mono">models/</span> follows the
+        same naming pattern: <span class="mono">&lt;resource&gt;_routes.py</span>,
+        <span class="mono">&lt;resource&gt;_service.py</span>, and so on. Once you understand one
+        resource end to end, all five (including <span class="mono">auth</span>) read the same way.
+      </p>
+    </section>
+
+    <section class="block" id="trace">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>One request, traced through every layer <span class="tag">POST /api/elements</span></h2>
+          <p class="dek">
+            The clearest way to see how these layers connect is to follow one real request all the
+            way through &mdash; an Admin creating a new element.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>four layers, one request</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">1. Route</span><span class="qnum">routes/element_routes.py</span></div>
+          <pre class="code">@element_blueprint.post("")
+@require_auth
+@require_roles("Admin")
+def create_element():
+    data = request.get_json(silent=True)
+    errors = CreateElementDTO.validate(data)
+    if errors:
+        return jsonify({"errors": errors}), 400
+
+    request_dto = CreateElementDTO.from_dictionary(data)
+    response_dto = service.create_element(request_dto)
+    return jsonify(response_dto.to_dictionary()), 201</pre>
+          <p class="desc"><span class="mono">require_auth</span> and <span class="mono">require_roles</span> already ran (see <a href="02-authentication.html#how-this-api-uses-it">Section 2</a>). The route's own job is small: validate the raw JSON with the DTO, turn it into a typed <span class="mono">CreateElementDTO</span>, and hand it to the service.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">2. DTO</span><span class="qnum">dtos/element_dto.py</span></div>
+          <p class="desc"><span class="mono">CreateElementDTO.validate(data)</span> checks required fields, types, string lengths, and value ranges &mdash; all before a database session is even opened. <span class="mono">from_dictionary</span> also converts numeric strings into <span class="mono">Decimal</span> for fields like <span class="mono">density</span>, so the service never has to think about that conversion.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">3. Service</span><span class="qnum">services/element_service.py</span></div>
+          <pre class="code">def create_element(dto: CreateElementDTO) -> ElementResponseDTO:
+    with SessionFactory() as session:
+        if element_repository.get_element_by_id(session, dto.atomic_number):
+            raise BusinessValidationError(["An element with this atomic_number already exists."])
+        ...
+        element = Element(**dto.to_dictionary())
+        element = element_repository.add_element(session, element)
+        return ElementResponseDTO.from_model(element)</pre>
+          <p class="desc">Opens a database session, enforces business rules the DTO can't know about by itself (like uniqueness, which requires checking the database), builds a <span class="mono">Element</span> model instance, and asks the repository to save it.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">4. Repository &amp; Model</span><span class="qnum">repositories/element_repository.py, models/element.py</span></div>
+          <p class="desc">The repository's <span class="mono">add_element</span> is a thin wrapper around <span class="mono">session.add(element)</span> / <span class="mono">session.commit()</span> &mdash; it doesn't know or care <i>why</i> it's being asked to save this row. <span class="mono">Element</span>, the model, is what SQLAlchemy uses to translate that Python object into the actual <span class="mono">INSERT</span> statement against the <span class="mono">elements</span> table described in the <a href="../database/01-schema.html">Database schema tutorial</a>.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Back up the stack</span><span class="qnum">response</span></div>
+          <p class="desc"><span class="mono">ElementResponseDTO.from_model(element)</span> converts the saved model back into a response DTO, the route calls <span class="mono">.to_dictionary()</span> on it and wraps it in <span class="mono">jsonify(...), 201</span> &mdash; the JSON body an Insomnia request would actually see.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">glossary</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Blueprint</dt>
+            <dd>Flask's way of grouping related routes together (all of <span class="mono">/api/elements</span>, for example) and registering them on the app as one unit in <span class="mono">app.py</span>.</dd>
+            <dt>DTO (Data Transfer Object)</dt>
+            <dd>A plain object whose only job is describing the shape of data crossing a boundary &mdash; here, JSON in and out of the API. DTOs validate; models don't.</dd>
+            <dt>Repository</dt>
+            <dd>A layer whose only job is running database queries for one table, so services never write raw SQLAlchemy queries directly.</dd>
+            <dt>Session / SessionFactory</dt>
+            <dd>SQLAlchemy's unit of work with the database &mdash; a session is opened, used for one logical operation, and closed. <span class="mono">SessionFactory()</span> creates a new one each time a service needs one.</dd>
+            <dt>Model</dt>
+            <dd>A Python class mapped to a database table by SQLAlchemy's ORM (Object-Relational Mapper) &mdash; an instance of <span class="mono">Element</span> corresponds to one row in the <span class="mono">elements</span> table.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-authentication.html"><span class="pn-label">&larr; Back</span>Authentication with JWT</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>Metals API overview</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>All three sections done &mdash; endpoints, authentication, and the code behind both. Next, see who actually calls these endpoints in the <a href="../ui/index.html">Metals UI tutorial</a>, or head back to the <a href="../index.html">tutorials home</a> any time.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">metals_api/</span> in this repository.
+</footer>
+
+</body>
+</html>

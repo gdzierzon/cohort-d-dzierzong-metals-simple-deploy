@@ -5,7 +5,9 @@ param(
     [string]$UserName = 'dzierzon',
     [string]$PsqlPath,
     # Supply this explicitly if a VPN/proxy uses a different database egress IP.
-    [string]$ClientIp
+    [string]$ClientIp,
+    # Resume after the resource group, PostgreSQL server, and database exist.
+    [switch]$SkipProvisioning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,30 +82,35 @@ if (-not [System.Net.IPAddress]::TryParse($ClientIp, [ref]$parsedClientIp) -or
     throw '-ClientIp must be a nonzero IPv4 address for this computer.'
 }
 
-# Resource group
-Invoke-Az group create --name $resourceGroup --location westus2
+if (-not $SkipProvisioning) {
+    # Resource group
+    Invoke-Az group create --name $resourceGroup --location westus2
 
-# Database: preserve the development settings from az_create_resources.sh.
-Invoke-Az postgres flexible-server create `
-    --resource-group $resourceGroup `
-    --name $dbServer `
-    --location westus2 `
-    --admin-user metalsadmin `
-    --admin-password 'P@ssw0rd' `
-    --tier Burstable `
-    --sku-name Standard_B1ms `
-    --storage-size 32 `
-    --storage-auto-grow Disabled `
-    --backup-retention 7 `
-    --geo-redundant-backup Disabled `
-    --version 16 `
-    --public-access 0.0.0.0 `
-    --tags Environment=Development
+    # Database: preserve the development settings from az_create_resources.sh.
+    Invoke-Az postgres flexible-server create `
+        --resource-group $resourceGroup `
+        --name $dbServer `
+        --location westus2 `
+        --admin-user metalsadmin `
+        --admin-password 'P@ssw0rd' `
+        --tier Burstable `
+        --sku-name Standard_B1ms `
+        --storage-size 32 `
+        --storage-auto-grow Disabled `
+        --backup-retention 7 `
+        --geo-redundant-backup Disabled `
+        --version 16 `
+        --public-access 0.0.0.0 `
+        --tags Environment=Development
 
-Invoke-Az postgres flexible-server db create `
-    --resource-group $resourceGroup `
-    --server-name $dbServer `
-    --name metals
+    Invoke-Az postgres flexible-server db create `
+        --resource-group $resourceGroup `
+        --server-name $dbServer `
+        --name metals
+}
+else {
+    Write-Host "Using existing resource group, PostgreSQL server, and database. Resuming at firewall configuration."
+}
 
 # The 0.0.0.0 rule above allows Azure services, not this local computer.
 Invoke-Az postgres flexible-server firewall-rule create `
@@ -218,7 +225,3 @@ finally {
     Remove-Variable dbPassword, encodedPassword, dbUrl -ErrorAction SilentlyContinue
 }
 
-# As in the Bash script, stop the database when provisioning is complete.
-Invoke-Az postgres flexible-server stop `
-    --resource-group $resourceGroup `
-    --name $dbServer

@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from auth import require_auth, require_roles
 from dtos import CreateAlloyElementDTO, UpdateAlloyElementDTO
 from services import alloy_element_service as service
 from services.exceptions import BusinessValidationError
@@ -14,6 +15,7 @@ alloy_element_blueprint = Blueprint(
 
 # http://localhost:5000/api/alloy-elements
 @alloy_element_blueprint.get("")
+@require_auth
 def get_all_alloy_elements():
     errors = []
     alloy_id = request.args.get("alloy_id")
@@ -51,6 +53,7 @@ def get_all_alloy_elements():
 
 # http://localhost:5000/api/alloy-elements/2/13
 @alloy_element_blueprint.get("/<int:alloy_id>/<int:atomic_number>")
+@require_auth
 def get_alloy_element(alloy_id: int, atomic_number: int):
     dto = service.find_alloy_element(
         alloy_id,
@@ -64,6 +67,8 @@ def get_alloy_element(alloy_id: int, atomic_number: int):
 
 # http://localhost:5000/api/alloy-elements
 @alloy_element_blueprint.post("")
+@require_auth
+@require_roles("Admin")
 def create_alloy_element():
     data = request.get_json(silent=True)
     errors = CreateAlloyElementDTO.validate(data)
@@ -81,6 +86,8 @@ def create_alloy_element():
 
 # http://localhost:5000/api/alloy-elements/2/13
 @alloy_element_blueprint.put("/<int:alloy_id>/<int:atomic_number>")
+@require_auth
+@require_roles("Admin")
 def update_alloy_element(alloy_id: int, atomic_number: int):
     data = request.get_json(silent=True)
     errors = UpdateAlloyElementDTO.validate(data)
@@ -101,6 +108,8 @@ def update_alloy_element(alloy_id: int, atomic_number: int):
 
 # http://localhost:5000/api/alloy-elements/2/13
 @alloy_element_blueprint.delete("/<int:alloy_id>/<int:atomic_number>")
+@require_auth
+@require_roles("Admin")
 def delete_alloy_element(alloy_id: int, atomic_number: int):
     deleted = service.remove_alloy_element(
         alloy_id,

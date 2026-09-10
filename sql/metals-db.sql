@@ -2,6 +2,9 @@
 -- Metals database schema
 -- Uses atomic_number as the natural primary key for elements.
 
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS alloy_elements;
 DROP TABLE IF EXISTS coins;
 DROP TABLE IF EXISTS alloys;
@@ -34,6 +37,35 @@ CREATE TABLE alloys (
     name VARCHAR(100) NOT NULL UNIQUE,
     color VARCHAR(50),
     description TEXT
+);
+
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE roles (
+    role_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE user_roles (
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+
+    CONSTRAINT pk_user_roles PRIMARY KEY (user_id, role_id),
+
+    CONSTRAINT fk_user_roles_user
+        FOREIGN KEY (user_id)
+        REFERENCES users (user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_user_roles_role
+        FOREIGN KEY (role_id)
+        REFERENCES roles (role_id)
+        ON DELETE RESTRICT
 );
 
 CREATE TABLE coins (
@@ -78,7 +110,32 @@ CREATE TABLE alloy_elements (
 
 CREATE INDEX idx_alloy_elements_atomic_number ON alloy_elements (atomic_number);
 
--- seed data 
+-- seed data
+INSERT INTO roles (name)
+VALUES
+    ('Customer'),
+    ('Admin')
+ON CONFLICT (name) DO NOTHING;
+
+-- Development seed accounts. Both accounts use the password: password.
+-- Passwords are represented below only by Argon2id hashes.
+INSERT INTO users (username, password_hash)
+VALUES
+    ('admin', '$argon2id$v=19$m=65536,t=3,p=4$MCCFN8vfa3G9QWaCg1phwA$ypbN2kCHWoN1fELZJK6CYqxKvby4ObdJ4Etvd/uDcI8'),
+    ('customer', '$argon2id$v=19$m=65536,t=3,p=4$RRkSYeL0kMb3KPUl9xzEEw$tN6o9Dgv8qhhrJpEPmh2Fj+oHeNb5ezBjpH3ZQJ1gI4')
+ON CONFLICT (username) DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.user_id, r.role_id
+FROM (
+    VALUES
+        ('admin', 'Admin'),
+        ('customer', 'Customer')
+) AS assignments(username, role_name)
+INNER JOIN users u ON u.username = assignments.username
+INNER JOIN roles r ON r.name = assignments.role_name
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
 INSERT INTO elements (
     atomic_number,
     name,

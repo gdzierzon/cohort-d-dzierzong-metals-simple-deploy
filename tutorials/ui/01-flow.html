@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI: Routing and Guards</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Metals UI</a> &rsaquo; How It's Put Together</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals UI &middot; Section 1 of 2</p>
+        <h1>Routing, Guards, and the Admin Screens</h1>
+        <p class="lede">
+          Every page in this app is rendered by the same small pipeline: restore whatever session
+          exists, resolve the current hash to a route, check that route's guard, and render its
+          view. That one pipeline is the entire reason a logged-out visitor never sees the catalog,
+          and a logged-in Customer never sees a delete button.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Entry point &rarr; <b>js/app.js</b></span>
+      <span class="fact">Router &rarr; <b>js/router.js</b></span>
+      <span class="fact">Guards &rarr; <b>js/auth/guards.js</b></span>
+      <span class="fact">Session &rarr; <b>js/auth/session.js</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Metals UI overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#startup">App startup</a></li>
+      <li><a href="#routing">How a route resolves</a></li>
+      <li><a href="#guards">The two guards</a></li>
+      <li><a href="#catalog-vs-admin">Catalog pages vs. admin pages</a></li>
+      <li><a href="#crud">The admin create/edit/delete flow</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="startup">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Follow one page load from the moment the browser opens <span class="mono">index.html</span> to a rendered view, and see exactly where access gets decided.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>two lines, at the bottom of app.js</figcaption>
+        </figure>
+      </div>
+      <h2>App startup <span class="tag">js/app.js</span></h2>
+      <p class="dek">
+        Every route is registered up front with <span class="mono">registerRoute(path, view, guard)</span>,
+        then the app does exactly two things before anything is on screen:
+      </p>
+      <pre class="code"><span class="filename">js/app.js</span>await restoreSession();
+startRouter(render);</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">restoreSession()</span><span class="qnum">js/auth/session.js</span></div>
+          <p class="desc">
+            Looks for an access token in <span class="mono">sessionStorage</span>. If there isn't
+            one, it does nothing &mdash; the visitor is treated as logged out. If there is one, it
+            calls <span class="mono">GET /api/auth/me</span> to ask the API who that token belongs
+            to and stores the result in application state. If the API rejects the token (expired,
+            invalid), the <span class="mono">catch</span> block clears the session instead of
+            leaving the app in a half-logged-in state.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">startRouter(render)</span><span class="qnum">js/router.js</span></div>
+          <p class="desc">
+            Resolves whatever route the current URL hash points to and renders it, then listens for
+            future <span class="mono">hashchange</span> events (clicking a link, using the back
+            button) and re-resolves each time.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="routing">
+      <h2>How a route resolves <span class="tag">js/router.js</span></h2>
+      <p class="dek">
+        <span class="mono">resolveRoute()</span> runs on load and on every hash change. It reads the
+        path after the <span class="mono">#</span>, finds the matching registered route (exact
+        match first, then a parameterized pattern like <span class="mono">/elements/:atomicNumber</span>),
+        and checks that route's guard before rendering anything.
+      </p>
+      <pre class="code"><span class="filename">js/router.js</span>const route = findRoute(path) ?? { ...routes.get("/not-found"), params: {} };
+
+if (route.guard && !route.guard()) {
+  navigate("/login");
+  return;
+}
+
+render(route.view(route.params));</pre>
+      <p class="bonus-banner">
+        Notice the guard check happens <i>before</i> <span class="mono">route.view()</span> is ever
+        called. A guarded view's code never runs for a visitor who fails its guard &mdash; they're
+        redirected to <span class="mono">#/login</span> instead, and nothing about the protected
+        page (not even its markup) is built.
+      </p>
+    </section>
+
+    <section class="block" id="guards">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The two guards <span class="tag">js/auth/guards.js</span></h2>
+          <p class="dek">
+            Both guards are one-line functions built from the same two state checks, and every
+            route in the app is registered with one of them, or neither.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>two checks, reused everywhere</figcaption>
+        </figure>
+      </div>
+      <pre class="code"><span class="filename">js/auth/guards.js</span>export const requireLogin = () => isAuthenticated();
+export const requireAdmin = () => isAuthenticated() && isAdmin();</pre>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Guard</th><th>Passes when&hellip;</th><th>Used by</th></tr></thead>
+          <tbody>
+            <tr><td><i>none</i></td><td>always</td><td><code>#/</code>, <code>#/login</code>, <code>#/register</code>, <code>#/not-found</code></td></tr>
+            <tr><td><code>requireLogin</code></td><td>a valid session exists, any role</td><td><code>#/elements</code>, <code>#/alloys</code>, <code>#/coins</code>, and their detail pages</td></tr>
+            <tr><td><code>requireAdmin</code></td><td>a valid session exists <i>and</i> its roles include Admin</td><td><code>#/admin</code> and every <code>#/admin/&hellip;</code> route</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>The UI's guards are a convenience, not a security boundary.</b> They only decide what
+        gets <i>rendered</i> in this browser tab. The real enforcement is still on the server: every
+        write request the admin screens send is checked again by the API's own
+        <span class="mono">@require_auth</span> and <span class="mono">@require_roles("Admin")</span>
+        decorators, covered in the <a href="../api/index.html">Metals API tutorial</a>. A guard
+        failing here just means a nicer redirect than a raw <span class="mono">403</span>.
+      </p>
+    </section>
+
+    <section class="block" id="catalog-vs-admin">
+      <h2>Catalog pages vs. admin pages <span class="tag">the split</span></h2>
+      <p class="dek">
+        Elements, alloys, and coins each exist twice in <span class="mono">js/views/</span>: once
+        under <span class="mono">catalog/</span> as a read-only browsing page, and once under
+        <span class="mono">admin/</span> as a management page with a form and delete buttons. Both
+        read from the same API endpoints; only the admin versions write to them.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:14rem;">Folder</th><th>What it renders</th><th>Guard on its routes</th></tr></thead>
+          <tbody>
+            <tr><td class="path">js/views/catalog/</td><td>List and detail pages &mdash; no create, edit, or delete controls at all.</td><td><code>requireLogin</code></td></tr>
+            <tr><td class="path">js/views/admin/</td><td>A form for create/edit plus a list with Edit and Delete buttons on every row.</td><td><code>requireAdmin</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="crud">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The admin create/edit/delete flow <span class="tag">js/views/admin/crud-admin.js</span></h2>
+          <p class="dek">
+            Elements, alloys, coins, and users don't each reimplement their own admin screen.
+            <span class="mono">elements-admin-view.js</span>, <span class="mono">alloys-admin-view.js</span>,
+            and <span class="mono">coins-admin-view.js</span> each hand a small config object
+            (field list, and <span class="mono">list</span>/<span class="mono">create</span>/<span class="mono">update</span>/<span class="mono">remove</span>
+            functions from the matching <span class="mono">api/</span> module) to one shared pair of
+            functions, <span class="mono">adminCrudView()</span> and
+            <span class="mono">bindAdminCrud()</span>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey thinking through a problem">
+          <figcaption>one form, four resources</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><b>Load:</b> on bind, the shared code calls <span class="mono">config.list()</span> and renders one row per record, each with Edit and Delete buttons.</li>
+            <li><b>Create or edit:</b> submitting the form calls <span class="mono">config.create()</span>, or <span class="mono">config.update()</span> if a row's Edit button set the form into edit mode first. Either way the list reloads afterward.</li>
+            <li><b>Delete:</b> the Delete button asks for confirmation, then calls <span class="mono">config.remove()</span> and reloads the list.</li>
+          </ol>
+          <p class="note">
+            Every one of those calls goes straight to the Metals API with the visitor's stored
+            Bearer token attached. If the token's roles don't actually include Admin &mdash; for
+            example, an Admin flag revoked in another tab &mdash; the API returns
+            <span class="mono">403 Forbidden</span> and the shared code surfaces that error message
+            in the form instead of pretending the change worked.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Metals UI overview</a>
+      <a class="next" href="02-running-locally.html"><span class="pn-label">Next &rarr;</span>Running It Locally</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Routing and guards covered &mdash; next, actually serving this folder and pointing it at a running API.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_ui/js/app.js</span>, <span class="mono">router.js</span>,
+  <span class="mono">auth/guards.js</span>, <span class="mono">auth/session.js</span>,
+  <span class="mono">views/admin/crud-admin.js</span>
+</footer>
+
+</body>
+</html>

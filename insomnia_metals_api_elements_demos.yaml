@@ -1,0 +1,654 @@
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: Elements Requests
+meta:
+  id: wrk_643062ca52ae4156aa8df554e717fc96
+  created: 1785437199839
+  modified: 1785439262477
+  description: ""
+collection:
+  - url: "{{base_url}}/api/elements"
+    name: Get All Elements
+    meta:
+      id: req_9990f0abc50248659f6cfbde60b07fe1
+      created: 1785260269503
+      modified: 1788978624241
+      isPrivate: false
+      description: ""
+      sortKey: -1785260269503
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >-
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_list_count =
+        parseInt(insomnia.environment.get("element_list_count"))
+
+        const elements = insomnia.response.json();
+
+
+        insomnia.test("Should return list of elements", function() {
+            insomnia.expect(elements).to.be.an("array");
+            insomnia.expect(elements).to.have.lengthOf(expected_list_count);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements/{{new_atomic_number}}"
+    name: Get Created Element by Id
+    meta:
+      id: req_e6f8d071c4614bd0ae45d461f8c0431d
+      created: 1785260436415
+      modified: 1788979324355
+      isPrivate: false
+      description: ""
+      sortKey: -1785223281389.625
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const element = insomnia.response.json();
+
+
+        insomnia.test("Should return element with atomic number", function() {		
+        		insomnia.expect(element.atomic_number).to.equal(expected_atomic_number);
+        		insomnia.expect(element.symbol).to.equal("Inv");
+        		insomnia.expect(element.name).to.equal("Invisium");
+        		insomnia.expect(element.color).to.equal("clear");
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements?color=gold"
+    name: Search for Gold by color
+    meta:
+      id: req_902ba474a0e44049a51fdd4a8c6ca086
+      created: 1785260757564
+      modified: 1788979065066
+      isPrivate: false
+      description: ""
+      sortKey: -1785242863332
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+        const elements = insomnia.response.json();
+
+        insomnia.test("Should return list of 1 element", function() {
+            insomnia.expect(elements).to.be.an("array");
+            insomnia.expect(elements).to.have.lengthOf(1);
+        });
+
+        const element = elements[0]
+
+        insomnia.test("Should return Gold", function() {
+        		insomnia.expect(element.atomic_number).to.equal(79);
+        		insomnia.expect(element.symbol).to.equal("Au");
+        		insomnia.expect(element.name).to.equal("Gold");
+        		insomnia.expect(element.color).to.equal("gold");
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements"
+    name: Create New Element
+    meta:
+      id: req_8b1aa804bfa94826baeb9e2a28b5b633
+      created: 1785264922078
+      modified: 1788979112573
+      isPrivate: false
+      description: ""
+      sortKey: -1785229808703.75
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+        		"atomic_number": {{new_atomic_number}},
+        		"boiling_point_f": "10000.00",
+        		"category": "INVISI_METAL",
+        		"color": "clear",
+        		"common_uses": "super powers",
+        		"density": "100.00",
+        		"is_magnetic": false,
+        		"is_toxic": true,
+        		"melting_point_f": "1000.00",
+        		"name": "Invisium",
+        		"state_at_room_temp": "SOLID",
+        		"symbol": "Inv"
+        	}
+    headers:
+      - name: Content-Type
+        value: application/json
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >
+        insomnia.test("Should return 201 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(201);
+        });
+
+
+        const expected_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const element = insomnia.response.json();
+
+
+        insomnia.test("Should return element with atomic number", function() {
+        		
+        		insomnia.expect(element).to.have.property('atomic_number');
+        		insomnia.expect(element.atomic_number).to.be.a('number');
+        		insomnia.expect(element.atomic_number).to.equal(expected_atomic_number);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements/404"
+    name: Update Element
+    meta:
+      id: req_463551062e4d4cac8ff0d5a9a0eda4d8
+      created: 1785271254452
+      modified: 1788980001425
+      isPrivate: false
+      description: ""
+      sortKey: -1785218385904.0312
+    method: PUT
+    body:
+      mimeType: application/json
+      text: |-
+        {
+        	"boiling_point_f": "11000.00",
+        	"category": "INVISI_METAL",
+        	"color": "translucent",
+        	"common_uses": "super powers",
+        	"density": "100.00",
+        	"is_magnetic": true,
+        	"is_toxic": true,
+        	"melting_point_f": "1000.00",
+        	"name": "Invisium",
+        	"state_at_room_temp": "SOLID",
+        	"symbol": "Inv"
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const element = insomnia.response.json();
+
+
+        insomnia.test("Should return element with atomic number", function() {
+        		insomnia.expect(element.atomic_number).to.equal(expected_atomic_number);	
+        		insomnia.expect(element.symbol).to.equal("Inv");
+        		insomnia.expect(element.name).to.equal("Invisium");
+        		insomnia.expect(element.color).to.equal("translucent");
+        		insomnia.expect(element.boiling_point_f).to.equal("11000.00");
+        		insomnia.expect(element.is_magnetic).to.equal(true);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements/404"
+    name: Delete Element
+    meta:
+      id: req_413ecabbbfad47c7bf2d0858bd20e9ec
+      created: 1785271954639
+      modified: 1788980607384
+      isPrivate: false
+      description: ""
+      sortKey: -1785216754075.5
+    method: DELETE
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |-
+        insomnia.test("Should return 204 Success No Content", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(204);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements/29"
+    name: Get Copper Element by Id
+    meta:
+      id: req_01bb46043c664f77a51b1a47496f8790
+      created: 1785402316260
+      modified: 1788979043576
+      isPrivate: false
+      description: ""
+      sortKey: -1785251566417.5
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |
+        const element = insomnia.response.json();
+
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+        insomnia.test("Should return Copper", function() {		
+        		insomnia.expect(element).to.have.property('atomic_number');
+        		insomnia.expect(element.atomic_number).to.be.a('number');
+        		insomnia.expect(element.atomic_number).to.equal(29);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements"
+    name: Get All Elements after Create
+    meta:
+      id: req_932d5eaa8fb74b84b7f8657bb28caa2e
+      created: 1785403785505
+      modified: 1788979306771
+      isPrivate: false
+      description: ""
+      sortKey: -1785226545046.6875
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >-
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_list_count =
+        parseInt(insomnia.environment.get("element_list_count")) + 1
+
+        const new_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const elements = insomnia.response.json();
+
+
+        insomnia.test(`Should return list of ${expected_list_count} elements`,
+        function() {
+            insomnia.expect(elements).to.be.an("array");
+            insomnia.expect(elements).to.have.lengthOf(expected_list_count);
+        });
+
+
+        const element = elements.find(
+            element => element.atomic_number === new_atomic_number
+        );
+
+
+        insomnia.test("Should contain Invisium", function() {
+        		insomnia.expect(element.atomic_number).to.equal(new_atomic_number);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements"
+    name: Create New Element Fails for Duplicate
+    meta:
+      id: req_2b8143327e464346986d79a2c1f15258
+      created: 1785404879824
+      modified: 1788980558141
+      isPrivate: false
+      description: ""
+      sortKey: -1785217569989.7656
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+        		"atomic_number": {{new_atomic_number}},
+        		"boiling_point_f": "10000.00",
+        		"category": "INVISI_METAL",
+        		"color": "clear",
+        		"common_uses": "super powers",
+        		"density": "100.00",
+        		"is_magnetic": false,
+        		"is_toxic": true,
+        		"melting_point_f": "1000.00",
+        		"name": "Invisium",
+        		"state_at_room_temp": "SOLID",
+        		"symbol": "Inv"
+        	}
+    headers:
+      - name: Content-Type
+        value: application/json
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |+
+        insomnia.test("Should return 400 Bad Request", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(400);
+        });
+
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{ _.base_url }}/api/elements/{{ _.new_atomic_number }}"
+    name: Get Updated Element by Id
+    meta:
+      id: req_92f7cd9b09594a94bcce8e67ad5db908
+      created: 1785405550732
+      modified: 1788980538736
+      isPrivate: false
+      description: ""
+      sortKey: -1785217977946.8984
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const element = insomnia.response.json();
+
+
+        insomnia.test("Should return element with atomic number", function() {		
+        		insomnia.expect(element.atomic_number).to.equal(expected_atomic_number);
+        		insomnia.expect(element.symbol).to.equal("Inv");
+        		insomnia.expect(element.name).to.equal("Invisium");
+        		insomnia.expect(element.color).to.equal("translucent");
+        		insomnia.expect(element.boiling_point_f).to.equal("11000.00");
+        		insomnia.expect(element.is_magnetic).to.equal(true);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements"
+    name: Get All Elements after Delete
+    meta:
+      id: req_b6aba5fd24864dceb6b0108a57fc06a7
+      created: 1785405799594
+      modified: 1788980687563
+      isPrivate: false
+      description: ""
+      sortKey: -1785216753975.5
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: >-
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+
+        const expected_list_count =
+        parseInt(insomnia.environment.get("element_list_count"))
+
+        const new_atomic_number =
+        parseInt(insomnia.environment.get("new_atomic_number"))
+
+        const elements = insomnia.response.json();
+
+
+        insomnia.test(`Should return list of ${expected_list_count} elements`,
+        function() {
+            insomnia.expect(elements).to.be.an("array");
+            insomnia.expect(elements).to.have.lengthOf(expected_list_count);
+        });
+
+
+        const element = elements.find(
+            element => element.atomic_number === new_atomic_number
+        );
+
+
+        insomnia.test("Should NOT contain Invisium", function() {
+        		insomnia.expect(element).to.be.undefined;
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{ _.base_url }}/api/elements/{{ _.new_atomic_number }}"
+    name: Get Deleted Element by Id
+    meta:
+      id: req_69bdcae0ae914ffca9c4787c0b769435
+      created: 1785408047196
+      modified: 1788980700519
+      isPrivate: false
+      description: ""
+      sortKey: -1785216753875.5
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |+
+        insomnia.test("Should return 404 Not Found", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(404);
+        });
+
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/elements/404"
+    name: Update Deleted Element
+    meta:
+      id: req_32956b0c082f43ca910136bd145efa6a
+      created: 1785408170415
+      modified: 1788980714990
+      isPrivate: false
+      description: ""
+      sortKey: -1785216753775.5
+    method: PUT
+    body:
+      mimeType: application/json
+      text: |-
+        {
+        	"boiling_point_f": "11000.00",
+        	"category": "INVISI_METAL",
+        	"color": "translucent",
+        	"common_uses": "super powers",
+        	"density": "100.00",
+        	"is_magnetic": true,
+        	"is_toxic": true,
+        	"melting_point_f": "1000.00",
+        	"name": "Invisium",
+        	"state_at_room_temp": "SOLID",
+        	"symbol": "Inv"
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    scripts:
+      afterResponse: |
+        insomnia.test("Should return 404 not found", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(404);
+        });
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/auth/login"
+    name: Login
+    meta:
+      id: req_624ea453629d4c63a8a375a4df560de7
+      created: 1788977568986
+      modified: 1788984920865
+      isPrivate: false
+      description: ""
+      sortKey: -1785260269603
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "username": "admin",
+          "password": "password"
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    scripts:
+      afterResponse: |
+        insomnia.test("Should return 200 Success", function() {
+        		insomnia.expect(insomnia.response.code).to.equal(200);
+        });
+
+        const body = insomnia.response.json();
+
+        insomnia.environment.set("auth_token", body.access_token);
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: "{{base_url}}/api/auth/me"
+    name: Check Login Status
+    meta:
+      id: req_bf71422d8dd04a8c87f31f047bb71957
+      created: 1788984888113
+      modified: 1788984909055
+      isPrivate: false
+      description: ""
+      sortKey: -1785260269553
+    method: GET
+    authentication:
+      type: bearer
+      token: "{{ _.auth_token }}"
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_516dfdf738434ad083268ced9eb081e8
+    created: 1785260260520
+    modified: 1788984926289
+environments:
+  name: Base Environment
+  meta:
+    id: env_fab7189a02b34de6b69b1527df90f644
+    created: 1785260260520
+    modified: 1788984926290
+    isPrivate: false
+  data:
+    base_url: "{{protocol}}{{url}}{{port}}"
+    protocol: http://
+    url: localhost
+    port: :5000
+    element_list_count: "27"
+    new_atomic_number: "404"
+    auth_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGVzIjpbIkFkbWluIl0sImlhdCI6MTc4ODk4NDkyNiwiZXhwIjoxNzg4OTg4NTI2fQ.m9A3j-kftqOSbW99Z_DXn2n8-IZE0xgQiC83ywocpTY

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>az_setup_github_oidc</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Manual Deployment</a> &rsaquo; az_setup_github_oidc</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Manual Deployment &middot; Script 3 of 4</p>
+        <h1>az_setup_github_oidc</h1>
+        <p class="lede">
+          Creates a passwordless Azure identity that GitHub Actions can use to deploy code to the
+          web app &mdash; the manual, hand-run version of what
+          <a href="../terraform/07-github-oidc.html">github_oidc.tf</a> automates. Same concepts,
+          same security model, one <span class="mono">az</span> command at a time instead of a
+          declared resource.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Files &rarr; <b>az_setup_github_oidc.ps1</b> &middot; <b>.sh</b></span>
+      <span class="fact">Requires first &rarr; <a href="01-create-resources.html"><b>az_create_resources</b></a></span>
+      <span class="fact">Terraform equivalent &rarr; <a href="../terraform/07-github-oidc.html"><b>github_oidc.tf</b></a></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Manual Deployment overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#prereqs">Before you run it</a></li>
+      <li><a href="#code">Walking through the script</a></li>
+      <li><a href="#repair">Repairing a broken credential</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this script</p>
+          <p>Create a managed identity trusted by GitHub Actions through OIDC, and grant it just enough permission to deploy to this one web app.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>same trust model as github_oidc.tf</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        Everything explained on the <a href="../terraform/07-github-oidc.html">github_oidc.tf
+        tutorial page</a> about <i>why</i> OIDC is used instead of a stored password, and why the
+        permission is scoped to one web app instead of the whole subscription, applies here
+        unchanged &mdash; this script just issues the equivalent <span class="mono">az identity</span>
+        and <span class="mono">az role assignment</span> commands directly, instead of declaring
+        the same outcome in a <span class="mono">.tf</span> file.
+      </p>
+    </section>
+
+    <section class="block" id="prereqs">
+      <h2>Before you run it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>The target web app must already exist &mdash; run <a href="01-create-resources.html">az_create_resources</a> first.</li>
+            <li>You're authenticated as an identity with permission to create managed identities and assign roles on the resource group / web app.</li>
+            <li>The GitHub repository and environment name you're setting this up for &mdash; defaults match this project's own repository and a <span class="mono">Development</span> environment.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="code">
+      <h2>Walking through the script <span class="tag">PowerShell version</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">1. Build the exact subject GitHub will present</span><span class="qnum">$FederatedSubject</span></div>
+          <pre class="code">$encodedEnvironment = $GitHubEnvironment.Replace(':', '%3A')
+$FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-deploy@1361521533:environment:${encodedEnvironment}"</pre>
+          <p class="desc">
+            The exact same computed value as <a href="../terraform/04-main.html">main.tf</a>'s
+            <span class="mono">local.oidc_subject</span> &mdash; a fixed string identifying
+            &ldquo;GitHub Actions, running in this exact repository, in this exact
+            environment.&rdquo; For any repository other than this project's own, you have to pass
+            <span class="mono">-FederatedSubject</span> explicitly with the value GitHub's own
+            <span class="mono">azure/login</span> action prints in its log &mdash; the script can't
+            safely guess another repository's immutable owner/repo IDs.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">2. Look up the web app</span><span class="qnum">az webapp show</span></div>
+          <pre class="code">$app = Invoke-Az webapp show --resource-group $resourceGroup --name $appName `
+    --query '{id:id,location:location}' --output json | ConvertFrom-Json</pre>
+          <p class="desc">Needs the web app's ID (to scope the role assignment) and location (to create the identity in the same region) &mdash; both read directly from the resource that <a href="01-create-resources.html">az_create_resources</a> already created.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">3. Create the identity</span><span class="qnum">az identity create</span></div>
+          <pre class="code">$identity = Invoke-Az identity create --resource-group $resourceGroup --name $identityName `
+    --location $app.location --output json | ConvertFrom-Json</pre>
+          <p class="desc">The manual equivalent of <a href="../terraform/07-github-oidc.html">github_oidc.tf</a>'s <span class="mono">azurerm_user_assigned_identity</span> &mdash; an empty identity, with no permissions yet.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">4. Trust GitHub's tokens for that exact subject</span><span class="qnum">az identity federated-credential create</span></div>
+          <pre class="code">Invoke-Az identity federated-credential create `
+    --resource-group $resourceGroup --identity-name $identityName --name github-development `
+    --issuer 'https://token.actions.githubusercontent.com' --subject $FederatedSubject `
+    --audiences 'api://AzureADTokenExchange'</pre>
+          <p class="desc">
+            Same <span class="mono">issuer</span>, <span class="mono">audience</span>, and
+            <span class="mono">subject</span> concepts covered on the
+            <a href="../terraform/07-github-oidc.html">github_oidc.tf page</a> &mdash; this is the
+            trust rule itself, deciding exactly which GitHub Actions tokens Azure will accept.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">5. Grant exactly enough permission</span><span class="qnum">az role assignment create</span></div>
+          <pre class="code">Invoke-Az role assignment create `
+    --assignee-object-id $identity.principalId --assignee-principal-type ServicePrincipal `
+    --role 'Website Contributor' --scope $app.id</pre>
+          <p class="desc">
+            The same least-privilege pattern as <a href="../terraform/07-github-oidc.html">github_oidc.tf</a>'s
+            <span class="mono">azurerm_role_assignment</span>: <span class="mono">Website
+            Contributor</span>, scoped to <span class="mono">$app.id</span> &mdash; this one web app
+            &mdash; not the resource group and not the subscription.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">6. Print what to paste into GitHub</span><span class="qnum">console output</span></div>
+          <pre class="code">Write-Host "AZURE_CLIENT_ID = $($identity.clientId)"
+Write-Host "AZURE_TENANT_ID = $($identity.tenantId)"
+Write-Host "AZURE_SUBSCRIPTION_ID = $subscriptionId"</pre>
+          <p class="desc">The same three identifiers Terraform's <a href="../terraform/08-outputs.html">outputs.tf</a> publishes as its <span class="mono">github_secrets</span> output &mdash; ready to paste into the repository's <span class="mono">Development</span> environment secrets.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="repair">
+      <h2>Repairing a broken credential <span class="tag">-UpdateCredentialOnly</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            If the identity and role assignment already exist, but the trusted subject was wrong
+            (a common cause of authentication failures), pass
+            <span class="mono">-UpdateCredentialOnly</span> to update just the federated
+            credential's subject, without recreating the identity or re-granting the role. This
+            trades the safety of Terraform's plan/apply cycle for a narrower, faster fix &mdash; there's
+            no equivalent single-purpose &ldquo;just fix the subject&rdquo; command in the
+            Terraform workflow; you'd change <a href="../terraform/03-variables.html">the
+            relevant variable</a> and run <a href="../terraform/commands/05-apply.html">terraform apply</a>
+            again instead.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>GitHub Actions fails to authenticate to Azure (&ldquo;AADSTS70021&rdquo; or similar)</td><td>The federated credential's subject doesn't exactly match what GitHub actually sent &mdash; often because the GitHub environment name, or an owner/repo ID, differs from what was assumed.</td><td>Copy the exact subject claim from the failed <span class="mono">azure/login</span> step's log, then rerun this script with <span class="mono">-FederatedSubject</span> (or <span class="mono">-UpdateCredentialOnly</span> if the identity already exists).</td></tr>
+            <tr><td>&ldquo;For another repository, pass -FederatedSubject...&rdquo;</td><td>You're running this against a different repository than the project's own default, without supplying the subject explicitly.</td><td>Get the exact subject from a GitHub Actions log for that repository, and pass it with <span class="mono">-FederatedSubject</span>.</td></tr>
+            <tr><td>The very next deployment run still fails right after this script succeeds</td><td>Azure role assignment and federated identity changes aren't always instantly visible everywhere.</td><td>Wait a few minutes before rerunning the failed GitHub Actions job.</td></tr>
+            <tr><td>&ldquo;ResourceNotFound&rdquo; looking up the web app</td><td><a href="01-create-resources.html">az_create_resources</a> hasn't been run yet, or used a different <span class="mono">-UserName</span>.</td><td>Run <a href="01-create-resources.html">az_create_resources</a> first with the same <span class="mono">-UserName</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-deploy.html"><span class="pn-label">&larr; Back</span>az_deploy</a>
+      <a class="next" href="04-delete-resources.html"><span class="pn-label">Next &rarr;</span>az_delete_resources</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>GitHub can deploy on its own now &mdash; last script, cleaning everything back up.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">utility_scripts/az_setup_github_oidc.ps1</span>, <span class="mono">utility_scripts/az_setup_github_oidc.sh</span>
+</footer>
+
+</body>
+</html>

@@ -4,10 +4,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+import jwt
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
+
+TEST_JWT_SECRET = "test-jwt-secret-that-is-long-enough-for-hs256"
 
 os.environ.setdefault("DB_USER", "test_user")
 os.environ.setdefault("DB_PASSWORD", "test_password")
@@ -21,13 +24,32 @@ def app():
     from app import create_app
 
     flask_app = create_app()
-    flask_app.config.update(TESTING=True)
+    flask_app.config.update(
+        TESTING=True,
+        JWT_SECRET_KEY=TEST_JWT_SECRET,
+        JWT_EXPIRATION_MINUTES=60,
+        REFRESH_ROLES_ON_AUTHORIZATION=False,
+    )
     return flask_app
 
 
 @pytest.fixture
 def client(app):
-    return app.test_client()
+    client = app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {make_token('Admin')}"
+    return client
+
+
+def make_token(*roles: str) -> str:
+    return jwt.encode(
+        {
+            "sub": "1",
+            "username": "test-admin",
+            "roles": list(roles),
+        },
+        TEST_JWT_SECRET,
+        algorithm="HS256",
+    )
 
 
 @pytest.fixture

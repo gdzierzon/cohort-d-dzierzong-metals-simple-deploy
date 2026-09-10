@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database Schema</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Database</a> &rsaquo; The Schema</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Database &middot; Page 1 of 2</p>
+        <h1>The Schema, Table by Table</h1>
+        <p class="lede">
+          Seven <span class="mono">CREATE TABLE</span> statements, two families of data: the metals
+          catalog (elements, alloys, coins) and, new in this branch, the authentication tables
+          (users, roles, and the join table connecting them).
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">File &rarr; <b>sql/metals-db.sql</b></span>
+      <span class="fact">New tables &rarr; <b>users, roles, user_roles</b></span>
+      <span class="fact">Password storage &rarr; <b>Argon2id hash, never plaintext</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Database overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#catalog">The metals catalog tables</a></li>
+      <li><a href="#auth-tables">The authentication tables</a></li>
+      <li><a href="#seed-data">Seeding roles and accounts</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="catalog">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Explain what every table in <span class="mono">sql/metals-db.sql</span> stores, how the tables relate to each other, and what the new authentication tables add.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>seven tables, two families</figcaption>
+        </figure>
+      </div>
+
+      <h2>The metals catalog tables <span class="tag">already existed</span></h2>
+      <p class="dek">
+        These four tables are what the API was originally built to serve. They aren't new, but
+        understanding them helps make sense of how the new authentication tables were bolted on
+        beside them, not into them.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">elements</span><span class="qnum">atomic_number PK</span></div>
+          <p class="desc">
+            One row per chemical element. Unusually, the primary key isn't a generated
+            <span class="mono">SERIAL</span> id &mdash; it's <span class="mono">atomic_number</span>
+            itself, since that number is already a natural, permanent identifier for an element.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">alloys</span><span class="qnum">alloy_id PK</span></div>
+          <p class="desc">Named mixtures such as &ldquo;Sterling Silver.&rdquo; A generated <span class="mono">SERIAL</span> id, since alloy names aren't a natural key the way atomic numbers are.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">alloy_elements</span><span class="qnum">join table</span></div>
+          <p class="desc">
+            Connects <span class="mono">alloys</span> to <span class="mono">elements</span>
+            (many-to-many: an alloy has several elements, an element appears in several alloys),
+            plus one extra column of its own, <span class="mono">percent_of_alloy</span>. Its
+            primary key is the <i>pair</i> of foreign keys, <span class="mono">(alloy_id,
+            atomic_number)</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">coins</span><span class="qnum">coin_id PK</span></div>
+          <p class="desc">Real-world coins. Each coin belongs to exactly one alloy (<span class="mono">alloy_id</span> is a required foreign key), so this is a plain one-to-many relationship, not a join table.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="auth-tables">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The authentication tables <span class="tag">new in this branch</span></h2>
+          <p class="dek">
+            Three tables, following the exact same join-table pattern as
+            <span class="mono">alloy_elements</span> above &mdash; a user can hold more than one role,
+            and a role can belong to more than one user, so the relationship needs its own table.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>same pattern, new data</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">users</span><span class="qnum">user_id PK</span></div>
+          <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);</pre>
+          <p class="desc">
+            Notice there is no <span class="mono">password</span> column &mdash; only
+            <span class="mono">password_hash</span>. The API (in
+            <span class="mono">metals_api/services/auth_service.py</span>) runs every password
+            through Argon2id before it's ever written here, and the real password is never stored
+            or logged anywhere. <span class="mono">username</span> is unique so two accounts can't
+            collide.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">roles</span><span class="qnum">role_id PK</span></div>
+          <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE roles (
+    role_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);</pre>
+          <p class="desc">
+            Deliberately tiny &mdash; just a name. This project seeds exactly two rows,
+            <span class="mono">Admin</span> and <span class="mono">Customer</span>, but the table
+            design doesn't hardcode that; a third role could be added with a single
+            <span class="mono">INSERT</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">user_roles</span><span class="qnum">join table</span></div>
+          <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE user_roles (
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    CONSTRAINT pk_user_roles PRIMARY KEY (user_id, role_id),
+    CONSTRAINT fk_user_roles_user FOREIGN KEY (user_id)
+        REFERENCES users (user_id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_roles_role FOREIGN KEY (role_id)
+        REFERENCES roles (role_id) ON DELETE RESTRICT
+);</pre>
+          <p class="desc">
+            One row per (user, role) pairing. Deleting a user cascades and cleans up their role
+            assignments automatically (<span class="mono">ON DELETE CASCADE</span>), but a role
+            that's still assigned to anyone can't be deleted (<span class="mono">ON DELETE
+            RESTRICT</span>) &mdash; Postgres blocks that delete until the assignments are removed
+            first.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="seed-data">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Seeding roles and accounts <span class="tag">what actually gets inserted</span></h2>
+          <p class="dek">
+            After the tables exist, the script inserts the two roles, two development login
+            accounts, and the assignments connecting them &mdash; all idempotent, so running the
+            script twice never duplicates or errors.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>safe to run more than once</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">1. Roles</span><span class="qnum">INSERT INTO roles</span></div>
+          <pre class="code">INSERT INTO roles (name)
+VALUES ('Customer'), ('Admin')
+ON CONFLICT (name) DO NOTHING;</pre>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">2. Two development accounts</span><span class="qnum">INSERT INTO users</span></div>
+          <p class="desc">
+            Both accounts share the same password. Only the Argon2id hash is stored in the script
+            &mdash; the actual password, and how to log in with it, is covered on
+            <a href="02-docker-compose.html#accounts">the next page</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">3. Role assignments</span><span class="qnum">INSERT INTO user_roles</span></div>
+          <p class="desc">
+            A single query joins a hand-written list of <span class="mono">(username,
+            role_name)</span> pairs against the rows that were just inserted, so the script never
+            has to hardcode numeric ids &mdash; it looks up <span class="mono">admin</span> &rarr;
+            <span class="mono">Admin</span> and <span class="mono">customer</span> &rarr;
+            <span class="mono">Customer</span> by name instead.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">glossary</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Primary key (PK)</dt>
+            <dd>The column (or columns) that uniquely identify a row. <span class="mono">user_roles</span> uses a <i>composite</i> primary key &mdash; the pair <span class="mono">(user_id, role_id)</span> together, since neither column alone is unique.</dd>
+            <dt>Foreign key (FK)</dt>
+            <dd>A column that must match a primary key value in another table &mdash; it's how Postgres enforces that <span class="mono">user_roles.user_id</span> can never point at a user that doesn't exist.</dd>
+            <dt>Join / junction table</dt>
+            <dd>A table that exists only to connect two other tables in a many-to-many relationship. <span class="mono">user_roles</span> and <span class="mono">alloy_elements</span> are both examples.</dd>
+            <dt><span class="mono">ON DELETE CASCADE</span> vs <span class="mono">RESTRICT</span></dt>
+            <dd>What happens to a row when the thing it references is deleted: <span class="mono">CASCADE</span> deletes it too; <span class="mono">RESTRICT</span> blocks the original delete instead.</dd>
+            <dt><span class="mono">ON CONFLICT ... DO NOTHING</span></dt>
+            <dd>Tells Postgres to silently skip an <span class="mono">INSERT</span> that would violate a uniqueness rule, instead of raising an error &mdash; what makes the seed data safe to load more than once.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Database overview</a>
+      <a class="next" href="02-docker-compose.html"><span class="pn-label">Next &rarr;</span>Running it locally</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Tables and relationships covered &mdash; next, actually running this database on your machine.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">sql/metals-db.sql</span>
+</footer>
+
+</body>
+</html>

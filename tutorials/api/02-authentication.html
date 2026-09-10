@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication with JWT</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Metals API</a> &rsaquo; Authentication</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals API &middot; Section 2 of 3</p>
+        <h1>Authentication: JWT and Insomnia, Step by Step</h1>
+        <p class="lede">
+          Every endpoint in this API needs to know who's asking, and write endpoints need to know
+          whether that person is an Admin. This page starts with what a JWT actually is (no prior
+          knowledge assumed), then walks through Insomnia click by click: registering or logging in,
+          finding the token in the response, and attaching it to every request that follows.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">File &rarr; <b>metals_api/auth.py</b></span>
+      <span class="fact">Token format &rarr; <b>JWT (JSON Web Token)</b></span>
+      <span class="fact">Library &rarr; <b>PyJWT, algorithm HS256</b></span>
+      <span class="fact">Header used &rarr; <b>Authorization: Bearer &lt;token&gt;</b></span>
+      <span class="fact">Default lifetime &rarr; <b>60 minutes</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Metals API overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what-is-jwt">What is a JWT?</a></li>
+      <li><a href="#how-this-api-uses-it">How this API issues and checks one</a></li>
+      <li><a href="#insomnia-setup">Setting up Insomnia</a></li>
+      <li><a href="#register-login">Register or log in</a></li>
+      <li><a href="#attach-token">Attaching the token to a request</a></li>
+      <li><a href="#verify">Verifying it worked</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what-is-jwt">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Explain what a JWT is well enough to use one confidently, then get you from &ldquo;no token&rdquo; to &ldquo;successfully calling a protected endpoint in Insomnia&rdquo; without skipping a step.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>new to JWTs? start here</figcaption>
+        </figure>
+      </div>
+
+      <h2>What is a JWT, in plain terms? <span class="tag">the wristband analogy</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The problem it solves</span><span class="qnum">HTTP has no memory</span></div>
+          <p class="desc">
+            Each HTTP request is independent &mdash; the server doesn't remember the previous request
+            you made, even a second ago. So if logging in required typing your username and
+            password on <i>every single request</i>, that would be slow, and it would mean sending
+            your password over the network constantly. A JWT (JSON Web Token) solves this: you log
+            in <i>once</i>, the server hands you back a token, and you show that token on every
+            request after that instead of your password.
+          </p>
+          <p class="note">
+            Think of a wristband at a concert: you show ID once at the gate, and get a wristband.
+            For the rest of the night, security only checks the wristband &mdash; they don't ask for
+            your ID again at every door.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The three parts of a token</span><span class="qnum">header.payload.signature</span></div>
+          <p class="desc">
+            A JWT is just a string with two dots in it, like
+            <span class="mono">eyJhbGci...&thinsp;.&thinsp;eyJzdWIi...&thinsp;.&thinsp;SflKxwRJ...</span>.
+            Each of the three sections means something specific:
+          </p>
+          <dl class="def">
+            <dt>Header</dt>
+            <dd>Says which algorithm was used to sign the token. This API uses <span class="mono">HS256</span>.</dd>
+            <dt>Payload</dt>
+            <dd>The actual claims &mdash; the data about you. See below for exactly what this API puts here.</dd>
+            <dt>Signature</dt>
+            <dd>A cryptographic stamp, computed from the header, the payload, and a secret key only the server knows (<span class="mono">JWT_SECRET_KEY</span> in <span class="mono">.env</span>). If anyone edits the payload, the signature no longer matches, and the server rejects the token.</dd>
+          </dl>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Signed, not encrypted</span><span class="qnum">an important distinction</span></div>
+          <p class="desc">
+            The header and payload are only <i>Base64-encoded</i>, not encrypted &mdash; anyone can
+            paste your token into a site like jwt.io and read exactly what's inside it. What the
+            signature guarantees is that <i>nobody can change it without the server noticing</i>,
+            not that its contents are secret. That's why this API's payload only ever contains a
+            user id, username, and role names &mdash; never a password or anything sensitive.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What's actually in this API's payload</span><span class="qnum">metals_api/services/auth_service.py</span></div>
+          <pre class="code">{
+  "sub": "2",
+  "username": "admin",
+  "roles": ["Admin"],
+  "iat": 1780000000,
+  "exp": 1780003600
+}</pre>
+          <p class="desc">
+            <span class="mono">sub</span> (&ldquo;subject&rdquo;) is the user id, as a string.
+            <span class="mono">roles</span> is a list of role names &mdash; this is exactly what lets
+            the server decide, later, whether you're allowed to create or delete data.
+            <span class="mono">iat</span> (&ldquo;issued at&rdquo;) and <span class="mono">exp</span>
+            (&ldquo;expires at&rdquo;) are timestamps; once the current time passes
+            <span class="mono">exp</span>, the token stops working and you have to log in again.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="how-this-api-uses-it">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>How this API issues and checks a token <span class="tag">metals_api/auth.py</span></h2>
+          <p class="dek">
+            Two small decorators, used together on almost every route, cover the entire login and
+            permission system.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>two decorators, every protected route</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Issuing a token</span><span class="qnum">POST /api/auth/register or /login</span></div>
+          <p class="desc">
+            <span class="mono">auth_service.create_access_token(user)</span> builds the payload
+            above and signs it with <span class="mono">JWT_SECRET_KEY</span> from
+            <span class="mono">.env</span>. The route wraps it in a JSON response alongside
+            <span class="mono">token_type: "Bearer"</span> and how many seconds until it expires.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle"><code>@require_auth</code></span><span class="qnum">is anyone logged in?</span></div>
+          <pre class="code"><span class="filename">metals_api/auth.py</span>def require_auth(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return jsonify({"error": "Authentication required."}), 401
+
+        try:
+            g.current_user = jwt.decode(
+                token, current_app.config["JWT_SECRET_KEY"], algorithms=["HS256"],
+            )
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "Invalid or expired access token."}), 401
+
+        return view(*args, **kwargs)
+    return wrapped</pre>
+          <p class="desc">
+            Reads the <span class="mono">Authorization</span> header, requires it to say
+            <span class="mono">Bearer &lt;token&gt;</span>, and decodes the token &mdash;
+            <span class="mono">jwt.decode</span> is what actually re-checks the signature.
+            If it decodes successfully, the payload is stashed on Flask's per-request
+            <span class="mono">g</span> object as <span class="mono">g.current_user</span> so the
+            rest of the request can read it.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle"><code>@require_roles("Admin")</code></span><span class="qnum">are they allowed to do <i>this</i>?</span></div>
+          <pre class="code"><span class="filename">metals_api/auth.py</span>def require_roles(*required_roles: str):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            current_roles = set(g.current_user.get("roles", []))
+            if not current_roles.intersection(required_roles):
+                return jsonify({"error": "You do not have permission..."}), 403
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator</pre>
+          <p class="desc">
+            Reads the roles <span class="mono">require_auth</span> already put on
+            <span class="mono">g.current_user</span> and checks for overlap with whatever roles were
+            passed in, like <span class="mono">"Admin"</span>. No overlap means
+            <span class="mono">403 Forbidden</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why the decorator order matters</span><span class="qnum">a subtle but important detail</span></div>
+          <pre class="code">@element_blueprint.post("")
+@require_auth
+@require_roles("Admin")
+def create_element():
+    ...</pre>
+          <p class="desc">
+            Stacked decorators apply from the <i>bottom up</i>, but that means the
+            <b>topmost</b> one is the <i>outermost</i> wrapper &mdash; the first thing to actually run
+            when a request comes in. Here, <span class="mono">require_auth</span> runs first,
+            decodes the token, and sets <span class="mono">g.current_user</span>. Only then does
+            <span class="mono">require_roles</span> run and read it. If the order were reversed,
+            <span class="mono">require_roles</span> would run before <span class="mono">
+            g.current_user</span> exists and crash. Every write route in this project keeps
+            <span class="mono">@require_auth</span> directly under the route decorator, with
+            <span class="mono">@require_roles(...)</span> below it, for exactly this reason.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="insomnia-setup">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Setting up Insomnia <span class="tag">step by step</span></h2>
+          <p class="dek">
+            The rest of this page assumes <a href="https://insomnia.rest/">Insomnia</a> is
+            installed and the API is running locally at <span class="mono">http://localhost:5000</span>
+            (see the <a href="../database/index.html">Database tutorial</a> to get the database
+            running first).
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>a few clicks before your first request</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li>Open Insomnia and create a new <b>Request Collection</b> (bottom of the sidebar, or <b>Create</b> &rarr; <b>Request Collection</b>). Name it something like <span class="mono">Metals API</span>.</li>
+            <li>Optional, but worth doing: click the environment dropdown near the top of the sidebar (usually labeled <b>No Environment</b>), choose <b>Manage Environments</b>, and add a JSON value <span class="mono">{ "base_url": "http://localhost:5000" }</span>. You can then type <span class="mono">&#123;&#123; _.base_url &#125;&#125;</span> in any request URL instead of typing the full address every time.</li>
+            <li>Inside the collection, click <b>New HTTP Request</b>. You'll repeat this for each endpoint below &mdash; give each one a clear name (e.g. <span class="mono">Register</span>, <span class="mono">Login</span>, <span class="mono">List Elements</span>).</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="register-login">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Register or log in <span class="tag">getting your first token</span></h2>
+          <p class="dek">
+            You have two options: log in as one of the two accounts the database already seeds, or
+            register a brand-new one. Either way, the response has the same shape.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>same response shape, either way</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Option A &mdash; log in with a seed account</span><span class="qnum">fastest</span></div>
+          <ol class="steps">
+            <li>Set the request method dropdown (left of the URL bar) to <b>POST</b>.</li>
+            <li>Enter the URL: <span class="mono">http://localhost:5000/api/auth/login</span>.</li>
+            <li>Click the <b>Body</b> tab, choose <b>JSON</b>, and enter:
+              <pre class="code">{ "username": "admin", "password": "password" }</pre>
+              (or <span class="mono">"customer"</span> instead of <span class="mono">"admin"</span> &mdash;
+              see <a href="../database/02-docker-compose.html#accounts">the seed accounts table</a>
+              for both.)
+            </li>
+            <li>Click <b>Send</b>.</li>
+          </ol>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Option B &mdash; register a new account</span><span class="qnum">POST /api/auth/register</span></div>
+          <ol class="steps">
+            <li>New request, method <b>POST</b>, URL <span class="mono">http://localhost:5000/api/auth/register</span>.</li>
+            <li><b>Body</b> tab &rarr; <b>JSON</b>:
+              <pre class="code">{ "username": "sample_student", "password": "SomeSecurePassword1" }</pre>
+            </li>
+            <li>Click <b>Send</b>.</li>
+          </ol>
+          <p class="note">
+            Every newly registered account is automatically given the <span class="mono">Customer</span>
+            role &mdash; there's no signup field for choosing <span class="mono">Admin</span>. To test
+            Admin-only endpoints, log in as the seeded <span class="mono">admin</span> account
+            instead.
+          </p>
+        </div>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The response you should see</span><span class="qnum">200 (login) or 201 (register)</span></div>
+          <pre class="code">{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "user": {
+    "user_id": 1,
+    "username": "admin",
+    "roles": ["Admin"]
+  }
+}</pre>
+          <p class="desc">
+            <b>Copy the full <span class="mono">access_token</span> string</b> (click into the value
+            in Insomnia's response pane and select all &mdash; it's long, don't truncate it). That's
+            the token you'll attach to every other request.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="attach-token">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Attaching the token to a request <span class="tag">the Bearer header</span></h2>
+          <p class="dek">
+            Every other endpoint reads the token from the <span class="mono">Authorization</span>
+            HTTP header, in the exact form <span class="mono">Bearer &lt;token&gt;</span> (the word
+            &ldquo;Bearer&rdquo;, one space, then the token). Insomnia gives you two ways to set
+            this; the first is simplest, the second saves retyping it on every request.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one header, every protected request</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Per-request, using the Auth tab</span><span class="qnum">simplest</span></div>
+          <ol class="steps">
+            <li>Open (or create) a request &mdash; e.g. <b>GET</b> <span class="mono">http://localhost:5000/api/elements</span>.</li>
+            <li>Click the <b>Auth</b> tab, just below the URL bar.</li>
+            <li>Choose <b>Bearer Token</b> from the auth-type dropdown.</li>
+            <li>Paste your copied token into the <b>Token</b> field. Leave <b>Prefix</b> as <span class="mono">Bearer</span>.</li>
+            <li>Click <b>Send</b>. Insomnia now adds the header for you: <span class="mono">Authorization: Bearer &lt;your token&gt;</span>.</li>
+          </ol>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Setting it once for the whole collection</span><span class="qnum">saves repeating it</span></div>
+          <ol class="steps">
+            <li>In your environment (from <a href="#insomnia-setup">setup</a> above), add a second value: <span class="mono">"token": "&lt;paste your access_token here&gt;"</span>.</li>
+            <li>Click your collection's folder in the sidebar (not an individual request), open its <b>Auth</b> tab, and choose <b>Bearer Token</b>.</li>
+            <li>In the <b>Token</b> field, type <span class="mono">&#123;&#123; _.token &#125;&#125;</span> instead of pasting the raw value.</li>
+            <li>On each individual request, set its own <b>Auth</b> tab to <b>Inherit from parent</b> (the default for new requests). Every request in the collection now sends the same token automatically.</li>
+          </ol>
+          <p class="note">
+            When the token expires (see <a href="#errors">common errors</a> below), log in again and
+            update just the one environment value &mdash; every request picks up the new token
+            without being edited individually.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What's actually happening underneath</span><span class="qnum">the raw HTTP header</span></div>
+          <p class="desc">
+            However you set it in Insomnia, the request that actually goes over the network has one
+            extra header:
+          </p>
+          <pre class="code">Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</pre>
+          <p class="desc">
+            That's the exact string <span class="mono">metals_api/auth.py</span>'s
+            <span class="mono">require_auth</span> reads back out with
+            <span class="mono">request.headers.get("Authorization")</span> on the server. If you
+            ever need to call this API from <span class="mono">curl</span> or code instead of
+            Insomnia, this is the one header you need to add by hand.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="verify">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Verifying it worked <span class="tag">two quick checks</span></h2>
+          <p class="dek">A logged-in-only endpoint and an Admin-only endpoint, so you can confirm both layers of the permission system.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+          <figcaption>two checks, two layers</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Check 1 &mdash; are you logged in?</span><span class="qnum">GET /api/auth/me</span></div>
+          <p class="desc">With the Bearer token attached, send <b>GET</b> <span class="mono">http://localhost:5000/api/auth/me</span>. You should get back <span class="mono">200</span> with your <span class="mono">user_id</span>, <span class="mono">username</span>, and <span class="mono">roles</span> &mdash; read straight back out of the token, proving the round trip works.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Check 2 &mdash; do you have Admin?</span><span class="qnum">POST /api/elements</span></div>
+          <p class="desc">
+            Send <b>POST</b> <span class="mono">http://localhost:5000/api/elements</span> with a
+            small JSON body (see <a href="01-endpoints.html#elements">Section 1</a> for the shape).
+            Logged in as <span class="mono">admin</span>, expect <span class="mono">201
+            Created</span>. Logged in as <span class="mono">customer</span> (or your own newly
+            registered account), expect <span class="mono">403 Forbidden</span> &mdash; that's the
+            <span class="mono">require_roles("Admin")</span> check doing its job.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td><code>401</code> &ldquo;Authentication required.&rdquo;</td><td>No <span class="mono">Authorization</span> header was sent at all, or it didn't start with <span class="mono">Bearer </span>.</td><td>Check the request's <b>Auth</b> tab is set to <b>Bearer Token</b> (not <b>No Auth</b>), and that a token value is actually present.</td></tr>
+            <tr><td><code>401</code> &ldquo;Invalid or expired access token.&rdquo;</td><td>The token expired (default lifetime is 60 minutes), was copied incompletely, or the server's <span class="mono">JWT_SECRET_KEY</span> changed (e.g. the API restarted with a different <span class="mono">.env</span>) since the token was issued.</td><td>Send the login request again to get a fresh token, and make sure you copied the <i>entire</i> <span class="mono">access_token</span> value.</td></tr>
+            <tr><td><code>403</code> &ldquo;You do not have permission to perform this action.&rdquo;</td><td>You're logged in, but as a <span class="mono">Customer</span>, and this endpoint requires <span class="mono">Admin</span>.</td><td>Log in as the seeded <span class="mono">admin</span> account instead (see <a href="../database/02-docker-compose.html#accounts">seed accounts</a>).</td></tr>
+            <tr><td><code>400</code> &ldquo;That username is already in use.&rdquo;</td><td>You tried to register a username that already exists &mdash; including <span class="mono">admin</span> or <span class="mono">customer</span>, which are already seeded.</td><td>Pick a different username, or just log in instead of registering.</td></tr>
+            <tr><td><code>400</code> on login/register with no useful detail</td><td>The request body wasn't valid JSON, or the <b>Body</b> tab wasn't set to <b>JSON</b> in Insomnia.</td><td>Double-check the <b>Body</b> tab shows <b>JSON</b> (not <b>Form URL Encoded</b>, and not empty), and that the JSON has both <span class="mono">username</span> and <span class="mono">password</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-endpoints.html"><span class="pn-label">&larr; Back</span>The API Endpoints</a>
+      <a class="next" href="03-file-structure.html"><span class="pn-label">Next &rarr;</span>File Structure</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Token in hand, endpoints responding &mdash; next, a tour of the code that makes all of this work.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/auth.py</span>, <span class="mono">metals_api/services/auth_service.py</span>, <span class="mono">metals_api/routes/auth_routes.py</span>
+</footer>
+
+</body>
+</html>

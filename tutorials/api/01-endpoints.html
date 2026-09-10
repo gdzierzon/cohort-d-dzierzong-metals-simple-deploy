@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Endpoints</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Metals API</a> &rsaquo; The Endpoints</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals API &middot; Section 1 of 3</p>
+        <h1>The API Endpoints</h1>
+        <p class="lede">
+          Five resources, all under <span class="mono">/api</span>, all speaking JSON. Four of them
+          &mdash; elements, alloys, alloy elements, and coins &mdash; follow the exact same shape:
+          list, get one, create, update, delete. The fifth, <span class="mono">/api/auth</span>, is
+          how you get a token in the first place, covered in depth in
+          <a href="02-authentication.html">Section 2</a>.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Base URL (local) &rarr; <b>http://localhost:5000</b></span>
+      <span class="fact">Content type &rarr; <b>application/json</b></span>
+      <span class="fact">Resources &rarr; <b>auth, elements, alloys, alloy-elements, coins</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Metals API overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#overview">Resources at a glance</a></li>
+      <li><a href="#elements">/api/elements</a></li>
+      <li><a href="#alloys">/api/alloys</a></li>
+      <li><a href="#alloy-elements">/api/alloy-elements</a></li>
+      <li><a href="#coins">/api/coins</a></li>
+      <li><a href="#errors">How errors are reported</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="overview">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>List every endpoint this API exposes, who's allowed to call it, and what a request and response look like for each.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one shape, five resources</figcaption>
+        </figure>
+      </div>
+      <h2>Resources at a glance <span class="tag">the map</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Resource</th><th>Base path</th><th>Reading it</th><th>Changing it</th></tr></thead>
+          <tbody>
+            <tr><td>Auth</td><td><code>/api/auth</code></td><td>public (register, login)</td><td>n/a &mdash; see <a href="02-authentication.html">Section 2</a></td></tr>
+            <tr><td>Elements</td><td><code>/api/elements</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+            <tr><td>Alloys</td><td><code>/api/alloys</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+            <tr><td>Alloy Elements</td><td><code>/api/alloy-elements</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+            <tr><td>Coins</td><td><code>/api/coins</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Every request other than <span class="mono">/api/auth/register</span> and
+        <span class="mono">/api/auth/login</span> needs an
+        <span class="mono">Authorization: Bearer &lt;token&gt;</span> header. Without one, every
+        endpoint below responds <span class="mono">401 Unauthorized</span> before any of its own
+        logic runs &mdash; see <a href="02-authentication.html">Section 2</a> to get a token.
+      </p>
+    </section>
+
+    <section class="block" id="elements">
+      <h2><code>/api/elements</code> <span class="tag">metals_api/routes/element_routes.py</span></h2>
+      <p class="dek">Chemical elements, keyed by atomic number.</p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/elements</td><td>any logged-in user</td><td>List elements. Optional <code>?name=</code> and <code>?color=</code> query filters.</td></tr>
+            <tr><td class="path">GET /api/elements/&lt;atomic_number&gt;</td><td>any logged-in user</td><td>Get one element, or <span class="mono">404</span> if it doesn't exist.</td></tr>
+            <tr><td class="path">POST /api/elements</td><td>Admin</td><td>Create an element.</td></tr>
+            <tr><td class="path">PUT /api/elements/&lt;atomic_number&gt;</td><td>Admin</td><td>Update one or more fields on an existing element.</td></tr>
+            <tr><td class="path">DELETE /api/elements/&lt;atomic_number&gt;</td><td>Admin</td><td>Delete an element, or <span class="mono">404</span> if it doesn't exist.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Create request body</span><span class="qnum">POST /api/elements</span></div>
+          <pre class="code">{
+  "atomic_number": 3,
+  "name": "Lithium",
+  "symbol": "Li",
+  "melting_point_f": 356.9,
+  "boiling_point_f": 2447.6,
+  "color": "silvery",
+  "density": 0.53,
+  "category": "ALKALI_METAL",
+  "state_at_room_temp": "SOLID",
+  "is_toxic": false,
+  "is_magnetic": false,
+  "common_uses": "batteries"
+}</pre>
+          <p class="desc">
+            Only <span class="mono">atomic_number</span>, <span class="mono">name</span>, and
+            <span class="mono">symbol</span> are required; everything else is optional. Sending an
+            unrecognized field, or a field of the wrong shape (like a negative
+            <span class="mono">density</span>, or a <span class="mono">state_at_room_temp</span>
+            outside <span class="mono">SOLID</span> / <span class="mono">LIQUID</span> /
+            <span class="mono">GAS</span>), returns <span class="mono">400</span> before anything is
+            written &mdash; see <a href="#errors">how errors are reported</a> below.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Successful response</span><span class="qnum">201 Created</span></div>
+          <pre class="code">{
+  "atomic_number": 3,
+  "name": "Lithium",
+  "symbol": "Li",
+  "melting_point_f": 356.9,
+  "boiling_point_f": 2447.6,
+  "color": "silvery",
+  "density": 0.53,
+  "category": "ALKALI_METAL",
+  "state_at_room_temp": "SOLID",
+  "is_toxic": false,
+  "is_magnetic": false,
+  "common_uses": "batteries"
+}</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="alloys">
+      <h2><code>/api/alloys</code> <span class="tag">metals_api/routes/alloy_routes.py</span></h2>
+      <p class="dek">Named mixtures, like &ldquo;Sterling Silver.&rdquo;</p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/alloys</td><td>any logged-in user</td><td>List alloys. Optional <code>?name=</code> and <code>?color=</code> query filters.</td></tr>
+            <tr><td class="path">GET /api/alloys/&lt;alloy_id&gt;</td><td>any logged-in user</td><td>Get one alloy, or <span class="mono">404</span>.</td></tr>
+            <tr><td class="path">POST /api/alloys</td><td>Admin</td><td>Create an alloy. Requires <span class="mono">name</span>; <span class="mono">color</span> and <span class="mono">description</span> are optional.</td></tr>
+            <tr><td class="path">PUT /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Update one or more fields.</td></tr>
+            <tr><td class="path">DELETE /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Delete an alloy, or <span class="mono">404</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="code">// POST /api/alloys
+{ "name": "Fine Gold 24K", "color": "gold", "description": "High-purity investment gold." }</pre>
+    </section>
+
+    <section class="block" id="alloy-elements">
+      <h2><code>/api/alloy-elements</code> <span class="tag">metals_api/routes/alloy_element_routes.py</span></h2>
+      <p class="dek">
+        The join table between alloys and elements &mdash; what percentage of a given alloy each
+        element makes up. This is the one resource identified by <i>two</i> path values instead of
+        one, matching its composite primary key.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:20rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/alloy-elements</td><td>any logged-in user</td><td>List, filterable by <code>?alloy_id=</code> and/or <code>?atomic_number=</code>.</td></tr>
+            <tr><td class="path">GET /api/alloy-elements/&lt;alloy_id&gt;/&lt;atomic_number&gt;</td><td>any logged-in user</td><td>Get one composition row, or <span class="mono">404</span>.</td></tr>
+            <tr><td class="path">POST /api/alloy-elements</td><td>Admin</td><td>Add an element to an alloy with a given <span class="mono">percent_of_alloy</span>.</td></tr>
+            <tr><td class="path">PUT /api/alloy-elements/&lt;alloy_id&gt;/&lt;atomic_number&gt;</td><td>Admin</td><td>Change the <span class="mono">percent_of_alloy</span> for that pair.</td></tr>
+            <tr><td class="path">DELETE /api/alloy-elements/&lt;alloy_id&gt;/&lt;atomic_number&gt;</td><td>Admin</td><td>Remove that element from that alloy.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="code">// POST /api/alloy-elements
+{ "alloy_id": 6, "atomic_number": 47, "percent_of_alloy": 92.5 }</pre>
+    </section>
+
+    <section class="block" id="coins">
+      <h2><code>/api/coins</code> <span class="tag">metals_api/routes/coin_routes.py</span></h2>
+      <p class="dek">Real-world coins, each minted from exactly one alloy.</p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/coins</td><td>any logged-in user</td><td>List, filterable by <code>?name=</code>, <code>?country=</code>, and/or <code>?alloy_id=</code>.</td></tr>
+            <tr><td class="path">GET /api/coins/&lt;coin_id&gt;</td><td>any logged-in user</td><td>Get one coin, or <span class="mono">404</span>.</td></tr>
+            <tr><td class="path">POST /api/coins</td><td>Admin</td><td>Create a coin. Requires <span class="mono">name</span> and <span class="mono">alloy_id</span> (must reference an existing alloy).</td></tr>
+            <tr><td class="path">PUT /api/coins/&lt;coin_id&gt;</td><td>Admin</td><td>Update one or more fields.</td></tr>
+            <tr><td class="path">DELETE /api/coins/&lt;coin_id&gt;</td><td>Admin</td><td>Delete a coin, or <span class="mono">404</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="code">// POST /api/coins
+{
+  "name": "American Gold Eagle (1 oz)",
+  "country": "United States",
+  "mint": "United States Mint",
+  "year_introduced": 1986,
+  "alloy_id": 2,
+  "gross_weight_g": 33.9305,
+  "face_value": 50.00,
+  "face_value_currency_code": "USD"
+}</pre>
+    </section>
+
+    <section class="block" id="errors">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>How errors are reported <span class="tag">consistent across every endpoint</span></h2>
+          <p class="dek">
+            Every route validates the request before touching the database, then lets the service
+            layer enforce business rules. Both layers report problems the same way, so client code
+            only needs to handle one shape of error response.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>one error shape, four causes</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Status</th><th>Body shape</th><th>When it happens</th></tr></thead>
+          <tbody>
+            <tr><td><code>400 Bad Request</code></td><td><code>{"errors": ["..."]}</code></td><td>The request body failed DTO validation (missing/invalid fields), or a business rule was broken (e.g. a duplicate element name).</td></tr>
+            <tr><td><code>401 Unauthorized</code></td><td><code>{"error": "..."}</code></td><td>No <span class="mono">Authorization</span> header, or the token is missing/invalid/expired. See <a href="02-authentication.html">Section 2</a>.</td></tr>
+            <tr><td><code>403 Forbidden</code></td><td><code>{"error": "You do not have permission to perform this action."}</code></td><td>You're logged in, but your token's roles don't include <span class="mono">Admin</span>, and this is a write endpoint.</td></tr>
+            <tr><td><code>404 Not Found</code></td><td><code>{"error": "... not found"}</code></td><td>The requested id (or id pair, for alloy elements) doesn't exist.</td></tr>
+            <tr><td><code>204 No Content</code></td><td><i>(empty body)</i></td><td>A <span class="mono">DELETE</span> succeeded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Notice the field name differs by cause: validation and business-rule failures use
+        <span class="mono">errors</span> (plural, an array &mdash; there can be more than one), while
+        authentication, authorization, and not-found failures use <span class="mono">error</span>
+        (singular, a string).
+      </p>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Metals API overview</a>
+      <a class="next" href="02-authentication.html"><span class="pn-label">Next &rarr;</span>Authentication with JWT</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Endpoints covered &mdash; next, actually getting a token so you can call one of them.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/routes/</span>, <span class="mono">metals_api/dtos/</span>
+</footer>
+
+</body>
+</html>

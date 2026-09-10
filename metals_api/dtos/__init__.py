@@ -18,6 +18,7 @@ from dtos.element_dto import (
     ElementResponseDTO,
     UpdateElementDTO,
 )
+from dtos.auth_dto import LoginDTO, RegisterDTO
 
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "CreateCoinDTO",
     "CreateElementDTO",
     "ElementResponseDTO",
+    "LoginDTO",
+    "RegisterDTO",
     "UpdateAlloyDTO",
     "UpdateAlloyElementDTO",
     "UpdateCoinDTO",

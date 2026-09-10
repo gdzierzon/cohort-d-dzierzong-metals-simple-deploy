@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running the UI Locally</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Metals UI</a> &rsaquo; Running It Locally</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals UI &middot; Section 2 of 2</p>
+        <h1>Running the UI with a Plain Static Server</h1>
+        <p class="lede">
+          <span class="mono">metals_ui/</span> has no build step, no bundler, and no dependencies
+          &mdash; it's plain HTML, CSS, and ES modules, so any static file server can host it. This
+          project's convention is Python's built-in one. This page covers that one command, how the
+          UI finds the API, and the order to start every piece of the stack in.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Serve command &rarr; <b>python -m http.server 8888</b></span>
+      <span class="fact">Local UI address &rarr; <b>http://localhost:8888</b></span>
+      <span class="fact">API base URL &rarr; <b>set in runtime-config.js</b></span>
+      <span class="fact">CORS &rarr; <b>already open in metals_api/app.py</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Metals UI overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#prereqs">Before you start it</a></li>
+      <li><a href="#serve">Serving the folder</a></li>
+      <li><a href="#config">Pointing the UI at an API</a></li>
+      <li><a href="#cors">Why the browser allows this at all</a></li>
+      <li><a href="#order">Start order for the whole stack</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="prereqs">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Get <span class="mono">metals_ui/</span> on screen in a browser, talking to a real Metals API, without guessing at start order.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one folder, one command</figcaption>
+        </figure>
+      </div>
+      <h2>Before you start it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Python 3 available on your <span class="mono">PATH</span> (only needed for
+              <span class="mono">http.server</span> &mdash; any other static server, like
+              <span class="mono">npx serve</span>, works exactly the same way).</li>
+            <li>The Metals API already running and reachable, since every catalog and admin page
+              calls it directly &mdash; see the <a href="#order">start order</a> below if you haven't
+              started it yet.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="serve">
+      <h2>Serving the folder <span class="tag">the one command</span></h2>
+      <p class="dek">Run this from the project root.</p>
+      <pre class="code"><span class="filename">terminal</span>cd metals_ui
+python -m http.server 8888</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            Open <span class="mono">http://localhost:8888</span> in a browser. That loads
+            <span class="mono">index.html</span> once; from there, every page you visit &mdash;
+            <span class="mono">#/elements</span>, <span class="mono">#/admin/coins</span>, and so on
+            &mdash; is just a change to the URL's hash, handled entirely by
+            <span class="mono">js/router.js</span> in the browser. The server never sees those
+            paths, so unlike some single-page apps, this one needs no route-rewrite configuration
+            at all &mdash; a plain static file server is enough.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="config">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Pointing the UI at an API <span class="tag">runtime-config.js</span></h2>
+          <p class="dek">
+            The UI's own port and the API's port are configured completely independently. One file,
+            loaded by <span class="mono">index.html</span> before any application module, holds the
+            only address the UI needs to know.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>one file to redeploy against a new API</figcaption>
+        </figure>
+      </div>
+      <pre class="code"><span class="filename">metals_ui/runtime-config.js</span>globalThis.METALS_ATLAS_CONFIG = {
+  apiBaseUrl: "http://localhost:5000/api",
+};</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            <span class="mono">js/config.js</span> reads
+            <span class="mono">globalThis.METALS_ATLAS_CONFIG.apiBaseUrl</span> and falls back to
+            <span class="mono">http://localhost:5000/api</span> if it isn't set &mdash; which is why
+            local development works with this file untouched. To point the same
+            <span class="mono">metals_ui/</span> folder at a deployed API instead (Azure, a
+            teammate's machine, &hellip;), this is the only line to change; nothing in
+            <span class="mono">js/</span> needs to be touched or rebuilt.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="cors">
+      <h2>Why the browser allows this at all <span class="tag">cross-origin requests</span></h2>
+      <p class="dek">
+        <span class="mono">http://localhost:8888</span> and <span class="mono">http://localhost:5000</span>
+        are different origins as far as a browser is concerned, so without explicit permission the
+        browser would block the UI's <span class="mono">fetch()</span> calls to the API. The API
+        already grants that permission for every origin:
+      </p>
+      <pre class="code"><span class="filename">metals_api/app.py</span>@app.after_request
+def allow_cross_origin_requests(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response</pre>
+      <p class="bonus-banner">
+        Nothing needs to be configured for local development because of this &mdash; it's called out
+        here so a CORS error in the browser console reads as a real signal (the API isn't running,
+        or isn't the one <span class="mono">runtime-config.js</span> points to) rather than a
+        missing setting to hunt for.
+      </p>
+    </section>
+
+    <section class="block" id="order">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Start order for the whole stack <span class="tag">database &rarr; API &rarr; UI</span></h2>
+          <p class="dek">
+            Each piece depends on the one before it, so starting them out of order just produces
+            connection errors further down the chain. The full walkthrough, with every command,
+            lives on the <a href="../index.html#run-locally">tutorials home page</a>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>data, then logic, then the screen</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Order</th><th>What starts</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Database (Docker Compose)</td><td><code>docker compose up -d db</code></td></tr>
+            <tr><td>2</td><td>Metals API (Flask, port 5000)</td><td><code>python metals_api/app.py</code></td></tr>
+            <tr><td>3</td><td>Metals UI (static server, port 8888)</td><td><code>python -m http.server 8888</code> (from <span class="mono">metals_ui/</span>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>Catalog pages stuck on &ldquo;Loading&hellip;&rdquo;, network error in the console</td><td>The API isn't running, or <span class="mono">runtime-config.js</span> points at the wrong address.</td><td>Start the API (<a href="../api/index.html">Metals API tutorial</a>), and confirm <span class="mono">apiBaseUrl</span> matches where it's actually listening.</td></tr>
+            <tr><td>Redirected straight back to <span class="mono">#/login</span> after logging in</td><td>No token was stored, or <span class="mono">GET /api/auth/me</span> failed right after login.</td><td>Check the Network tab for the login and <span class="mono">/me</span> requests; confirm the API's <span class="mono">JWT_SECRET_KEY</span> is set (see the <a href="../database/02-docker-compose.html">database tutorial</a>'s <span class="mono">.env</span> notes).</td></tr>
+            <tr><td>Admin pages show <span class="mono">403 Forbidden</span> even though you're logged in as an admin</td><td>The account doesn't actually carry the Admin role.</td><td>Confirm the role from <span class="mono">#/admin/users</span> (as an existing admin), or use the seed <span class="mono">admin</span> account from the <a href="../database/02-docker-compose.html#accounts">database tutorial</a>.</td></tr>
+            <tr><td><span class="mono">Address already in use</span> on port 8888</td><td>Another process (maybe a previous <span class="mono">http.server</span>) is already bound to it.</td><td>Stop that process, or serve on a different port: <span class="mono">python -m http.server 8889</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-flow.html"><span class="pn-label">&larr; Back</span>How the UI Is Put Together</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>Metals UI overview</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Database, API, and UI all running &mdash; head to <span class="mono">http://localhost:8888</span> and log in with the seed admin account to try the admin screens yourself.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_ui/runtime-config.js</span> and
+  <span class="mono">metals_api/app.py</span> in this repository.
+</footer>
+
+</body>
+</html>

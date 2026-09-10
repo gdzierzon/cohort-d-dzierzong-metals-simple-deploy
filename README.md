@@ -25,6 +25,7 @@ The manual Azure CLI lesson has equivalent PowerShell and Bash scripts. Authenti
 | Task | PowerShell | Bash |
 | --- | --- | --- |
 | Create resources | `.\utility_scripts\az_create_resources.ps1` | `bash utility_scripts/az_create_resources.sh` |
+| Configure GitHub OIDC | `.\utility_scripts\az_setup_github_oidc.ps1` | `bash utility_scripts/az_setup_github_oidc.sh` |
 | Deploy the application | `.\utility_scripts\az_deploy.ps1` | `bash utility_scripts/az_deploy.sh` |
 | Preview deletion | `.\utility_scripts\az_delete_resources.ps1 -WhatIf` | `bash utility_scripts/az_delete_resources.sh --what-if` |
 | Delete resources | `.\utility_scripts\az_delete_resources.ps1` | `bash utility_scripts/az_delete_resources.sh` |

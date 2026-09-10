@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running the Database Locally</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Database</a> &rsaquo; Running it Locally</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Database &middot; Page 2 of 2</p>
+        <h1>Running the Database with Docker Compose</h1>
+        <p class="lede">
+          <span class="mono">docker-compose.yml</span>, at the root of this repository, stands up a
+          local PostgreSQL 16 container preloaded with the full schema and seed data from
+          <span class="mono">sql/metals-db.sql</span> &mdash; no manual <span class="mono">psql</span>
+          steps required. This page walks through the file itself, then covers the one thing that
+          trips people up: an old, already-running database won't pick up new tables on its own.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">File &rarr; <b>docker-compose.yml</b></span>
+      <span class="fact">Start command &rarr; <b>docker compose up -d db</b></span>
+      <span class="fact">Full reset &rarr; <b>docker compose down -v</b></span>
+      <span class="fact">Dev accounts &rarr; <b>admin / customer, password: password</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Database overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#prereqs">Before you start it</a></li>
+      <li><a href="#compose">Walking through docker-compose.yml</a></li>
+      <li><a href="#running">Starting it up</a></li>
+      <li><a href="#reset">Have an old database already running?</a></li>
+      <li><a href="#accounts">The two seed accounts</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="prereqs">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Get a local PostgreSQL database running with the current schema, and know exactly what to do if a database from before the authentication update is already sitting on your machine.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one command, one database</figcaption>
+        </figure>
+      </div>
+      <h2>Before you start it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Docker Desktop (or Docker Engine + the Compose plugin) installed and running.</li>
+            <li>A <span class="mono">.env</span> file at the project root, copied from
+              <span class="mono">.env.example</span>, with the <span class="mono">DB_*</span>
+              variables set to match <span class="mono">docker-compose.yml</span> (see
+              <a href="#running">Starting it up</a> below).</li>
+            <li>Port <span class="mono">5432</span> free on your machine &mdash; stop any other local
+              PostgreSQL install first, or it will conflict.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="compose">
+      <h2>Walking through docker-compose.yml <span class="tag">the whole file</span></h2>
+      <p class="dek">
+        This file only defines one service, <span class="mono">db</span> &mdash; there's no
+        container for the API itself in local development; you run
+        <span class="mono">metals_api</span> directly with Python and point it at this database.
+      </p>
+      <pre class="code"><span class="filename">docker-compose.yml</span>services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metals
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_metals:/var/lib/postgresql/data
+      - ./sql/metals-db.sql:/docker-entrypoint-initdb.d/metals-db.sql:ro
+
+volumes:
+  pgdata_metals:</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">image: postgres:16</span><span class="qnum">the database engine</span></div>
+          <p class="desc">The official PostgreSQL image, version 16 &mdash; the same major version the manual and Terraform deployment paths create in Azure, so behavior matches production.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">environment</span><span class="qnum">first-boot configuration</span></div>
+          <p class="desc">
+            These three variables are read by the official Postgres image <i>only the first time</i>
+            it starts with an empty data directory: they create the
+            <span class="mono">metals</span> database and a <span class="mono">postgres</span>
+            superuser with password <span class="mono">postgres</span>. Your local
+            <span class="mono">.env</span> file's <span class="mono">DB_USER</span> /
+            <span class="mono">DB_PASSWORD</span> need to match these exact values, since that's
+            what the container will actually accept.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">ports: "5432:5432"</span><span class="qnum">reaching it from your machine</span></div>
+          <p class="desc">Maps the container's PostgreSQL port to the same port on your computer, so tools like <span class="mono">psql</span>, DBeaver, or the API itself can connect to <span class="mono">localhost:5432</span> as if Postgres were installed natively.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">volumes: pgdata_metals</span><span class="qnum">where the data actually lives</span></div>
+          <p class="desc">
+            A named Docker volume that stores the database files outside the container, so your data
+            survives <span class="mono">docker compose down</span>, container rebuilds, and image
+            updates. This is also exactly the piece you have to delete to force a full reset &mdash;
+            see <a href="#reset">below</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">the metals-db.sql mount</span><span class="qnum">the auto-init hook</span></div>
+          <p class="desc">
+            Bind-mounting <span class="mono">sql/metals-db.sql</span> into
+            <span class="mono">/docker-entrypoint-initdb.d/</span> is a feature built into the
+            official Postgres image: on startup, if (and only if) the data directory is completely
+            empty, it runs every <span class="mono">.sql</span> file found in that folder, in order.
+            That single run is what creates every table and loads every seed row &mdash; there's no
+            separate migration step to remember.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="running">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Starting it up <span class="tag">day-to-day commands</span></h2>
+          <p class="dek">Run these from the project root, next to <span class="mono">docker-compose.yml</span>.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>same three commands, every time</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>docker compose up -d db</code></td><td>Starts the <span class="mono">db</span> service in the background. The first time, this also creates the volume and runs <span class="mono">metals-db.sql</span>.</td></tr>
+            <tr><td><code>docker compose logs -f db</code></td><td>Streams the container's logs &mdash; useful the first time, to watch the schema and seed data load.</td></tr>
+            <tr><td><code>docker compose down</code></td><td>Stops and removes the container, but <b>keeps</b> the <span class="mono">pgdata_metals</span> volume, so your data is still there next time you run <span class="mono">up</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>Matching <span class="mono">.env</span> file:</b> copy <span class="mono">.env.example</span>
+        to <span class="mono">.env</span> and set <span class="mono">DB_HOST=localhost</span>,
+        <span class="mono">DB_PORT=5432</span>, <span class="mono">DB_NAME=metals</span>,
+        <span class="mono">DB_USER=postgres</span>, <span class="mono">DB_PASSWORD=postgres</span>
+        &mdash; matching the <span class="mono">environment</span> block above exactly. Also set
+        <span class="mono">JWT_SECRET_KEY</span> to any long random string; the API refuses to issue
+        tokens with the placeholder value left in <span class="mono">.env.example</span>.
+      </p>
+    </section>
+
+    <section class="block" id="reset">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Have an old database already running? <span class="tag">read this before you debug anything else</span></h2>
+          <p class="dek">
+            If you ran <span class="mono">docker compose up -d db</span> on this project
+            <i>before</i> the authentication update, your <span class="mono">pgdata_metals</span>
+            volume already has data in it &mdash; which means the &ldquo;only runs on an empty data
+            directory&rdquo; rule from above now works against you. Postgres will start up fine, but
+            it will silently skip <span class="mono">metals-db.sql</span> entirely, so the new
+            <span class="mono">users</span>, <span class="mono">roles</span>, and
+            <span class="mono">user_roles</span> tables will simply not exist. The API will fail with
+            errors like <span class="mono">relation "users" does not exist</span> as soon as you try
+            to register or log in.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <figcaption>old volume, new script &mdash; they don't mix</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li>Stop the container <i>and</i> delete its volume: <pre class="code">docker compose down -v</pre></li>
+            <li>Start it again from scratch: <pre class="code">docker compose up -d db</pre></li>
+            <li>Because the volume is now gone, Postgres treats this as a brand-new database and runs <span class="mono">metals-db.sql</span> again in full &mdash; creating every table, including the three new ones, and reloading all seed data.</li>
+          </ol>
+          <p class="warn">
+            <b>The <span class="mono">-v</span> flag deletes the volume, permanently.</b> Any data
+            you added by hand (extra elements, alloys you created through the API, etc.) will be
+            gone. That's expected and fine for a local development database &mdash; never run
+            <span class="mono">down -v</span> against a shared or production database.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="accounts">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The two seed accounts <span class="tag">how to actually log in</span></h2>
+          <p class="dek">
+            <span class="mono">metals-db.sql</span> creates exactly two login accounts so you can
+            start using the <a href="../api/index.html">Metals API</a> immediately, without
+            registering a new one first. Both use the same password.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+          <figcaption>ready to log in, out of the box</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Username</th><th>Password</th><th>Role</th><th>Can do</th></tr></thead>
+          <tbody>
+            <tr><td><code>admin</code></td><td><code>password</code></td><td>Admin</td><td>Everything &mdash; including creating, updating, and deleting elements, alloys, alloy elements, and coins.</td></tr>
+            <tr><td><code>customer</code></td><td><code>password</code></td><td>Customer</td><td>Read-only &mdash; can view the catalog, but write attempts get a <span class="mono">403 Forbidden</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        These accounts, and this password, exist only for local development &mdash; the SQL file
+        stores an Argon2id hash, never the plaintext password, but a hardcoded, publicly-known
+        development password is obviously not appropriate for anything beyond a training
+        environment. See <a href="../api/02-authentication.html">the authentication tutorial</a> to
+        actually log in with these accounts and start calling the API.
+      </p>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>Port <span class="mono">5432</span> already in use / bind: address already in use</td><td>Another PostgreSQL instance (local install, another project's container) is already using the port.</td><td>Stop the other instance, or change the left-hand side of the <span class="mono">ports</span> mapping (e.g. <span class="mono">"5433:5432"</span>) and update <span class="mono">DB_PORT</span> in <span class="mono">.env</span> to match.</td></tr>
+            <tr><td><span class="mono">password authentication failed for user</span></td><td><span class="mono">.env</span>'s <span class="mono">DB_USER</span> / <span class="mono">DB_PASSWORD</span> don't match the <span class="mono">environment</span> block in <span class="mono">docker-compose.yml</span>.</td><td>Set both to <span class="mono">postgres</span> / <span class="mono">postgres</span>, or change the compose file's environment block to match your <span class="mono">.env</span> &mdash; just make sure they agree.</td></tr>
+            <tr><td><span class="mono">relation "users" does not exist</span> (or similarly, <span class="mono">"roles"</span>, <span class="mono">"elements"</span>)</td><td>You have an old volume from before the schema change, so the init script never ran against it.</td><td>Follow <a href="#reset">the reset steps above</a>: <span class="mono">docker compose down -v</span>, then <span class="mono">docker compose up -d db</span>.</td></tr>
+            <tr><td>API can't connect at all / connection refused</td><td>The container isn't running yet, or hasn't finished starting.</td><td>Run <span class="mono">docker compose ps</span> to check its status, and <span class="mono">docker compose logs -f db</span> to watch it start; give it a few seconds after <span class="mono">up -d</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-schema.html"><span class="pn-label">&larr; Back</span>The schema, in detail</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>Database overview</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Database running and seeded &mdash; next, head to the <a href="../api/index.html">Metals API tutorial</a> to log in and start calling it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">docker-compose.yml</span> and <span class="mono">sql/metals-db.sql</span> at the root of this repository.
+</footer>
+
+</body>
+</html>

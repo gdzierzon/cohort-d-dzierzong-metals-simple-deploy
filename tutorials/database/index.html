@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Database</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Database</p>
+        <h1>The Metals Database, Structure and Local Setup</h1>
+        <p class="lede">
+          Every table this application uses is defined in one file &mdash;
+          <span class="mono">sql/metals-db.sql</span> &mdash; and a local copy of the database can be
+          stood up with one file at the project root, <span class="mono">docker-compose.yml</span>.
+          This page covers what's actually inside that schema, including the new
+          <span class="mono">users</span>, <span class="mono">roles</span>, and
+          <span class="mono">user_roles</span> tables added for authentication, and how to run (and,
+          if needed, reset) the database on your own machine.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Engine &rarr; <b>PostgreSQL 16</b></span>
+      <span class="fact">Schema &amp; seed data &rarr; <b>sql/metals-db.sql</b></span>
+      <span class="fact">Local runtime &rarr; <b>docker-compose.yml</b></span>
+      <span class="fact">Tables &rarr; <b>7</b></span>
+      <span class="fact">Dev seed accounts &rarr; <b>admin</b> &amp; <b>customer</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="../index.html">&larr; Tutorials home</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#one-file">One file, one source of truth</a></li>
+      <li><a href="#tables">The tables, table by table</a></li>
+      <li><a href="#seed">What gets loaded automatically</a></li>
+      <li><a href="#pages">Pick a page to learn</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="one-file">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>One file, one source of truth <span class="tag">start here</span></h2>
+          <p class="dek">
+            <span class="mono">sql/metals-db.sql</span> does two jobs in one script: it drops and
+            recreates every table this project needs (in dependency order, so foreign keys don't
+            fail), and then it inserts starting data &mdash; including the roles, the two development
+            login accounts, and the metals/alloys/coins catalog data the API serves.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one script, every table</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Where this file is used</span><span class="qnum">two places</span></div>
+          <p class="desc">
+            Locally, <span class="mono">docker-compose.yml</span> mounts this file straight into a
+            fresh PostgreSQL container so it runs automatically the first time the container starts
+            &mdash; covered on <a href="02-docker-compose.html">the next page</a>. In Azure, the same
+            file is loaded by <a href="../manual/01-create-resources.html">az_create_resources</a>
+            (manual path) or <span class="mono">terraform/scripts/initialize_database.py</span>
+            (Terraform path) after the empty database server is created.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="tables">
+      <h2>The tables, table by table <span class="tag">structure</span></h2>
+      <p class="dek">
+        Seven tables in total, split into two groups: the metals catalog data the API was originally
+        built around, and the authentication tables added on top of it.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:11rem;">Table</th><th>What it's for, in plain terms</th></tr></thead>
+          <tbody>
+            <tr><td class="path">elements</td><td>One row per chemical element (atomic number as the primary key) &mdash; melting/boiling points, color, density, category, and whether it's toxic or magnetic.</td></tr>
+            <tr><td class="path">alloys</td><td>Named mixtures, like &ldquo;Sterling Silver&rdquo; or &ldquo;18K Yellow Gold.&rdquo;</td></tr>
+            <tr><td class="path">alloy_elements</td><td>A join table: which elements make up which alloy, and what percentage of the alloy each one is.</td></tr>
+            <tr><td class="path">coins</td><td>Real-world coins, each made from one alloy, with weight and face-value details.</td></tr>
+            <tr><td class="path"><b>users</b></td><td>Login accounts &mdash; a username and a password <i>hash</i> (never the real password). <a href="01-schema.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><b>roles</b></td><td>The two permission levels this API knows about: <span class="mono">Admin</span> and <span class="mono">Customer</span>. <a href="01-schema.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><b>user_roles</b></td><td>A join table connecting users to the role(s) they hold. <a href="01-schema.html">(dig deeper)</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>Bold rows</b> are the three tables added for authentication. Everything else was already
+        part of the metals catalog.
+      </p>
+    </section>
+
+    <section class="block" id="seed">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>What gets loaded automatically <span class="tag">seed data</span></h2>
+          <p class="dek">
+            After creating the tables, the same script inserts starting rows: the
+            <span class="mono">Admin</span> and <span class="mono">Customer</span> roles, two
+            ready-to-use login accounts, and a large catalog of real elements, alloys, and coins.
+            Every insert uses <span class="mono">ON CONFLICT ... DO NOTHING</span>, so re-running
+            the script against a database that already has this data is harmless.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>safe to run more than once</figcaption>
+        </figure>
+      </div>
+      <p class="bonus-banner">
+        The two seed accounts and their password are covered in detail on
+        <a href="02-docker-compose.html#accounts">the Docker Compose page</a> &mdash; you'll need them
+        to log in once the <a href="../api/index.html">Metals API</a> requires authentication.
+      </p>
+    </section>
+
+    <section class="block" id="pages">
+      <h2>Pick a page to learn <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-schema.html"><span class="mnum">Page 1 of 2</span><h3>The schema, in detail</h3><p>Every table, its columns, its relationships, and the key terms behind them.</p></a>
+        <a class="module-card" href="02-docker-compose.html"><span class="mnum">Page 2 of 2</span><h3>Running it locally</h3><p>docker-compose.yml, resetting an out-of-date database, and the seed login accounts.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Pick a page above, or head to the <a href="../api/index.html">Metals API tutorial</a> to see who actually calls this database.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">sql/metals-db.sql</span> and <span class="mono">docker-compose.yml</span> at the root of this repository.
+</footer>
+
+</body>
+</html>

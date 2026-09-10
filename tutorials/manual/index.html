@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual Deployment</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Manual Deployment</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Manual Deployment</p>
+        <h1>Building This Project by Hand, with Azure CLI</h1>
+        <p class="lede">
+          Before this project used Terraform, every Azure resource it needs was created by
+          running <span class="mono">az</span> commands directly &mdash; one at a time, in a fixed
+          order, typed by a person (or scripted, but still imperative, step-by-step commands
+          rather than a declared end state). That logic lives in the
+          <span class="mono">utility_scripts/</span> folder at the root of this project. This page
+          walks through what each script does, and why the project later moved to Terraform for
+          day-to-day use.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>utility_scripts/</b></span>
+      <span class="fact">Tool &rarr; <b>Azure CLI (az)</b></span>
+      <span class="fact">Scripts &rarr; <b>4</b>, each in PowerShell and Bash</span>
+      <span class="fact">Automated alternative &rarr; <a href="../terraform/index.html"><b>Terraform tutorial</b></a></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="../index.html">&larr; Tutorials home</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#manual-vs-automated">Manual vs. automated</a></li>
+      <li><a href="#structure">The scripts, script by script</a></li>
+      <li><a href="#order">A sensible order</a></li>
+      <li><a href="#scripts">Pick a script to learn</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="manual-vs-automated">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Manual vs. automated <span class="tag">why both exist</span></h2>
+          <p class="dek">
+            Both approaches create the exact same kind of Azure environment &mdash; a resource
+            group, a PostgreSQL server and database, an App Service plan and web app, and (for
+            CI/CD) a passwordless GitHub identity. They just get there differently.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>same destination, two different roads</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The manual approach (this page)</span><span class="qnum">imperative</span></div>
+          <p class="desc">
+            Each script is a fixed list of <span class="mono">az</span> commands, run top to
+            bottom, in order. There's no memory of what already exists beyond whatever's actually
+            sitting in Azure &mdash; run a script twice and it tries to create everything twice
+            (some commands then fail because the resource already exists). Nothing previews what
+            would happen before it happens. This is exactly how most people first learn a cloud
+            platform: one command, one resource, cause and effect you can see immediately.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The automated approach (Terraform)</span><span class="qnum">declarative</span></div>
+          <p class="desc">
+            <a href="../terraform/index.html">Terraform</a> describes the <i>end state</i> you
+            want, keeps a record (state) of what it already built, and previews every change
+            before making it. It's more setup up front, but it scales to a team, catches drift,
+            and tears down cleanly &mdash; the trade-offs covered in detail on the
+            <a href="../terraform/index.html">Terraform tutorial</a>'s
+            <a href="../terraform/index.html#problem">&ldquo;what problem does Terraform
+            solve?&rdquo;</a> section.
+          </p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        <b>Worth knowing:</b> this project no longer runs these scripts in its actual CI/CD
+        pipeline &mdash; the GitHub Actions workflow uses Terraform. They're kept, and covered
+        here, because reading them is one of the clearest ways to see exactly which Azure API
+        calls Terraform is making on your behalf under the hood.
+      </p>
+    </section>
+
+    <section class="block" id="structure">
+      <h2>The scripts, script by script <span class="tag">structure</span></h2>
+      <p class="dek">
+        Every script below lives inside <span class="mono">utility_scripts/</span>, as a matching
+        pair &mdash; a <span class="mono">.ps1</span> file for PowerShell and a
+        <span class="mono">.sh</span> file for Bash, doing the same job. Both take a
+        <span class="mono">-UserName</span> / <span class="mono">--user-name</span> parameter
+        (default <span class="mono">dzierzon</span>) used to build resource names, the same
+        pattern as Terraform's <a href="../terraform/03-variables.html">user_name variable</a>.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:17rem;">Script</th><th>What it's for, in plain terms</th></tr></thead>
+          <tbody>
+            <tr><td class="path"><a href="01-create-resources.html">az_create_resources</a></td><td>Creates the resource group, the PostgreSQL server and database, and the web app hosting slot, then loads the starting database tables. <a href="01-create-resources.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="02-deploy.html">az_deploy</a></td><td>Packages the Flask API's code into a zip file and uploads it to the already-created web app, then streams its logs. <a href="02-deploy.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="03-setup-github-oidc.html">az_setup_github_oidc</a></td><td>Creates a passwordless identity so GitHub Actions can deploy code, the manual equivalent of Terraform's <a href="../terraform/07-github-oidc.html">github_oidc.tf</a>. <a href="03-setup-github-oidc.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="04-delete-resources.html">az_delete_resources</a></td><td>Deletes the entire resource group and everything inside it, cleanly and safely. <a href="04-delete-resources.html">(dig deeper)</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>Note:</b> a fifth script, <span class="mono">az_deploy.ps1</span>'s zip step, also
+        creates a working file named <span class="mono">deploy.zip</span> inside
+        <span class="mono">utility_scripts/</span> &mdash; a temporary build artifact, not
+        something to edit or commit.
+      </p>
+    </section>
+
+    <section class="block" id="order">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>A sensible order <span class="tag">where to start</span></h2>
+          <p class="dek">
+            Unlike Terraform, these scripts don't check dependencies for you &mdash; running one out
+            of order just fails with an Azure error about a resource that doesn't exist yet. This
+            is the order they're meant to run in.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>four scripts, one order</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><a href="01-create-resources.html"><b>az_create_resources</b></a> &mdash; provisions everything: resource group, database, web app.</li>
+            <li><a href="02-deploy.html"><b>az_deploy</b></a> &mdash; pushes the Flask API's code onto the web app that now exists.</li>
+            <li><a href="03-setup-github-oidc.html"><b>az_setup_github_oidc</b></a> &mdash; optional, only needed once, to let GitHub Actions deploy automatically afterward.</li>
+            <li><a href="04-delete-resources.html"><b>az_delete_resources</b></a> &mdash; whenever you're done, tears everything back down.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="scripts">
+      <h2>Pick a script to learn <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-create-resources.html"><span class="mnum">Script 1 of 4</span><h3>az_create_resources</h3><p>Provisions the resource group, database, and web app; loads starting data.</p></a>
+        <a class="module-card" href="02-deploy.html"><span class="mnum">Script 2 of 4</span><h3>az_deploy</h3><p>Zips and deploys the Flask API's code to the existing web app.</p></a>
+        <a class="module-card" href="03-setup-github-oidc.html"><span class="mnum">Script 3 of 4</span><h3>az_setup_github_oidc</h3><p>Creates a passwordless GitHub Actions deployment identity.</p></a>
+        <a class="module-card" href="04-delete-resources.html"><span class="mnum">Script 4 of 4</span><h3>az_delete_resources</h3><p>Deletes the resource group and everything inside it.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Pick a script above, or head to the <a href="../terraform/index.html">Terraform tutorial</a> to see the automated version of the same steps.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">utility_scripts/</span> in this repository has both the PowerShell (<span class="mono">.ps1</span>) and Bash (<span class="mono">.sh</span>) versions of every script covered here.
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>az_delete_resources</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Manual Deployment</a> &rsaquo; az_delete_resources</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Manual Deployment &middot; Script 4 of 4</p>
+        <h1>az_delete_resources</h1>
+        <p class="lede">
+          Deletes the entire resource group this project created, and everything inside it &mdash;
+          the resource group, database (and all its data), and web app &mdash; in one command, then
+          waits for the deletion to actually finish.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Files &rarr; <b>az_delete_resources.ps1</b> &middot; <b>.sh</b></span>
+      <span class="fact">Reversible &rarr; <b>no</b> (data included)</span>
+      <span class="fact">Terraform equivalent &rarr; <a href="../terraform/commands/06-destroy.html"><b>terraform destroy</b></a></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Manual Deployment overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#prereqs">Before you run it</a></li>
+      <li><a href="#code">Walking through the script</a></li>
+      <li><a href="#compare">How this compares to terraform destroy</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this script</p>
+          <p>Delete the resource group holding every Azure resource this project created, safely and idempotently, and wait for the deletion to complete.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <figcaption>one command, everything gone</figcaption>
+        </figure>
+      </div>
+      <p class="warn" style="max-width:44rem;">
+        Just like <a href="../terraform/commands/06-destroy.html">terraform destroy</a>, this is
+        permanent. Deleting the resource group deletes the PostgreSQL server and every row of data
+        inside it, with no built-in undo. Back up anything that matters first.
+      </p>
+    </section>
+
+    <section class="block" id="prereqs">
+      <h2>Before you run it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Azure CLI installed and authenticated, as an identity with permission to delete the resource group.</li>
+            <li>Nothing else &mdash; the script itself checks whether the resource group exists before doing anything, so it's safe to run even if you're not sure what state things are in.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="code">
+      <h2>Walking through the script <span class="tag">PowerShell version</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">1. Pin down the subscription</span><span class="qnum">az account show</span></div>
+          <pre class="code">$subscriptionId = Invoke-Az account show @subscriptionArguments --query id --output tsv</pre>
+          <p class="desc">Resolves and fixes the subscription ID up front (honoring <span class="mono">-Subscription</span> if supplied), so every following command targets exactly one subscription &mdash; no ambiguity if you have several.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">2. Check before deleting</span><span class="qnum">az group exists</span></div>
+          <pre class="code">$exists = Invoke-Az group exists --name $resourceGroup --subscription $subscriptionId --output tsv
+if (([string]$exists).Trim() -eq 'false') {
+    Write-Host "Resource group '$resourceGroup' does not exist... Nothing to delete."
+    return
+}</pre>
+          <p class="desc">
+            Makes the script <b>idempotent</b> in the one direction that matters most: running it
+            against an already-deleted (or never-created) resource group is a harmless no-op, not
+            an error. This is the same spirit as <a href="../terraform/commands/06-destroy.html">terraform destroy</a>
+            gracefully handling a resource that's already gone.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">3. Preview without deleting</span><span class="qnum">-WhatIf</span></div>
+          <pre class="code">.\utility_scripts\az_delete_resources.ps1 -WhatIf</pre>
+          <p class="desc">
+            Built on PowerShell's standard <span class="mono">SupportsShouldProcess</span>
+            mechanism &mdash; passing <span class="mono">-WhatIf</span> prints exactly what would be
+            deleted without touching anything, the closest manual equivalent to
+            <a href="../terraform/commands/04-plan.html">terraform plan -destroy</a>'s preview,
+            even though it's far less detailed (it names the resource group, not every individual
+            resource inside it).
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">4. Delete, and wait</span><span class="qnum">az group delete</span></div>
+          <pre class="code">Invoke-Az group delete --name $resourceGroup --subscription $subscriptionId --yes</pre>
+          <p class="desc">
+            <span class="mono">--yes</span> skips Azure CLI's own interactive confirmation prompt
+            (the script's own <span class="mono">-WhatIf</span> support is the safety check
+            instead). By default, <span class="mono">az group delete</span> blocks until the
+            deletion actually finishes &mdash; which can take several minutes, mostly waiting on the
+            PostgreSQL server &mdash; so the script (and whoever's running it) knows deletion is
+            complete before moving on, rather than returning immediately while Azure is still
+            cleaning up in the background.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="compare">
+      <h2>How this compares to terraform destroy <span class="tag">same idea, blunter tool</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <p class="desc">
+            <a href="../terraform/commands/06-destroy.html">terraform destroy</a> deletes resources
+            one by one, in an order that respects the dependencies Terraform's state already
+            tracks, and shows a plan of exactly what will go before it happens. This script
+            deletes the entire resource group in a single Azure operation &mdash; simpler to read
+            and run, but all-or-nothing: there's no way to preview individual resources, and no
+            way to delete just one resource this way without deleting everything alongside it.
+          </p>
+          <p class="note">
+            Because this script deletes by resource group rather than by tracked resource, it also
+            works correctly regardless of <i>how</i> those resources were created &mdash; by this
+            script, by Terraform, or by hand in the Portal. Terraform's own destroy, by contrast,
+            only removes what's in <i>its</i> state file.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;No Azure subscription was found&rdquo;</td><td>Not logged in, or no subscription is selected.</td><td>Run <span class="mono">az login</span>, and pass <span class="mono">-Subscription</span> if you have more than one.</td></tr>
+            <tr><td>&ldquo;Resource group ... does not exist. Nothing to delete.&rdquo;</td><td>This is expected, successful behavior &mdash; there was nothing to remove.</td><td>No action needed.</td></tr>
+            <tr><td>Authorization error during deletion</td><td>Your identity doesn't have delete permission on the resource group.</td><td>Use an account with at least Contributor-level access on the subscription or resource group.</td></tr>
+            <tr><td>The command takes several minutes to return</td><td>This is expected &mdash; the script waits for the full deletion (especially the PostgreSQL server) to complete.</td><td>Let it finish; avoid interrupting it partway through.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="03-setup-github-oidc.html"><span class="pn-label">&larr; Back</span>az_setup_github_oidc</a>
+      <a class="next" href="index.html"><span class="pn-label">Finish &rarr;</span>Manual Deployment overview</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's all four scripts &mdash; when you're ready to see the same steps done declaratively, head to the <a href="../terraform/index.html">Terraform tutorial</a>.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">utility_scripts/az_delete_resources.ps1</span>, <span class="mono">utility_scripts/az_delete_resources.sh</span>
+</footer>
+
+</body>
+</html>

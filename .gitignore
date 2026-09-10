@@ -221,6 +221,9 @@ __marimo__/
 .claude/
 utility_scripts/deploy.zip
 
+# Windows download metadata
+*:Zone.Identifier
+
 # Terraform local state and inputs (state and plans contain credentials).
 **/.terraform/*
 *.tfstate

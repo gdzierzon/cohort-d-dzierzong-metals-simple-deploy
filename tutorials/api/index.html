@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metals API</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Metals API</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Metals API</p>
+        <h1>The Metals API: Endpoints, Authentication, and Structure</h1>
+        <p class="lede">
+          <span class="mono">metals_api/</span> is a Flask application that serves the metals
+          catalog &mdash; elements, alloys, alloy compositions, and coins &mdash; as JSON over HTTP.
+          Every endpoint now requires a logged-in user, and creating, changing, or deleting data is
+          restricted to accounts with the <span class="mono">Admin</span> role. Codey will cover this
+          app in three parts: what the endpoints actually do, how the login system works (including
+          a full walkthrough in Insomnia), and how the code itself is organized.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>metals_api/</b></span>
+      <span class="fact">Framework &rarr; <b>Flask</b></span>
+      <span class="fact">Login tokens &rarr; <b>JWT (JSON Web Tokens)</b></span>
+      <span class="fact">Password storage &rarr; <b>Argon2id</b></span>
+      <span class="fact">Roles &rarr; <b>Admin, Customer</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns: 1fr;">
+  <main>
+
+    <section class="block" id="sections">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Three sections <span class="tag">start here</span></h2>
+          <p class="dek">
+            Each section stands on its own, but they build on each other in this order: first what
+            the API does, then how you prove who you are to it, then how the code behind it all is
+            put together.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>three sections, one app</figcaption>
+        </figure>
+      </div>
+      <div class="card-grid">
+        <a class="info-card linkable" href="01-endpoints.html">
+          <p class="ieyebrow">Section 1</p>
+          <h3>The API Endpoints</h3>
+          <p>
+            Every resource the API exposes &mdash; elements, alloys, alloy elements, coins &mdash; the
+            HTTP methods and paths for each, what a request body looks like, and how errors are
+            reported.
+          </p>
+          <div class="stack"><span class="chip">REST</span><span class="chip">JSON</span><span class="chip">Flask Blueprints</span></div>
+        </a>
+        <a class="info-card linkable" href="02-authentication.html">
+          <p class="ieyebrow">Section 2</p>
+          <h3>Authentication with JWT</h3>
+          <p>
+            What a JWT actually is, how this API issues and checks one, and a full step-by-step
+            walkthrough in Insomnia: register or log in, copy the token, and attach it to every
+            other request.
+          </p>
+          <div class="stack"><span class="chip">JWT</span><span class="chip">Bearer tokens</span><span class="chip">Insomnia</span></div>
+        </a>
+        <a class="info-card linkable" href="03-file-structure.html">
+          <p class="ieyebrow">Section 3</p>
+          <h3>File Structure</h3>
+          <p>
+            How <span class="mono">metals_api/</span> is organized &mdash; routes, services,
+            repositories, models, and DTOs &mdash; and how a single request travels through all of
+            them.
+          </p>
+          <div class="stack"><span class="chip">Layered architecture</span><span class="chip">SQLAlchemy</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="block" id="flow">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The shape of every request <span class="tag">the big picture</span></h2>
+          <p class="dek">
+            Whichever endpoint you call, the request passes through the same two checks before any
+            business logic runs: are you logged in at all, and if this is a write, are you an
+            <span class="mono">Admin</span>? Both checks live in
+            <span class="mono">metals_api/auth.py</span> as small decorators reused across every
+            route file.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>same two gates, every route</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Read endpoints</span><span class="qnum">GET</span></div>
+          <p class="desc">Require <code>@require_auth</code> only &mdash; any logged-in user, Admin or Customer, can look things up.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Write endpoints</span><span class="qnum">POST, PUT, DELETE</span></div>
+          <p class="desc">Require <code>@require_auth</code> <i>and</i> <code>@require_roles("Admin")</code> &mdash; logged in isn't enough; the token's roles must include <span class="mono">Admin</span>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="pick">
+      <h2>Pick a section to start <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-endpoints.html"><span class="mnum">Section 1 of 3</span><h3>The API Endpoints</h3><p>Every resource, method, path, and request body.</p></a>
+        <a class="module-card" href="02-authentication.html"><span class="mnum">Section 2 of 3</span><h3>Authentication with JWT</h3><p>What a JWT is, and a full Insomnia walkthrough.</p></a>
+        <a class="module-card" href="03-file-structure.html"><span class="mnum">Section 3 of 3</span><h3>File Structure</h3><p>Routes, services, repositories, models, and DTOs.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>New here? Start with the endpoints, then authentication &mdash; you'll need a token from Section 2 to actually try any of the write endpoints from Section 1.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">metals_api/</span> in this repository. See also the
+  <a href="../database/index.html">Database tutorial</a> for the tables this API reads and writes.
+</footer>
+
+</body>
+</html>

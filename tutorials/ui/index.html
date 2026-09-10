@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metals UI</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Metals UI</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Metals UI</p>
+        <h1>The Metals UI: Roles, Routing, and Running It</h1>
+        <p class="lede">
+          <span class="mono">metals_ui/</span> is a framework-free, client-side JavaScript app for
+          the Metals API &mdash; plain ES modules, hash-based routing, and no build step. Every
+          visitor can see the landing page, but the catalog itself &mdash; elements, alloys, and
+          coins &mdash; is only visible once you're logged in. Creating, editing, or deleting any of
+          that data is restricted further still, to accounts with the <span class="mono">Admin</span>
+          role. Codey will cover how the app decides who sees what, then how to actually run it.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>metals_ui/</b></span>
+      <span class="fact">Framework &rarr; <b>none &mdash; vanilla JS, ES modules</b></span>
+      <span class="fact">Routing &rarr; <b>hash-based (#/elements, #/admin/coins, &hellip;)</b></span>
+      <span class="fact">Auth storage &rarr; <b>sessionStorage (JWT Bearer token)</b></span>
+      <span class="fact">Roles &rarr; <b>Admin, Customer</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns: 1fr;">
+  <main>
+
+    <section class="block" id="sections">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Two sections <span class="tag">start here</span></h2>
+          <p class="dek">
+            First, how the app decides what a visitor is allowed to see and do &mdash; the routing
+            and guard logic that sits between every page and the data behind it. Then, how to
+            actually serve this folder and point it at a running API.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>two sections, one app</figcaption>
+        </figure>
+      </div>
+      <div class="card-grid">
+        <a class="info-card linkable" href="01-flow.html">
+          <p class="ieyebrow">Section 1</p>
+          <h3>How the UI Is Put Together</h3>
+          <p>
+            App startup, hash-based routing, the login/admin guards that protect each route, and
+            the shared form for the admin create/edit/delete screens.
+          </p>
+          <div class="stack"><span class="chip">Router</span><span class="chip">Route guards</span><span class="chip">Session</span></div>
+        </a>
+        <a class="info-card linkable" href="02-running-locally.html">
+          <p class="ieyebrow">Section 2</p>
+          <h3>Running It Locally</h3>
+          <p>
+            Serving <span class="mono">metals_ui/</span> with a plain static server, pointing it at
+            the API through <span class="mono">runtime-config.js</span>, and the order to start
+            everything in.
+          </p>
+          <div class="stack"><span class="chip">http.server</span><span class="chip">runtime-config.js</span><span class="chip">CORS</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="block" id="access">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Who can see what <span class="tag">the big picture</span></h2>
+          <p class="dek">
+            Three levels of access, each one strictly a superset of the one before it. The UI is
+            what steers a visitor toward the right page, but it isn't what actually enforces any of
+            this &mdash; that's still the API's job, exactly as covered in the
+            <a href="../api/index.html">Metals API tutorial</a>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>view, then browse, then change</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>Visitor</th><th>Can see</th><th>Can change</th></tr></thead>
+          <tbody>
+            <tr><td>Unauthenticated</td><td>The landing page, log in, register</td><td>Nothing &mdash; the catalog isn't shown at all</td></tr>
+            <tr><td>Customer</td><td>Elements, alloys, and coins</td><td>Nothing &mdash; browsing only</td></tr>
+            <tr><td>Admin</td><td>Everything a Customer sees, plus the admin section</td><td>Elements, alloys, coins, and other users' Admin permission</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Registering through the UI always creates a <span class="mono">Customer</span> account
+        &mdash; there's no self-service way to become an Admin. The seed database ships one ready-made
+        Admin login for local development; see
+        <a href="../database/02-docker-compose.html#accounts">the database tutorial</a> for its
+        credentials.
+      </p>
+    </section>
+
+    <section class="block" id="routes">
+      <h2>Every route, and who's allowed on it <span class="tag">reference</span></h2>
+      <p class="dek">
+        Routes live after the <span class="mono">#</span> in the URL, so the browser never sends
+        them to a server &mdash; the router in <span class="mono">js/router.js</span> reads
+        <span class="mono">window.location.hash</span> and renders a view entirely on the client.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:12rem;">Route</th><th>Audience</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="path">#/</td><td>Everyone</td><td>Landing page introducing the catalog.</td></tr>
+            <tr><td class="path">#/login</td><td>Everyone</td><td>Log in with an existing account.</td></tr>
+            <tr><td class="path">#/register</td><td>Everyone</td><td>Create a new Customer account.</td></tr>
+            <tr><td class="path">#/elements</td><td>Logged in</td><td>Browse and filter elements.</td></tr>
+            <tr><td class="path">#/alloys</td><td>Logged in</td><td>Browse alloys and their compositions.</td></tr>
+            <tr><td class="path">#/coins</td><td>Logged in</td><td>Browse coins and the alloy each was minted from.</td></tr>
+            <tr><td class="path">#/admin</td><td>Admin</td><td>Administration landing page.</td></tr>
+            <tr><td class="path">#/admin/elements</td><td>Admin</td><td>Create, edit, and delete elements.</td></tr>
+            <tr><td class="path">#/admin/alloys</td><td>Admin</td><td>Create, edit, and delete alloys.</td></tr>
+            <tr><td class="path">#/admin/coins</td><td>Admin</td><td>Create, edit, and delete coins.</td></tr>
+            <tr><td class="path">#/admin/users</td><td>Admin</td><td>View users and grant or revoke the Admin role.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="pick">
+      <h2>Pick a section to start <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-flow.html"><span class="mnum">Section 1 of 2</span><h3>How the UI Is Put Together</h3><p>Startup, routing, guards, and the admin CRUD screens.</p></a>
+        <a class="module-card" href="02-running-locally.html"><span class="mnum">Section 2 of 2</span><h3>Running It Locally</h3><p>python -m http.server, runtime-config.js, and start order.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>New here? Start with how the UI is put together, then see it running &mdash; or head to the <a href="../index.html">tutorials home</a> for how every piece of this project fits together.</p>
+</div>
+
+<footer class="page">
+  Reference: <span class="mono">metals_ui/</span> in this repository. See also the
+  <a href="../api/index.html">Metals API tutorial</a> for the endpoints this UI calls.
+</footer>
+
+</body>
+</html>

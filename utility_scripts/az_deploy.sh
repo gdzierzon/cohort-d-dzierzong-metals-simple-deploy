@@ -1,35 +1,43 @@
 #!/usr/bin/env bash
-# Requires Azure CLI (az login) and zip.
-set -euo pipefail
 
-usage() {
-    cat <<'EOF'
-Usage: bash utility_scripts/az_deploy.sh [--user-name NAME]
-EOF
-}
+userName="dzierzon"
 
-user_name='dzierzon'
-while (( $# > 0 )); do
-    case "$1" in
-        --user-name) (( $# >= 2 )) || { printf 'Missing value for --user-name.\n' >&2; exit 2; }; user_name="$2"; shift 2 ;;
-        -h|--help) usage; exit 0 ;;
-        *) printf 'Unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
-    esac
-done
+###################
+# Compress / Zip
+###################
 
-command -v az >/dev/null 2>&1 || { printf 'Azure CLI (az) was not found. Install it and run az login.\n' >&2; exit 1; }
-command -v zip >/dev/null 2>&1 || { printf 'zip was not found. Install zip and try again.\n' >&2; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR/.."
+DEPLOY_ZIP="$SCRIPT_DIR/deploy.zip"
 
-project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-app_directory="$project_root/metals_api"
-deploy_zip=$(mktemp "${TMPDIR:-/tmp}/metals-deploy.XXXXXX.zip")
-trap 'rm -f "$deploy_zip"' EXIT
-resource_group="expeditors-${user_name}-metals-rg"
-app_name="expeditors-${user_name}-metals-api"
+rm -f "$DEPLOY_ZIP"
+python3 - "$PROJECT_ROOT" "$DEPLOY_ZIP" <<'PYEOF'
+import os
+import sys
+import zipfile
 
-(cd "$app_directory" && zip -q -r "$deploy_zip" . -x '__pycache__/*' '.pytest_cache/*')
-zip -q -j "$deploy_zip" "$project_root/requirements.txt"
+project_root, deploy_zip = sys.argv[1], sys.argv[2]
+app_dir = os.path.join(project_root, "metals_api")
 
-az webapp deploy --name "$app_name" --resource-group "$resource_group" --src-path "$deploy_zip" --type zip
-az webapp log config --name "$app_name" --resource-group "$resource_group" --application-logging filesystem --level information
-az webapp log tail --name "$app_name" --resource-group "$resource_group"
+with zipfile.ZipFile(deploy_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(app_dir):
+        dirs[:] = [d for d in dirs if d not in ("__pycache__", ".pytest_cache")]
+        for name in files:
+            full_path = os.path.join(root, name)
+            zf.write(full_path, os.path.relpath(full_path, app_dir))
+    zf.write(os.path.join(project_root, "requirements.txt"), "requirements.txt")
+PYEOF
+
+az webapp deploy \
+  --name "expeditors-${userName}-metals-api" \
+  --resource-group "expeditors-${userName}-metals-rg" \
+  --src-path "$DEPLOY_ZIP" \
+  --type zip
+
+#####################
+# Logging
+#####################
+az webapp log config --name "expeditors-${userName}-metals-api" --resource-group "expeditors-${userName}-metals-rg" --application-logging filesystem --level information
+
+
+az webapp log tail --name "expeditors-${userName}-metals-api" --resource-group "expeditors-${userName}-metals-rg"

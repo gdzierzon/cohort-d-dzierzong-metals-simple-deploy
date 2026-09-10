@@ -1,0 +1,135 @@
+.brand {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+}
+
+.navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.navigation a,
+.button {
+  display: inline-block;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.5rem 0.8rem;
+  color: var(--color-text);
+  background: transparent;
+  text-decoration: none;
+}
+
+.navigation a:hover,
+.navigation a:focus-visible {
+  color: var(--color-gold-bright);
+}
+
+.navigation .button {
+  margin-left: 0.7rem;
+  border-color: rgb(202 163 95 / 65%);
+  padding-inline: 1.35rem;
+}
+
+.button--primary {
+  border-color: var(--color-gold);
+  background: linear-gradient(105deg, #9b7137, #d5ae66);
+  color: var(--color-action-text);
+}
+
+.button--primary:hover,
+.button--primary:focus-visible {
+  border-color: var(--color-gold-bright);
+  background: linear-gradient(105deg, #aa7e3e, #e1bd76);
+  color: #fff;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.card {
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-gold-bright);
+  outline-offset: 3px;
+}
+
+.notice {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.notice--error {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field label {
+  color: #e2ddd3;
+  font-size: 0.92rem;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  background: rgb(19 23 24 / 68%);
+  color: var(--color-text);
+}
+
+.field input::placeholder {
+  color: var(--color-muted);
+}
+
+.field__hint {
+  margin: -0.1rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

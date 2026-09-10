@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from auth import require_auth, require_roles
 from dtos import CreateCoinDTO, UpdateCoinDTO
 from services import coin_service as service
 from services.exceptions import BusinessValidationError
@@ -14,6 +15,7 @@ coin_blueprint = Blueprint(
 
 # http://localhost:5000/api/coins
 @coin_blueprint.get("")
+@require_auth
 def get_all_coins():
     alloy_id = request.args.get("alloy_id")
     if alloy_id is not None:
@@ -34,6 +36,7 @@ def get_all_coins():
 
 # http://localhost:5000/api/coins/1
 @coin_blueprint.get("/<int:coin_id>")
+@require_auth
 def get_coin(coin_id: int):
     dto = service.find_coin(coin_id)
     if dto is None:
@@ -44,6 +47,8 @@ def get_coin(coin_id: int):
 
 # http://localhost:5000/api/coins
 @coin_blueprint.post("")
+@require_auth
+@require_roles("Admin")
 def create_coin():
     data = request.get_json(silent=True)
     errors = CreateCoinDTO.validate(data)
@@ -61,6 +66,8 @@ def create_coin():
 
 # http://localhost:5000/api/coins/1
 @coin_blueprint.put("/<int:coin_id>")
+@require_auth
+@require_roles("Admin")
 def update_coin(coin_id: int):
     data = request.get_json(silent=True)
     errors = UpdateCoinDTO.validate(data)
@@ -81,6 +88,8 @@ def update_coin(coin_id: int):
 
 # http://localhost:5000/api/coins/1
 @coin_blueprint.delete("/<int:coin_id>")
+@require_auth
+@require_roles("Admin")
 def delete_coin(coin_id: int):
     if not service.remove_coin(coin_id):
         return jsonify({"error": "Coin not found"}), 404
