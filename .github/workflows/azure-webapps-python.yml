@@ -6,11 +6,11 @@ env:
   PYTHON_VERSION: '3.11'            # match the Azure App Service runtime
 
 on:
-  push:
-    paths:
-      - 'metals_api/**'
-      - 'sql/**'
-      - 'requirements.txt'
+  # push:
+  #   paths:
+  #     - 'metals_api/**'
+  #     - 'sql/**'
+  #     - 'requirements.txt'
   workflow_dispatch:
 
 permissions:
