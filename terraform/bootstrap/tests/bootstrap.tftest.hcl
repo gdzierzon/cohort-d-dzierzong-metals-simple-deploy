@@ -26,7 +26,7 @@ run "bootstrap_survives_application_teardown" {
     error_message = "State storage must use identity authentication and retain blob versions."
   }
   assert {
-    condition     = strcontains(azurerm_role_assignment.deployment_roles.condition, "@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}") && strcontains(azurerm_role_assignment.deployment_roles.condition, "@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}")
-    error_message = "Both role assignment creation and deletion must be limited to Website Contributor."
+    condition     = strcontains(azurerm_role_assignment.deployment_roles.condition, "@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, 8311e382-0749-4cb8-b61a-304f252e45ec, acdd72a7-3385-48ef-bd42-f606fba81ae7}") && strcontains(azurerm_role_assignment.deployment_roles.condition, "@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, 8311e382-0749-4cb8-b61a-304f252e45ec, acdd72a7-3385-48ef-bd42-f606fba81ae7}")
+    error_message = "Both role assignment creation and deletion must be limited to Website Contributor, AcrPush, and Reader."
   }
 }
