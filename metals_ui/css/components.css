@@ -122,6 +122,56 @@ textarea:focus-visible {
   font-size: 0.78rem;
 }
 
+/* Password strength, measured on length alone. Anything that passes validation
+   starts at "medium" - there is deliberately no "weak" band for a valid
+   password. See metals_ui/js/views/register-view.js. */
+.password-strength {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.password-strength__track {
+  height: 0.25rem;
+  border-radius: 0.25rem;
+  background: rgb(229 221 205 / 14%);
+  overflow: hidden;
+}
+
+.password-strength__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-border);
+  transition: width 0.15s ease, background-color 0.15s ease;
+}
+
+.password-strength__label {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.password-strength[data-level="empty"] .password-strength__track {
+  opacity: 0;
+}
+
+.password-strength[data-level="short"] .password-strength__fill {
+  background: var(--color-danger);
+}
+
+.password-strength[data-level="medium"] .password-strength__fill {
+  background: var(--color-action);
+}
+
+.password-strength[data-level="strong"] .password-strength__fill {
+  background: var(--color-gold);
+}
+
+.password-strength[data-level="excellent"] .password-strength__fill {
+  background: var(--color-gold-bright);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -5,6 +5,9 @@ from services import auth_service
 from services.exceptions import BusinessValidationError
 from conftest import make_token
 
+# A valid passphrase under the length-based policy in dtos/auth_dto.py.
+VALID_PASSPHRASE = "a sentence i will remember"
+
 
 def _user(user_id: int = 1, username: str = "student", roles: tuple[str, ...] = ("Customer",)):
     return SimpleNamespace(
@@ -20,13 +23,13 @@ def test_register_creates_customer_and_returns_token(client, monkeypatch):
 
     response = client.post(
         "/api/auth/register",
-        json={"username": "new_student", "password": "password"},
+        json={"username": "new_student", "password": VALID_PASSPHRASE},
     )
 
     assert response.status_code == 201
     assert response.get_json()["user"]["roles"] == ["Customer"]
     assert response.get_json()["token_type"] == "Bearer"
-    register.assert_called_once_with("new_student", "password")
+    register.assert_called_once_with("new_student", VALID_PASSPHRASE)
 
 
 def test_register_rejects_duplicate_username(client, monkeypatch):
@@ -38,7 +41,7 @@ def test_register_rejects_duplicate_username(client, monkeypatch):
 
     response = client.post(
         "/api/auth/register",
-        json={"username": "student", "password": "password"},
+        json={"username": "student", "password": VALID_PASSPHRASE},
     )
 
     assert response.status_code == 400

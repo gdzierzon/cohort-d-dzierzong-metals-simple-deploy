@@ -33,6 +33,7 @@
       <span class="fact">Library &rarr; <b>PyJWT, algorithm HS256</b></span>
       <span class="fact">Header used &rarr; <b>Authorization: Bearer &lt;token&gt;</b></span>
       <span class="fact">Default lifetime &rarr; <b>60 minutes</b></span>
+      <span class="fact">Password policy &rarr; <a href="#password-policy"><b>15+ characters, spaces welcome</b></a></span>
       <span class="fact">Decode one yourself &rarr; <a href="#try-it"><b>3 demo tokens for jwt.io</b></a></span>
     </div>
   </div>
@@ -48,6 +49,7 @@
       <li><a href="#how-this-api-uses-it">How this API issues and checks one</a></li>
       <li><a href="#insomnia-setup">Setting up Insomnia</a></li>
       <li><a href="#register-login">Register or log in</a></li>
+      <li><a href="#password-policy">The password rules, and why</a></li>
       <li><a href="#attach-token">Attaching the token to a request</a></li>
       <li><a href="#verify">Verifying it worked</a></li>
       <li><a href="#errors">Common errors</a></li>
@@ -443,10 +445,15 @@ def create_element():
           <ol class="steps">
             <li>New request, method <b>POST</b>, URL <span class="mono">http://localhost:5000/api/auth/register</span>.</li>
             <li><b>Body</b> tab &rarr; <b>JSON</b>:
-              <pre class="code">{ "username": "sample_student", "password": "SomeSecurePassword1" }</pre>
+              <pre class="code">{ "username": "sample_student", "password": "my grandmother collected silver coins" }</pre>
             </li>
             <li>Click <b>Send</b>.</li>
           </ol>
+          <p class="note">
+            That password isn't a joke &mdash; a sentence with spaces is exactly what this API wants,
+            and it must be at least 15 characters. The rules, and why they look like that, are in
+            <a href="#password-policy">the next section</a>.
+          </p>
           <p class="note">
             Every newly registered account is automatically given the <span class="mono">Customer</span>
             role &mdash; there's no signup field for choosing <span class="mono">Admin</span>. To test
@@ -475,6 +482,130 @@ def create_element():
           </p>
         </div>
       </div>
+    </section>
+
+    <section class="block" id="password-policy">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The password rules, and why <span class="tag">length over complexity</span></h2>
+          <p class="dek">
+            This API asks for a <b>long</b> password rather than a cryptic one. No required capital,
+            no required digit, no required symbol &mdash; just length, with spaces explicitly allowed
+            so a whole sentence works. That's a deliberate choice, and it's the one the standards now
+            recommend.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey thinking with a rubber duck">
+          <figcaption>a sentence beats P@ssw0rd!</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:12rem;">Rule</th><th>Value</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Minimum length</td><td><b>15 characters</b></td><td>NIST SP 800-63B's figure for a password used on its own, without a second factor. A short sentence clears it easily.</td></tr>
+            <tr><td>Maximum length</td><td>128 characters</td><td>Not a security rule &mdash; a denial-of-service guard. Hashing cost grows with input, so the field can't be unbounded.</td></tr>
+            <tr><td>Character rules</td><td><b>none</b></td><td>Every character is allowed, including spaces and punctuation. Nothing is required.</td></tr>
+            <tr><td>Spaces</td><td>allowed, and kept</td><td>Nothing is trimmed, so <span class="mono">"a b"</span> and <span class="mono">"ab"</span> are different passwords. Leading and trailing spaces count too.</td></tr>
+            <tr><td>Repeated character</td><td>rejected</td><td><span class="mono">"aaaaaaaaaaaaaaa"</span> is 15 characters and obviously terrible, so it's blocked explicitly.</td></tr>
+            <tr><td>Contains your username</td><td>rejected</td><td><span class="mono">collector</span> can't use <span class="mono">"i am a collector of coins"</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why forced complexity backfires</span><span class="qnum">the reasoning</span></div>
+          <p class="desc">
+            Rules like &ldquo;one capital, one digit, one symbol&rdquo; push people toward a small
+            number of predictable shapes &mdash; <span class="mono">Password1!</span>,
+            <span class="mono">Summer2026!</span> &mdash; which are short, hard to remember, and easy
+            for a cracker to guess <i>because everyone does the same thing</i>. The usual outcome is a
+            password written on a sticky note. Length is what actually makes guessing expensive, and a
+            sentence is far easier to remember than a short string of symbols.
+          </p>
+          <p class="note">
+            NIST revised SP 800-63B to say exactly this: no composition rules, no mandatory expiry,
+            allow all printable characters and spaces, and allow long passwords.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why this only works because of Argon2id</span><span class="qnum">an important detail</span></div>
+          <p class="desc">
+            <b>bcrypt</b>, a very common alternative hasher, silently ignores everything past the
+            72nd byte. On bcrypt, a 90-character passphrase is really only its first 72 characters,
+            and the advice &ldquo;longer is better&rdquo; quietly stops being true.
+            <span class="mono">argon2-cffi</span>, which this API uses, has no such limit &mdash; the
+            whole passphrase is hashed.
+          </p>
+          <p class="note">
+            So &ldquo;use a long passphrase&rdquo; is only sound advice if you know what's hashing it.
+            Worth checking before you copy this policy into another project.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Validated on register, never on login</span><span class="qnum">and this is why the seed accounts still work</span></div>
+          <p class="desc">
+            The rules run when an account is <i>created</i>. Logging in only verifies the stored hash
+            &mdash; it never measures length. That's why
+            <span class="mono">admin</span> / <span class="mono">password</span> still works despite
+            being 8 characters: it predates the policy, and nothing about authenticating it cares.
+          </p>
+          <p class="note">
+            A policy that ran on login instead would lock every existing user out the moment the
+            minimum changed. Length checks belong where passwords are <i>set</i>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Unicode, normalized</span><span class="qnum">a subtle one</span></div>
+          <p class="desc">
+            <span class="mono">café</span> can be typed two ways: one <span class="mono">é</span>
+            character, or an <span class="mono">e</span> followed by a combining accent. They look
+            identical and hash differently. The API applies <b>NFKC normalization</b> to the password
+            on registration <i>and</i> on login, so both spellings resolve to the same secret &mdash;
+            otherwise anyone using accented characters could be locked out by their own keyboard.
+          </p>
+        </div>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Usernames are the opposite</span><span class="qnum">deliberately strict</span></div>
+          <p class="desc">
+            Passwords are permissive; usernames are not. A username must be <b>3&ndash;100
+            characters</b>, ASCII letters, digits, dots, hyphens, or underscores, must <b>start and
+            end</b> with a letter or digit, and may not contain two separators in a row &mdash; so
+            <span class="mono">first.last</span> is fine, while <span class="mono">_bob</span>,
+            <span class="mono">bob-</span>, and <span class="mono">a..b</span> are not.
+          </p>
+          <p class="note">
+            No spaces, and no non-ASCII: a username is a public identifier that other people have to
+            read and type, so lookalike characters and invisible leading spaces are a liability
+            rather than a feature. Usernames are also lowercased, so
+            <span class="mono">Admin</span> and <span class="mono">admin</span> are the same account.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What the UI shows you</span><span class="qnum">metals_ui register form</span></div>
+          <p class="desc">
+            The <a href="../ui/index.html">Metals UI</a> register form mirrors these rules for instant
+            feedback: the hint suggests a sentence, and a strength meter scores the password
+            <i>on length alone</i>. Because meeting the minimum is already reasonable, the lowest band
+            a valid password can reach is &ldquo;medium&rdquo; &mdash; there's no &ldquo;weak&rdquo;
+            state for something that passes.
+          </p>
+          <p class="warn">
+            The form is a convenience, not the gate. The API re-checks everything, because anyone can
+            bypass a browser and POST straight to <span class="mono">/api/auth/register</span>.
+          </p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        Try it: register with <span class="mono">"short"</span> and you'll get
+        <span class="mono">400</span> with a message naming the 15-character minimum and suggesting a
+        sentence. The rules live in <span class="mono">metals_api/dtos/auth_dto.py</span>, as two
+        constants and a handful of checks &mdash; worth reading, because it's much less code than a
+        complexity-rule validator would be.
+      </p>
     </section>
 
     <section class="block" id="attach-token">
@@ -576,6 +707,10 @@ def create_element():
             <tr><td><code>401</code> &ldquo;Invalid or expired access token.&rdquo;</td><td>The token expired (default lifetime is 60 minutes), was copied incompletely, or the server's <span class="mono">JWT_SECRET_KEY</span> changed (e.g. the API restarted with a different <span class="mono">.env</span>) since the token was issued.</td><td>Send the login request again to get a fresh token, and make sure you copied the <i>entire</i> <span class="mono">access_token</span> value.</td></tr>
             <tr><td><code>403</code> &ldquo;You do not have permission to perform this action.&rdquo;</td><td>You're logged in, but as a <span class="mono">Customer</span>, and this endpoint requires <span class="mono">Admin</span>.</td><td>Log in as the seeded <span class="mono">admin</span> account instead (see <a href="../database/02-docker-compose.html#accounts">seed accounts</a>).</td></tr>
             <tr><td><code>400</code> &ldquo;That username is already in use.&rdquo;</td><td>You tried to register a username that already exists &mdash; including <span class="mono">admin</span> or <span class="mono">customer</span>, which are already seeded.</td><td>Pick a different username, or just log in instead of registering.</td></tr>
+            <tr><td><code>400</code> &ldquo;password must be at least 15 characters&hellip;&rdquo;</td><td>Registering with a short password. Note this never happens on <i>login</i> &mdash; only when creating an account.</td><td>Use a sentence. Spaces count toward the length; see <a href="#password-policy">the password rules</a>.</td></tr>
+            <tr><td><code>400</code> &ldquo;password must not contain your username.&rdquo;</td><td>The username appears inside the password, case-insensitively.</td><td>Pick a phrase that doesn't include the account name.</td></tr>
+            <tr><td><code>400</code> &ldquo;password must not be a single character repeated.&rdquo;</td><td>Something like <span class="mono">"aaaaaaaaaaaaaaa"</span> &mdash; long enough, but trivially guessable.</td><td>Use actual words.</td></tr>
+            <tr><td><code>400</code> &ldquo;username may contain only letters, numbers, dots&hellip;&rdquo;</td><td>A space, a non-ASCII character, a leading/trailing separator, or two separators in a row.</td><td>See <a href="#password-policy">the username rules</a> &mdash; <span class="mono">first.last</span> is fine, <span class="mono">_bob</span> and <span class="mono">a..b</span> are not.</td></tr>
             <tr><td><code>400</code> on login/register with no useful detail</td><td>The request body wasn't valid JSON, or the <b>Body</b> tab wasn't set to <b>JSON</b> in Insomnia.</td><td>Double-check the <b>Body</b> tab shows <b>JSON</b> (not <b>Form URL Encoded</b>, and not empty), and that the JSON has both <span class="mono">username</span> and <span class="mono">password</span>.</td></tr>
           </tbody>
         </table>

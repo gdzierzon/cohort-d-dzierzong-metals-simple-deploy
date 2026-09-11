@@ -269,6 +269,14 @@ volumes:
         environment. See <a href="../api/02-authentication.html">the authentication tutorial</a> to
         actually log in with these accounts and start calling the API.
       </p>
+      <p class="bonus-banner">
+        <b>Spotted the contradiction?</b> <span class="mono">password</span> is 8 characters, but
+        registering a new account now requires <b>15</b>. Both are true: the policy runs when an
+        account is <i>created</i>, while logging in only verifies the stored hash and never measures
+        length. That's deliberate &mdash; a length check on login would lock out every existing user
+        the moment the minimum changed. The reasoning is on
+        <a href="../api/02-authentication.html#password-policy">the password rules section</a>.
+      </p>
     </section>
 
     <section class="block" id="errors">
