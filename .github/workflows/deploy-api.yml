@@ -75,9 +75,10 @@ jobs:
 
   build-and-push:
     needs: test
-    # Matches terraform.yml: pushes/PRs only validate (the test job above);
-    # actual Azure changes require Run workflow.
-    if: github.event_name == 'workflow_dispatch'
+    # Real Azure changes happen on a manual dispatch or a push to main (i.e.
+    # a merge) that got here through the test job above; other pushes/PRs
+    # stop after testing.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment: Development
     permissions:
@@ -101,7 +102,7 @@ jobs:
 
   deploy:
     needs: build-and-push
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: none
       id-token: write

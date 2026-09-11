@@ -47,10 +47,10 @@ The image serves Flask through Gunicorn as a non-root user on port 5000. Secrets
 
 ## Existing Azure deployment workflow
 
-This branch teaches Azure infrastructure provisioning and application deployment using two independent GitHub Actions workflows.
+This branch teaches Azure infrastructure provisioning and application deployment using three independent GitHub Actions workflows.
 
-- [Terraform infrastructure](.github/workflows/terraform.yml): automatic validation for infrastructure changes, plus manually selected **plan**, **apply**, and **destroy** operations.
-- [API build/test/deploy](.github/workflows/deploy-api.yml) and [UI build/deploy](.github/workflows/deploy-ui.yml): test and build each container independently, then deploy it to its Azure Web App.
+- [Terraform infrastructure](.github/workflows/terraform.yml): automatic validation for infrastructure changes, plus manually selected **plan**, **apply**, and **destroy** operations. Applying always requires a manual run, regardless of branch.
+- [API build/test/deploy](.github/workflows/deploy-api.yml) and [UI build/deploy](.github/workflows/deploy-ui.yml): test/validate each container independently on every push or PR; a merge to `main` (or a manual run) additionally builds, pushes, and deploys it to its Azure Web App — full CI/CD for the application containers.
 
 Follow the [step-by-step Terraform guide](terraform/README.md):
 
