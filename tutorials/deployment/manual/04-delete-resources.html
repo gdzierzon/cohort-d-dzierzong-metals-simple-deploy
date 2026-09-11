@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>az_delete_resources</title>
-<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../../assets/style.css">
 </head>
 <body>
 
-<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Manual Deployment</a> &rsaquo; az_delete_resources</div>
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Deployment</a> &rsaquo; <a href="index.html">Manual</a> &rsaquo; az_delete_resources</div>
 
 <header class="masthead">
   <div class="masthead-inner">
@@ -18,25 +18,26 @@
         <h1>az_delete_resources</h1>
         <p class="lede">
           Deletes the entire resource group this project created, and everything inside it &mdash;
-          the resource group, database (and all its data), and web app &mdash; in one command, then
-          waits for the deletion to actually finish.
+          the database and all its data, both web apps, the App Service plan, and the container
+          registry along with every image ever pushed to it &mdash; in one command, then waits for
+          the deletion to actually finish.
         </p>
       </div>
       <figure class="codey-figure">
-        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
       </figure>
     </div>
     <div class="factbar">
       <span class="fact">Files &rarr; <b>az_delete_resources.ps1</b> &middot; <b>.sh</b></span>
       <span class="fact">Reversible &rarr; <b>no</b> (data included)</span>
-      <span class="fact">Terraform equivalent &rarr; <a href="../terraform/commands/06-destroy.html"><b>terraform destroy</b></a></span>
+      <span class="fact">Terraform equivalent &rarr; <a href="../../terraform/commands/06-destroy.html"><b>terraform destroy</b></a></span>
     </div>
   </div>
 </header>
 
 <div class="shell">
   <nav class="toc" aria-label="Table of contents">
-    <a class="toc-back" href="index.html">&larr; Manual Deployment overview</a>
+    <a class="toc-back" href="index.html">&larr; Manual overview</a>
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#purpose">Purpose</a></li>
@@ -56,12 +57,12 @@
           <p>Delete the resource group holding every Azure resource this project created, safely and idempotently, and wait for the deletion to complete.</p>
         </div>
         <figure class="codey-figure">
-          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <img src="../../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
           <figcaption>one command, everything gone</figcaption>
         </figure>
       </div>
       <p class="warn" style="max-width:44rem;">
-        Just like <a href="../terraform/commands/06-destroy.html">terraform destroy</a>, this is
+        Just like <a href="../../terraform/commands/06-destroy.html">terraform destroy</a>, this is
         permanent. Deleting the resource group deletes the PostgreSQL server and every row of data
         inside it, with no built-in undo. Back up anything that matters first.
       </p>
@@ -97,7 +98,7 @@ if (([string]$exists).Trim() -eq 'false') {
           <p class="desc">
             Makes the script <b>idempotent</b> in the one direction that matters most: running it
             against an already-deleted (or never-created) resource group is a harmless no-op, not
-            an error. This is the same spirit as <a href="../terraform/commands/06-destroy.html">terraform destroy</a>
+            an error. This is the same spirit as <a href="../../terraform/commands/06-destroy.html">terraform destroy</a>
             gracefully handling a resource that's already gone.
           </p>
         </div>
@@ -108,7 +109,7 @@ if (([string]$exists).Trim() -eq 'false') {
             Built on PowerShell's standard <span class="mono">SupportsShouldProcess</span>
             mechanism &mdash; passing <span class="mono">-WhatIf</span> prints exactly what would be
             deleted without touching anything, the closest manual equivalent to
-            <a href="../terraform/commands/04-plan.html">terraform plan -destroy</a>'s preview,
+            <a href="../../terraform/commands/04-plan.html">terraform plan -destroy</a>'s preview,
             even though it's far less detailed (it names the resource group, not every individual
             resource inside it).
           </p>
@@ -134,7 +135,7 @@ if (([string]$exists).Trim() -eq 'false') {
       <div class="qgrid">
         <div class="qcard">
           <p class="desc">
-            <a href="../terraform/commands/06-destroy.html">terraform destroy</a> deletes resources
+            <a href="../../terraform/commands/06-destroy.html">terraform destroy</a> deletes resources
             one by one, in an order that respects the dependencies Terraform's state already
             tracks, and shows a plan of exactly what will go before it happens. This script
             deletes the entire resource group in a single Azure operation &mdash; simpler to read
@@ -175,8 +176,8 @@ if (([string]$exists).Trim() -eq 'false') {
 </div>
 
 <div class="codey-signoff">
-  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
-  <p>That's all four scripts &mdash; when you're ready to see the same steps done declaratively, head to the <a href="../terraform/index.html">Terraform tutorial</a>.</p>
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's all four scripts &mdash; when you're ready to see the same steps done declaratively, head to the <a href="../../terraform/index.html">Terraform tutorial</a>.</p>
 </div>
 
 <footer class="page">

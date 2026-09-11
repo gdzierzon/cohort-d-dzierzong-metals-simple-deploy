@@ -1,4 +1,13 @@
 services:
+  # The tutorial site. Independent of the application: no database, no API, so
+  # it has no depends_on and starts immediately.
+  tutorials:
+    build: ./tutorials
+    image: metals-tutorials:local
+    restart: unless-stopped
+    ports:
+      - "${TUTORIALS_PORT:-8890}:8080"
+
   ui:
     build: ./metals_ui
     image: metals-ui:local

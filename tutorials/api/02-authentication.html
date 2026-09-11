@@ -33,6 +33,7 @@
       <span class="fact">Library &rarr; <b>PyJWT, algorithm HS256</b></span>
       <span class="fact">Header used &rarr; <b>Authorization: Bearer &lt;token&gt;</b></span>
       <span class="fact">Default lifetime &rarr; <b>60 minutes</b></span>
+      <span class="fact">Decode one yourself &rarr; <a href="#try-it"><b>3 demo tokens for jwt.io</b></a></span>
     </div>
   </div>
 </header>
@@ -43,6 +44,7 @@
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#what-is-jwt">What is a JWT?</a></li>
+      <li><a href="#try-it">Try it yourself on jwt.io</a></li>
       <li><a href="#how-this-api-uses-it">How this API issues and checks one</a></li>
       <li><a href="#insomnia-setup">Setting up Insomnia</a></li>
       <li><a href="#register-login">Register or log in</a></li>
@@ -104,20 +106,25 @@
           <div class="qhead"><span class="qtitle">Signed, not encrypted</span><span class="qnum">an important distinction</span></div>
           <p class="desc">
             The header and payload are only <i>Base64-encoded</i>, not encrypted &mdash; anyone can
-            paste your token into a site like jwt.io and read exactly what's inside it. What the
-            signature guarantees is that <i>nobody can change it without the server noticing</i>,
-            not that its contents are secret. That's why this API's payload only ever contains a
-            user id, username, and role names &mdash; never a password or anything sensitive.
+            paste your token into <a href="https://jwt.io">jwt.io</a> and read exactly what's inside
+            it. What the signature guarantees is that <i>nobody can change it without the server
+            noticing</i>, not that its contents are secret. That's why this API's payload only ever
+            contains a user id, username, and role names &mdash; never a password or anything
+            sensitive.
+          </p>
+          <p class="note">
+            Don't take our word for it &mdash; <a href="#try-it">the next section</a> has three real
+            tokens to paste in and decode yourself.
           </p>
         </div>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">What's actually in this API's payload</span><span class="qnum">metals_api/services/auth_service.py</span></div>
           <pre class="code">{
-  "sub": "2",
+  "sub": "1",
   "username": "admin",
   "roles": ["Admin"],
-  "iat": 1780000000,
-  "exp": 1780003600
+  "iat": 1768467600,
+  "exp": 1768471200
 }</pre>
           <p class="desc">
             <span class="mono">sub</span> (&ldquo;subject&rdquo;) is the user id, as a string.
@@ -129,6 +136,157 @@
           </p>
         </div>
       </div>
+    </section>
+
+    <section class="block" id="try-it">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Try it yourself on jwt.io <span class="tag">hands on</span></h2>
+          <p class="dek">
+            Reading about tokens only goes so far. <a href="https://jwt.io">jwt.io</a> is a free
+            debugger that splits any token into its three parts and decodes them in front of you.
+            Below are three <b>real, working tokens</b> issued in this API's exact format &mdash;
+            paste each one into the Encoded box at jwt.io and read what comes back.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey holding a magnifying glass">
+          <figcaption>decode them yourself</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">How to use them</span><span class="qnum">four steps</span></div>
+          <ol class="steps">
+            <li>Open <a href="https://jwt.io">jwt.io</a> and find the debugger's <b>Encoded</b> box.</li>
+            <li>Paste one token in, replacing whatever is already there. The <b>Decoded</b> panel updates instantly &mdash; header on top, payload below it.</li>
+            <li>To check the signature too, put the demo secret below into the verification box. jwt.io will tell you whether the signature is valid.</li>
+            <li>Then try <a href="#experiments">the experiments</a> at the end of this section.</li>
+          </ol>
+          <p class="warn">
+            Never paste a <i>real</i> token from a real system into any website. A token is a
+            credential &mdash; pasting it somewhere is like pasting a password. These three are safe
+            precisely because they're throwaway demo tokens signed with a publicly-known secret.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The demo secret</span><span class="qnum">for signature verification</span></div>
+          <pre class="code">metals-tutorial-demo-secret-not-for-real-use</pre>
+          <p class="desc">
+            All three tokens below are signed with this string using
+            <span class="mono">HS256</span>, the same algorithm this API uses. Paste it into jwt.io's
+            signature box and you'll see the signature verify. Change a single character of it and
+            verification fails &mdash; which is exactly the check
+            <span class="mono">metals_api/auth.py</span> performs on every request.
+          </p>
+          <p class="note">
+            A real deployment's secret is a long random value kept in
+            <span class="mono">JWT_SECRET_KEY</span> and never shared. This one is published in a
+            tutorial, so treat any token signed with it as worthless.
+          </p>
+        </div>
+      </div>
+
+      <h2>Token 1 &mdash; an Admin <span class="tag">paste this first</span></h2>
+      <pre class="code"><span class="filename">token 1 &mdash; admin, valid</span>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGVzIjpbIkFkbWluIl0sImlhdCI6MTc2ODQ2NzYwMCwiZXhwIjoyMDUxMjIyNDAwfQ.kjEQ-8JG0x8dGTdcy7YGaA8JQyymUVMMsKu21zYzpM8</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What you should see</span><span class="qnum">decoded payload</span></div>
+          <pre class="code">{
+  "sub": "1",
+  "username": "admin",
+  "roles": ["Admin"],
+  "iat": 1768467600,
+  "exp": 2051222400
+}</pre>
+          <p class="desc">
+            This is the token the <span class="mono">admin</span> seed account would receive from
+            <span class="mono">POST /api/auth/login</span>. Notice that
+            <span class="mono">roles</span> contains <span class="mono">"Admin"</span> &mdash; that one
+            array is what lets this token create, update, and delete catalog data.
+          </p>
+          <p class="note">
+            Notice also what <i>isn't</i> there: no password, no password hash, no email. The payload
+            is readable by anyone, so it only carries what's safe to be read.
+          </p>
+        </div>
+      </div>
+
+      <h2>Token 2 &mdash; a Customer <span class="tag">spot the difference</span></h2>
+      <pre class="code"><span class="filename">token 2 &mdash; customer, valid</span>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidXNlcm5hbWUiOiJjdXN0b21lciIsInJvbGVzIjpbIkN1c3RvbWVyIl0sImlhdCI6MTc2ODQ2NzYwMCwiZXhwIjoyMDUxMjIyNDAwfQ.VCjDaelsV6mvDFoeiNjyjA5PnAlNwt1tdkclDCQ-bM0</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What you should see</span><span class="qnum">decoded payload</span></div>
+          <pre class="code">{
+  "sub": "2",
+  "username": "customer",
+  "roles": ["Customer"],
+  "iat": 1768467600,
+  "exp": 2051222400
+}</pre>
+          <p class="desc">
+            Structurally <i>identical</i> to token 1 &mdash; same claims, same algorithm, same
+            validity. The only meaningful difference is
+            <span class="mono">"roles": ["Customer"]</span>. Send this token to
+            <span class="mono">POST /api/elements</span> and the API answers
+            <span class="mono">403 Forbidden</span>; send token 1 and it succeeds.
+          </p>
+          <p class="note">
+            That contrast is the whole of <b>authorization</b> in one line of JSON. Authentication
+            (&ldquo;who are you&rdquo;) succeeded for both tokens; authorization
+            (&ldquo;may you do this&rdquo;) is decided by the roles claim.
+          </p>
+        </div>
+      </div>
+
+      <h2>Token 3 &mdash; an expired Admin <span class="tag">valid signature, dead token</span></h2>
+      <pre class="code"><span class="filename">token 3 &mdash; admin, expired</span>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGVzIjpbIkFkbWluIl0sImlhdCI6MTc2ODQ2NzYwMCwiZXhwIjoxNzY4NDcxMjAwfQ.lX-Etp7KONSl90ppInMriR-0tZ1Nj16HwbaPhG9OYFA</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What you should see</span><span class="qnum">decoded payload</span></div>
+          <pre class="code">{
+  "sub": "1",
+  "username": "admin",
+  "roles": ["Admin"],
+  "iat": 1768467600,
+  "exp": 1768471200
+}</pre>
+          <p class="desc">
+            Identical to token 1 except for <span class="mono">exp</span>. Here
+            <span class="mono">iat</span> is 15 January 2026 at 09:00 UTC and
+            <span class="mono">exp</span> is 10:00 UTC the same day &mdash; a 60-minute window,
+            matching this API's real <span class="mono">JWT_EXPIRATION_MINUTES</span> default. That
+            hour is long past, so the API rejects this token with
+            <span class="mono">401 Invalid or expired access token</span>.
+          </p>
+          <p class="note">
+            The important subtlety: its <b>signature is still perfectly valid</b>. jwt.io will
+            confirm that, and may also flag the token as expired. Nothing was tampered with &mdash;
+            the token is simply past its own stated deadline, and the server is the thing that
+            enforces it.
+          </p>
+        </div>
+      </div>
+
+      <div class="qgrid" id="experiments">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Experiments worth running</span><span class="qnum">five minutes each</span></div>
+          <ol class="steps">
+            <li><b>Promote yourself.</b> With token 2 loaded, edit the decoded payload to say <span class="mono">"roles": ["Admin"]</span>. Watch the encoded token change &mdash; and the signature stop verifying. This is exactly why a token's contents can't be trusted without checking the signature.</li>
+            <li><b>Re-sign it.</b> Now put the demo secret back in. jwt.io recomputes a valid signature, and you have a working Admin token. This is what leaking a signing key costs you &mdash; and why <span class="mono">JWT_SECRET_KEY</span> is treated as a secret.</li>
+            <li><b>Compare the timestamps.</b> Paste <span class="mono">1768467600</span> and <span class="mono">1768471200</span> into any Unix-timestamp converter. They're plain seconds since 1970 &mdash; no encryption, no obfuscation.</li>
+            <li><b>Break the header.</b> Change <span class="mono">"alg"</span> from <span class="mono">HS256</span> to <span class="mono">none</span>. Some naive libraries historically accepted this; this API doesn't, because it passes <span class="mono">algorithms=["HS256"]</span> explicitly when decoding.</li>
+            <li><b>Get a real one.</b> Log in through the API (<a href="#register-login">below</a>) and decode your own token. Same five claims, your own user id, and an <span class="mono">exp</span> exactly 60 minutes ahead.</li>
+          </ol>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        <b>One honest caveat:</b> tokens 1 and 2 carry an <span class="mono">exp</span> of
+        <span class="mono">2051222400</span> &mdash; 1 January 2035 &mdash; so they keep working as
+        teaching material for years. Real tokens from this API last <b>60 minutes</b>, like token 3.
+        If you ever see a production token with a multi-year expiry, that's a finding, not a
+        convenience.
+      </p>
     </section>
 
     <section class="block" id="how-this-api-uses-it">

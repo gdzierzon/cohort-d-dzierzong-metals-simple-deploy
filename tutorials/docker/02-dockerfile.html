@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inside a Dockerfile</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; Inside a Dockerfile</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 2 of 6</p>
+        <h1>Every Instruction This Project Uses</h1>
+        <p class="lede">
+          A <span class="mono">Dockerfile</span> is a plain text recipe read top to bottom, one
+          instruction per step. There are only about a dozen instructions in total, and this
+          project uses nine of them. This page is the reference: what each one does, the gotcha
+          that comes with it, and where it shows up in the two real Dockerfiles covered later in
+          this section.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Instructions used here &rarr; <b>9</b></span>
+      <span class="fact">Runs at build time &rarr; <b>RUN</b></span>
+      <span class="fact">Runs at start time &rarr; <b>CMD</b></span>
+      <span class="fact">Controls the context &rarr; <b>.dockerignore</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#shape">The shape of a Dockerfile</a></li>
+      <li><a href="#build-time">Instructions that build the filesystem</a></li>
+      <li><a href="#metadata">Instructions that set metadata</a></li>
+      <li><a href="#runtime">Instructions that define startup</a></li>
+      <li><a href="#context">The build context and .dockerignore</a></li>
+      <li><a href="#reference">Quick reference</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="shape">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Be able to read any Dockerfile line by line &mdash; knowing which instructions run during the build, which only record settings, and which take effect when a container starts.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>nine instructions, that's all</figcaption>
+        </figure>
+      </div>
+      <h2>The shape of a Dockerfile <span class="tag">orientation</span></h2>
+      <p class="dek">
+        Almost every Dockerfile follows the same arc: start from a base, install dependencies, add
+        your own files, then declare how the thing should run. The API image is a textbook example
+        of that arc, so it's worth seeing whole before breaking it apart.
+      </p>
+      <pre class="code"><span class="filename">metals_api/Dockerfile</span>FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+COPY requirements.txt requirements-container.txt ./
+RUN python -m pip install --no-cache-dir -r requirements-container.txt \
+    &amp;&amp; useradd --create-home --uid 10001 appuser
+
+COPY metals_api/ ./metals_api/
+WORKDIR /app/metals_api
+USER appuser
+
+EXPOSE 5000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-", "app:app"]</pre>
+      <p class="bonus-banner">
+        Three groups, in order: instructions that <b>change the filesystem</b> (and therefore create
+        layers), instructions that just <b>record metadata</b>, and instructions that describe
+        <b>what happens when a container starts</b>. The rest of this page takes them group by
+        group.
+      </p>
+    </section>
+
+    <section class="block" id="build-time">
+      <h2>Instructions that build the filesystem <span class="tag">these create layers</span></h2>
+      <p class="dek">
+        These four do actual work during <span class="mono">docker build</span>, and each one adds
+        a layer to the image.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">FROM</span><span class="qnum">the starting point</span></div>
+          <p class="desc">
+            Names the image to build on top of, and must be the first instruction. Everything in
+            that image &mdash; its Linux distribution, its installed runtime, its default user
+            &mdash; becomes your starting filesystem. Covered in depth on
+            <a href="01-images-and-containers.html#base">the previous page</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">COPY</span><span class="qnum">bringing your files in</span></div>
+          <p class="desc">
+            Copies files from the <a href="#context">build context</a> on your machine into the
+            image. A trailing slash on the destination means &ldquo;into this directory.&rdquo;
+            <span class="mono">COPY metals_api/ ./metals_api/</span> puts the source folder at
+            <span class="mono">/app/metals_api</span>, because the working directory at that point
+            is <span class="mono">/app</span>.
+          </p>
+          <p class="note">
+            <span class="mono">ADD</span> does the same thing plus auto-extracting archives and
+            fetching URLs. That extra magic makes it harder to predict, so
+            <span class="mono">COPY</span> is the default choice &mdash; and the only one this
+            project uses.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">RUN</span><span class="qnum">executing during the build</span></div>
+          <p class="desc">
+            Runs a shell command inside the half-built image and keeps whatever it changed. This is
+            how packages get installed. Chaining related commands with
+            <span class="mono">&amp;&amp;</span> into a single <span class="mono">RUN</span>, as
+            the API image does with <span class="mono">pip install</span> and
+            <span class="mono">useradd</span>, keeps them in one layer instead of two.
+          </p>
+          <p class="note">
+            <span class="mono">--no-cache-dir</span> tells pip not to keep its download cache. In
+            normal development that cache saves time; inside an image it's dead weight that ships
+            to production forever.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">WORKDIR</span><span class="qnum">the current directory</span></div>
+          <p class="desc">
+            Sets the directory that subsequent <span class="mono">COPY</span>,
+            <span class="mono">RUN</span>, and <span class="mono">CMD</span> instructions operate
+            in, creating it if needed. It's the Dockerfile equivalent of
+            <span class="mono">cd</span> &mdash; but unlike running <span class="mono">cd</span>
+            inside a <span class="mono">RUN</span>, it persists to later instructions and into the
+            running container.
+          </p>
+          <p class="note">
+            The API image uses it twice: <span class="mono">/app</span> while installing, then
+            <span class="mono">/app/metals_api</span> so Gunicorn's <span class="mono">app:app</span>
+            reference resolves against the right folder at startup.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="metadata">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Instructions that set metadata <span class="tag">no files change</span></h2>
+          <p class="dek">
+            These record settings on the image rather than modifying its filesystem. They still
+            create (empty) layers, and they still affect how the container behaves &mdash; they just
+            don't add bytes.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>settings, not files</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">ENV</span><span class="qnum">default environment variables</span></div>
+          <p class="desc">
+            Sets variables that exist during the rest of the build <i>and</i> inside every container
+            started from the image. Crucially these are <b>defaults</b> &mdash; anything supplied at
+            run time (<span class="mono">docker run -e</span>, a Compose
+            <span class="mono">environment:</span> block, an Azure app setting) overrides them.
+            That's exactly how the UI image ships a sensible local default for
+            <span class="mono">API_UPSTREAM</span> that Azure then replaces.
+          </p>
+          <p class="warn">
+            Never put secrets in <span class="mono">ENV</span>. They're baked into the image, visible
+            to anyone who can run <span class="mono">docker history</span> or pull the image.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">USER</span><span class="qnum">who the process runs as</span></div>
+          <p class="desc">
+            Switches the account used for the remaining instructions and for the container's main
+            process. The API image creates <span class="mono">appuser</span> with
+            <span class="mono">useradd</span> first, then switches to it &mdash; placement matters,
+            since the <span class="mono">pip install</span> above it still needs root to write into
+            system directories.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">EXPOSE</span><span class="qnum">documentation, mostly</span></div>
+          <p class="desc">
+            Declares which port the application listens on. It does <b>not</b> publish the port or
+            open a firewall &mdash; that's <span class="mono">docker run -p</span> or a Compose
+            <span class="mono">ports:</span> entry. Think of it as a label for humans and tools;
+            Azure, for instance, has its own <span class="mono">WEBSITES_PORT</span> setting and
+            doesn't read this at all.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">HEALTHCHECK</span><span class="qnum">is it actually working?</span></div>
+          <p class="desc">
+            A command Docker runs periodically inside the container to decide whether it's
+            <span class="mono">healthy</span> or <span class="mono">unhealthy</span>. Both images
+            here call their own <span class="mono">/health</span> endpoint. The flags control
+            timing: <span class="mono">--start-period</span> is a grace window during startup where
+            failures don't count, and <span class="mono">--retries</span> is how many consecutive
+            failures flip the status.
+          </p>
+          <p class="note">
+            This is what lets Compose hold the API back until PostgreSQL is genuinely accepting
+            connections, rather than merely started &mdash; see
+            <a href="06-compose.html">the Compose page</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="runtime">
+      <h2>Instructions that define startup <span class="tag">what runs when it starts</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">CMD</span><span class="qnum">the default command</span></div>
+          <p class="desc">
+            The process to run when a container starts. Written as a JSON array
+            (&ldquo;exec form&rdquo;), the command runs directly as process 1, which means it
+            receives stop signals properly. Written as a bare string, it's wrapped in a shell, and
+            signals go to the shell instead &mdash; a common cause of containers that take ten
+            seconds to stop. Both images here use the array form, or inherit one that does.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">CMD vs. ENTRYPOINT</span><span class="qnum">the pairing</span></div>
+          <p class="desc">
+            <span class="mono">ENTRYPOINT</span> is the fixed part of the startup command;
+            <span class="mono">CMD</span> is the replaceable part. If both exist, the
+            <span class="mono">CMD</span> is appended as arguments to the
+            <span class="mono">ENTRYPOINT</span>. The UI image declares <i>neither</i> &mdash; it
+            deliberately inherits both from <span class="mono">nginx-unprivileged</span>, whose
+            entrypoint does the config templating before handing off to Nginx.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why gunicorn and not python app.py</span><span class="qnum">a real decision</span></div>
+          <p class="desc">
+            Flask's built-in server is single-threaded and explicitly not meant for production
+            traffic. <b>Gunicorn</b> is a production WSGI server that runs several worker processes
+            &mdash; here <span class="mono">--workers 2</span> &mdash; so the API can handle
+            concurrent requests. The <span class="mono">--access-logfile -</span> and
+            <span class="mono">--error-logfile -</span> flags point both logs at standard output,
+            which is where a container is expected to log so that
+            <span class="mono">docker logs</span> and Azure's log stream can pick them up.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="context">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The build context and .dockerignore <span class="tag">what Docker can see</span></h2>
+          <p class="dek">
+            When you run <span class="mono">docker build</span>, the final argument is a directory
+            &mdash; the <b>build context</b>. Docker packages that entire directory up and sends it
+            to the build engine, and <span class="mono">COPY</span> can only reach files inside it.
+            A <span class="mono">.dockerignore</span> file trims what gets sent.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>the folder Docker is handed</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why the API builds from the repo root</span><span class="qnum">context ≠ Dockerfile location</span></div>
+          <p class="desc">
+            <span class="mono">metals_api/Dockerfile</span> copies both
+            <span class="mono">requirements.txt</span> (repo root) and
+            <span class="mono">metals_api/</span>. Since <span class="mono">COPY</span> can't reach
+            above the context, the context has to be the repo root &mdash; not the
+            <span class="mono">metals_api</span> folder. The Dockerfile's own location is
+            independent, passed with <span class="mono">--file</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The root .dockerignore</span><span class="qnum">allow-list style</span></div>
+          <p class="desc">
+            Because the context is the whole repository, this file starts by excluding
+            <i>everything</i> with <span class="mono">**</span> and then re-includes only what the
+            build genuinely needs, with <span class="mono">!</span> lines. Without it, every build
+            would ship the <span class="mono">.venv</span>, the <span class="mono">tutorials/</span>
+            folder, and the Terraform state directory across to the builder.
+          </p>
+          <pre class="code"><span class="filename">.dockerignore</span># Only send API source and dependency manifests to the image builder.
+**
+!requirements.txt
+!requirements-container.txt
+!metals_api/
+!metals_api/**
+metals_api/Dockerfile
+metals_api/tests/
+**/__pycache__/
+**/*.py[cod]
+**/.env
+**/.env.*</pre>
+          <p class="note">
+            The last four lines matter for more than size: they guarantee a stray local
+            <span class="mono">.env</span> file can never be baked into a published image.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="reference">
+      <h2>Quick reference <span class="tag">all nine</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:9rem;">Instruction</th><th>When it acts</th><th>One-line summary</th></tr></thead>
+          <tbody>
+            <tr><td><code>FROM</code></td><td>build</td><td>The image to start from; must come first.</td></tr>
+            <tr><td><code>ENV</code></td><td>build + run</td><td>Default environment variables, overridable at run time.</td></tr>
+            <tr><td><code>WORKDIR</code></td><td>build + run</td><td>Sets (and creates) the current directory.</td></tr>
+            <tr><td><code>COPY</code></td><td>build</td><td>Copies files from the build context into the image.</td></tr>
+            <tr><td><code>RUN</code></td><td>build</td><td>Executes a command and keeps the resulting filesystem changes.</td></tr>
+            <tr><td><code>USER</code></td><td>build + run</td><td>Switches the account later steps and the main process run as.</td></tr>
+            <tr><td><code>EXPOSE</code></td><td>documentation</td><td>Declares the listening port; publishes nothing by itself.</td></tr>
+            <tr><td><code>HEALTHCHECK</code></td><td>run</td><td>Periodic command deciding healthy vs. unhealthy.</td></tr>
+            <tr><td><code>CMD</code></td><td>run</td><td>The default process to start; use the JSON array form.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-images-and-containers.html"><span class="pn-label">&larr; Back</span>Images &amp; containers</a>
+      <a class="next" href="03-commands.html"><span class="pn-label">Next &rarr;</span>The commands</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's the whole instruction set &mdash; next, the commands that turn a Dockerfile into something running.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/Dockerfile</span> and <span class="mono">.dockerignore</span> at the root of this repository.
+</footer>
+
+</body>
+</html>

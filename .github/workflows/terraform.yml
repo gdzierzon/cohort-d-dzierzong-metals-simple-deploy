@@ -160,6 +160,9 @@ jobs:
             echo 'UI Web App name:'
             terraform -chdir=terraform output -raw ui_webapp_name
             echo
+            echo 'Tutorials Web App name:'
+            terraform -chdir=terraform output -raw tutorials_webapp_name
+            echo
             echo 'Container registry:'
             terraform -chdir=terraform output -raw container_registry_login_server
             echo

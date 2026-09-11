@@ -8,8 +8,8 @@ This guide documents the scripts as they currently work.
 
 | Script | Purpose | Current status |
 | --- | --- | --- |
-| [az_create_resources.ps1](az_create_resources.ps1) | Create PostgreSQL, Azure Container Registry, and API/UI container Web Apps | Updated for containers |
-| [az_deploy.ps1](az_deploy.ps1) | Build both images in ACR, point the Web Apps at them, and restart | Updated for containers |
+| [az_create_resources.ps1](az_create_resources.ps1) | Create PostgreSQL, Azure Container Registry, and the API, UI, and tutorials container Web Apps | Updated for containers |
+| [az_deploy.ps1](az_deploy.ps1) | Build all three images in ACR, point the Web Apps at them, and restart | Updated for containers |
 | [az_setup_github_oidc.ps1](az_setup_github_oidc.ps1) | Configure GitHub Actions authentication to Azure | Optional; grants access to the API Web App only, not registry push or UI deployment |
 | [az_delete_resources.ps1](az_delete_resources.ps1) | Delete the resource group and everything inside it | Supports preview with `-WhatIf` |
 
@@ -100,7 +100,7 @@ The script performs these steps in order:
    already exist, skip initialization and preserve them; this is not a schema
    migration or repair operation.
 5. Create a Basic Azure Container Registry and a shared B1 Linux App Service plan.
-6. Create or configure separate API and UI container Web Apps, with managed
+6. Create or configure the API, UI, and tutorials container Web Apps, with managed
    identities allowed to pull images from the registry.
 7. Configure HTTPS, logging, `/health` checks, container ports, database settings,
    a JWT signing key, and the UI's API upstream URL.
@@ -116,6 +116,7 @@ With the default username, resource names are:
 | App Service plan | `expeditors-dzierzon-metals-appservice-plan` |
 | API Web App | `expeditors-dzierzon-metals-api` |
 | UI Web App | `expeditors-dzierzon-metals-ui` |
+| Tutorials Web App | `expeditors-dzierzon-metals-tutorials` |
 
 **This runs all steps automatically.** It does not pause for verification
 between resources and has no step-selection parameter. For individual execution,
@@ -130,7 +131,7 @@ The verification commands below can be run separately without changing resources
 | `-UserName` | Resource-name suffix; default `dzierzon`. Use the same value in all scripts. |
 | `-Location` | Azure region; default `westus2`. |
 | `-RegistryName` | Override the generated registry name, for example if it is already taken. Must contain 5–50 letters or digits. |
-| `-ImageTag` | Expected tag for both images; default `latest`. This does not build or push images. |
+| `-ImageTag` | Expected tag for every image; default `latest`. This does not build or push images. |
 | `-DatabasePassword` | Optional `SecureString`; otherwise the script prompts. |
 | `-ClientIp` | Explicit public IPv4 address if automatic detection fails or a VPN changes database egress. |
 | `-PsqlPath` | Full path to a `psql` executable. |
@@ -217,22 +218,23 @@ The creation script expects these repositories in your Azure Container Registry:
 ```text
 <registry-login-server>/metals-api:<ImageTag>
 <registry-login-server>/metals-ui:<ImageTag>
+<registry-login-server>/metals-tutorials:<ImageTag>
 ```
 
-Build and deploy both images with:
+Build and deploy all three images with:
 
 ```powershell
 .\utility_scripts\az_deploy.ps1 -UserName dzierzon
 ```
 
 This builds each image in Azure Container Registry with `az acr build` (no
-local Docker required), points both Web Apps at the new tag, restarts them so
+local Docker required), points each Web App at the new tag, restarts them so
 they actually re-pull the image, and polls `/health` until each app responds
 or the attempt times out. Use `-ImageTag` to deploy a tag other than `latest`,
 `-SkipBuild` to only repoint and restart Web Apps at an already-pushed tag,
 and `-FollowLogs` to stream the API's container logs after restarting (add
 `-UserName` again with `az webapp log tail --name <ui-app-name>` for the UI).
-Rerunning is safe; it always rebuilds and restarts both apps.
+Rerunning is safe; it always rebuilds and restarts all three apps.
 
 After images have been deployed, verify the actual hostnames and health endpoints:
 
@@ -275,7 +277,7 @@ To repair just an existing federated credential:
 ```
 
 This script and the workflow need further updates for registry push permission
-and deployment of both containers. The existing API-only role is insufficient
+and deployment of all three containers. The existing API-only role is insufficient
 for that complete workflow.
 
 ## Delete the environment
@@ -293,7 +295,7 @@ To actually delete it:
 ```
 
 **Deletion removes the entire resource group, including PostgreSQL data, the
-container registry and its images, both Web Apps, and the App Service plan.**
+container registry and its images, all three Web Apps, and the App Service plan.**
 The script waits for deletion to finish. Use `-Subscription "<name or ID>"` to
 explicitly select the target subscription, and `-Confirm` if you want an
 interactive confirmation prompt. This operation is separate from Docker

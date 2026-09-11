@@ -1,12 +1,13 @@
 # Terraform infrastructure through GitHub Actions
 
-This branch has two independent workflows:
+This branch has four independent workflows:
 
 | Workflow | Purpose | Trigger |
 | --- | --- | --- |
 | `terraform.yml` — **Terraform infrastructure** | Validate, plan, create/update, initialize an empty database, or destroy application infrastructure | Validation on Terraform pushes/PRs; Azure operations through **Run workflow** |
 | `deploy-api.yml` — **Build and deploy metals-api to Azure** | Test, then build/push/deploy the API container | Tests run on every `metals_api`/`sql`/requirements change; build/push/deploy also runs automatically on a push to `main`, or on demand via **Run workflow** |
 | `deploy-ui.yml` — **Build and deploy metals-ui to Azure** | Build/push/deploy the UI container | A local build-only check runs on every `metals_ui` change; build/push/deploy also runs automatically on a push to `main`, or on demand via **Run workflow** |
+| `deploy-tutorials.yml` — **Build and deploy metals-tutorials to Azure** | Build/push/deploy the tutorial site container | Same pattern, triggered by `tutorials/**` changes |
 
 Infrastructure-only commits no longer trigger application deployment. Terraform state is stored in Azure Blob Storage with locking. A separate bootstrap resource group holds the state storage and infrastructure identity so application teardown does not delete them.
 
@@ -46,7 +47,7 @@ Bootstrap creates:
 - A private state container in an Azure Storage account, with blob versioning and a 7-day deletion-retention policy. Storage access uses Microsoft Entra authentication, not access keys.
 - A GitHub identity that trusts this repository's exact OIDC subject for the **Terraform** environment.
 - Subscription-level **Contributor** so the workflow can create and remove the application resource group and its resources.
-- **Role Based Access Control Administrator**, conditioned to assign/remove only **Website Contributor** roles for service principals, so Terraform can manage the application deployment identity's role.
+- **Role Based Access Control Administrator**, conditioned to assign/remove only **Website Contributor** and **Contributor** roles for service principals, so Terraform can manage the application deployment identity's roles. `Contributor` is in that allow-list because the deployment identity needs it on the container registry for `az acr build`; note the condition restricts which role may be granted, not at what scope.
 - **Storage Blob Data Contributor** on the state container for the workflow identity and the local bootstrap operator.
 
 Use a dedicated teaching subscription: the infrastructure identity has broader access than the application deployment identity. Restrict the GitHub **Terraform** environment to trusted deployment branches; configure reviewers if your lesson needs approval before changes.
@@ -126,7 +127,7 @@ Open **Actions → Terraform infrastructure → Run workflow**:
 
 Each apply run generates its own fresh plan and applies that plan in the same job. A prior plan-only run is a preview, not a saved approval artifact used by the later run. The operation defaults to plan; pushes and pull requests run offline checks only and never apply or destroy Azure resources.
 
-Apply creates: PostgreSQL 16/B1ms with 32 GiB storage and 7-day backups, the `metals` database and firewall rules, a Basic Azure Container Registry, a shared Linux B1 App Service plan with separate API and UI container Web Apps (pulling `metals-api`/`metals-ui` via each app's own managed identity, not admin credentials), application settings, and the Development OIDC deployment identity (now scoped to both Web Apps plus `AcrPush` on the registry). Basic publishing authentication remains disabled.
+Apply creates: PostgreSQL 16/B1ms with 32 GiB storage and 7-day backups, the `metals` database and firewall rules, a Basic Azure Container Registry, a shared Linux B1 App Service plan with three container Web Apps — API, UI, and the tutorial site (pulling `metals-api`/`metals-ui`/`metals-tutorials` via each app's own managed identity, not admin credentials) — application settings, and the Development OIDC deployment identity (scoped to all three Web Apps plus `Contributor` on the registry). All three apps share the one plan, so the UI and tutorial site add no compute cost. Basic publishing authentication remains disabled.
 
 Apply does **not** build or push the container images. Push `metals-api:<image_tag>` and `metals-ui:<image_tag>` to the output `container_registry_login_server` first — either locally with `az_deploy.ps1`/`az_deploy.sh`, or through `deploy-api.yml`/`deploy-ui.yml` (see step 5) — using the same `image_tag` value (default `latest`) you pass to Terraform; an apply that changes `image_tag` also restarts the Web Apps against the new tag, an apply that doesn't still requires a manual restart for Azure to re-pull `:latest`.
 
@@ -158,12 +159,13 @@ bash terraform/scripts/show_application_deployment_secrets.sh
 
 Keep `TF_AZURE_*` secrets unchanged. The workflow prints only identifiers, not the database password. GitHub secret updates are performed manually; the infrastructure workflow is not given repository-secret write permissions.
 
-Ensure `RESOURCE_GROUP`, `REGISTRY_NAME`, and the `*_WEBAPP_NAME` values at the top of `.github/workflows/deploy-api.yml` and `deploy-ui.yml` match the names shown in the summary, especially if you changed `TF_USER_NAME`.
+Ensure `RESOURCE_GROUP`, `REGISTRY_NAME`, and the `*_WEBAPP_NAME` values at the top of `.github/workflows/deploy-api.yml`, `deploy-ui.yml`, and `deploy-tutorials.yml` match the names shown in the summary, especially if you changed `TF_USER_NAME`.
 
 The API and UI deploy independently, in separate workflows, so a change to one doesn't rebuild/redeploy the other:
 
 - **`deploy-api.yml`** triggers on `metals_api/**`, `sql/**`, or requirements-file changes. Every push/PR runs the `test` job (schema load + pytest against an ephemeral Postgres service). Building, pushing (`az acr build`, no local Docker required — same as `az_deploy.ps1`/`.sh`), and deploying the API container additionally runs when the trigger is a push to `main` (i.e. a merge) or a manual **Run workflow** — a PR branch or feature-branch push stops after `test`.
 - **`deploy-ui.yml`** triggers on `metals_ui/**` changes. Every push/PR builds the image locally as a sanity check (no push, no Azure credentials touched). Building, pushing, and deploying the UI container additionally runs on a push to `main` or a manual **Run workflow**.
+- **`deploy-tutorials.yml`** does the same for `tutorials/**` and the `metals-tutorials` image. The tutorial site is independent of the application, so it deploys on its own schedule.
 
 So a PR gets tested/validated automatically, and merging it to `main` auto-deploys — full CI/CD. Running Terraform does not automatically trigger either workflow, and infrastructure changes still always require a manual **Run workflow** on `terraform.yml`, regardless of branch — that risk profile is different enough from redeploying an already-tested container that it stays a deliberate action. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
 

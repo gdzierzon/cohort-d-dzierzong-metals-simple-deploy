@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Docker Commands</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; The Commands</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 3 of 6</p>
+        <h1>Building, Running, and Inspecting Containers</h1>
+        <p class="lede">
+          The Docker CLI is large, but day-to-day work uses a small, stable handful of commands:
+          build an image, run it, look at what's running, read its logs, and clean up afterward.
+          This page covers those, then the <span class="mono">docker compose</span> equivalents this
+          project actually uses &mdash; and finishes with the exact commands for this repository.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Build an image &rarr; <b>docker build</b></span>
+      <span class="fact">Start a container &rarr; <b>docker run</b></span>
+      <span class="fact">Whole stack &rarr; <b>docker compose up</b></span>
+      <span class="fact">Reclaim space &rarr; <b>docker system prune</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#build">Building an image</a></li>
+      <li><a href="#run">Running a container</a></li>
+      <li><a href="#inspect">Seeing what's happening</a></li>
+      <li><a href="#cleanup">Cleaning up</a></li>
+      <li><a href="#compose">The Compose equivalents</a></li>
+      <li><a href="#this-project">The commands for this project</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="build">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Know the handful of commands needed to build, run, debug, and tidy up containers &mdash; and which ones you'll actually type while working on this project.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>a small set, used constantly</figcaption>
+        </figure>
+      </div>
+      <h2>Building an image <span class="tag">docker build</span></h2>
+      <p class="dek">
+        Turns a <span class="mono">Dockerfile</span> plus a build context into an image stored
+        locally.
+      </p>
+      <pre class="code">docker build --tag metals-api:local --file metals_api/Dockerfile .</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The three pieces</span><span class="qnum">every build has them</span></div>
+          <ul class="steps">
+            <li><b><span class="mono">--tag</span></b> (or <span class="mono">-t</span>) names the result, as <span class="mono">repository:tag</span>. Without it you get an untagged image identified only by a hash.</li>
+            <li><b><span class="mono">--file</span></b> (or <span class="mono">-f</span>) points at the Dockerfile. Omit it and Docker looks for <span class="mono">Dockerfile</span> in the context directory.</li>
+            <li><b>The trailing <span class="mono">.</span></b> is the <a href="02-dockerfile.html#context">build context</a> &mdash; easy to forget, and the cause of the classic <span class="mono">"docker build" requires exactly 1 argument</span> error.</li>
+          </ul>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Useful flags</span><span class="qnum">occasionally</span></div>
+          <p class="desc">
+            <span class="mono">--no-cache</span> forces every layer to rebuild, which is how you
+            prove a caching problem rather than guess at one.
+            <span class="mono">--progress=plain</span> prints full build output instead of the
+            collapsing summary view &mdash; invaluable when a <span class="mono">RUN</span> step
+            fails and you need to see why.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="run">
+      <h2>Running a container <span class="tag">docker run</span></h2>
+      <p class="dek">
+        Creates and starts a container from an image. Nearly every flag exists to connect the
+        container to something outside itself &mdash; a port, a variable, a folder.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:13rem;">Flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>-d</code></td><td>Detached &mdash; run in the background and return the prompt instead of streaming output.</td></tr>
+            <tr><td><code>-p 8080:8080</code></td><td>Publishes a port: <span class="mono">host:container</span>. The left number is what you type in a browser; the right is what the app listens on inside.</td></tr>
+            <tr><td><code>-e KEY=value</code></td><td>Sets an environment variable, overriding any <span class="mono">ENV</span> default baked into the image.</td></tr>
+            <tr><td><code>--name metals-ui-test</code></td><td>Gives the container a memorable name, so later commands don't need the generated hash.</td></tr>
+            <tr><td><code>--rm</code></td><td>Deletes the container automatically when it stops &mdash; ideal for one-off test runs.</td></tr>
+            <tr><td><code>-v pgdata:/var/lib/postgresql/data</code></td><td>Mounts a volume, so data written to that path survives the container being removed.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Port mapping trips everyone up once: <span class="mono">-p 8888:8080</span> does
+        <b>not</b> change what the app listens on. Nginx inside the UI container is still bound to
+        8080; you've only chosen which door on your own machine leads to it. That's precisely the
+        mapping <a href="06-compose.html">docker-compose.yml</a> uses for the UI.
+      </p>
+    </section>
+
+    <section class="block" id="inspect">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Seeing what's happening <span class="tag">debugging</span></h2>
+          <p class="dek">
+            When something doesn't work, these four answer &ldquo;is it running?&rdquo;, &ldquo;what
+            did it say?&rdquo;, and &ldquo;what does it look like in there?&rdquo;
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey holding a magnifying glass">
+          <figcaption>look before guessing</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:19rem;">Command</th><th>What it tells you</th></tr></thead>
+          <tbody>
+            <tr><td><code>docker ps</code></td><td>Containers currently running, with their ports and health status. Add <span class="mono">-a</span> to include stopped ones &mdash; essential when a container exited immediately and has vanished from the default list.</td></tr>
+            <tr><td><code>docker logs -f &lt;name&gt;</code></td><td>Everything the container wrote to standard output. <span class="mono">-f</span> follows live. This is the first place to look for a crash on startup.</td></tr>
+            <tr><td><code>docker exec -it &lt;name&gt; sh</code></td><td>Opens a shell <i>inside</i> a running container, to check that files landed where you expect or that a config rendered correctly.</td></tr>
+            <tr><td><code>docker images</code></td><td>Images stored locally, with their tags and sizes &mdash; useful for confirming a build actually produced what you meant.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <span class="mono">docker exec</span> only works on a <i>running</i> container. If the
+        container keeps exiting, there's nothing to exec into &mdash; read
+        <span class="mono">docker logs</span> instead, which still works on stopped containers.
+      </p>
+    </section>
+
+    <section class="block" id="cleanup">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Cleaning up <span class="tag">reclaiming disk</span></h2>
+          <p class="dek">
+            Docker never deletes anything on its own. Old images, stopped containers, and orphaned
+            build cache accumulate quietly until a disk fills up.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <figcaption>careful with prune</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:19rem;">Command</th><th>What it removes</th></tr></thead>
+          <tbody>
+            <tr><td><code>docker stop &lt;name&gt;</code></td><td>Stops a running container, leaving it around to inspect or restart.</td></tr>
+            <tr><td><code>docker rm &lt;name&gt;</code></td><td>Deletes a stopped container. Add <span class="mono">-f</span> to stop and delete in one step.</td></tr>
+            <tr><td><code>docker rmi &lt;image&gt;</code></td><td>Deletes an image, provided no container still references it.</td></tr>
+            <tr><td><code>docker system prune</code></td><td>Bulk cleanup: stopped containers, unused networks, dangling images, and build cache.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <b>Read the prompt before confirming a prune.</b> Plain
+        <span class="mono">docker system prune</span> leaves named volumes alone, but adding
+        <span class="mono">--volumes</span> deletes them too &mdash; which would take this project's
+        <span class="mono">pgdata_metals</span> volume, and every row in your local database, with
+        it.
+      </p>
+    </section>
+
+    <section class="block" id="compose">
+      <h2>The Compose equivalents <span class="tag">several containers at once</span></h2>
+      <p class="dek">
+        <span class="mono">docker compose</span> reads <span class="mono">docker-compose.yml</span>
+        and applies the same operations across every service defined in it, so you don't hand-manage
+        three containers and a network. Run these from the folder containing the compose file.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:19rem;">Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>docker compose up -d</code></td><td>Creates the network, then builds anything missing and starts every service in the background.</td></tr>
+            <tr><td><code>docker compose up -d --build</code></td><td>Same, but rebuilds images first &mdash; the one to use after editing application code or a Dockerfile.</td></tr>
+            <tr><td><code>docker compose ps</code></td><td>Status and health of just this project's services.</td></tr>
+            <tr><td><code>docker compose logs -f api</code></td><td>Follows one service's logs; drop the name to interleave all of them.</td></tr>
+            <tr><td><code>docker compose down</code></td><td>Stops and removes the containers and network, <b>keeping</b> named volumes.</td></tr>
+            <tr><td><code>docker compose down -v</code></td><td>The same, plus deletes the volumes &mdash; the full database reset covered in the <a href="../database/02-docker-compose.html#reset">database tutorial</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        The most common Compose confusion: <span class="mono">up</span> without
+        <span class="mono">--build</span> reuses an existing image, so your code edit appears to
+        have done nothing. If a change isn't showing up, rebuild before debugging anything else.
+      </p>
+    </section>
+
+    <section class="block" id="this-project">
+      <h2>The commands for this project <span class="tag">copy these</span></h2>
+      <p class="dek">
+        Everything above, applied to this repository. All commands run from the project root.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:3rem;">#</th><th>Goal</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Start the whole stack (db + API + UI)</td><td><code>docker compose up -d --build</code></td></tr>
+            <tr><td>2</td><td>Check everything came up healthy</td><td><code>docker compose ps</code></td></tr>
+            <tr><td>3</td><td>Watch the API's logs</td><td><code>docker compose logs -f api</code></td></tr>
+            <tr><td>4</td><td>Build just the API image by hand</td><td><code>docker build -t metals-api:local -f metals_api/Dockerfile .</code></td></tr>
+            <tr><td>5</td><td>Build just the UI image by hand</td><td><code>docker build -t metals-ui:local metals_ui</code></td></tr>
+            <tr><td>6</td><td>Stop everything, keep the data</td><td><code>docker compose down</code></td></tr>
+            <tr><td>7</td><td>Stop everything and wipe the database</td><td><code>docker compose down -v</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Note the difference between rows 4 and 5: the API build passes
+        <span class="mono">.</span> (the repo root) as its context with an explicit
+        <span class="mono">-f</span>, while the UI build passes
+        <span class="mono">metals_ui</span> and lets Docker find the Dockerfile inside it. That
+        asymmetry is deliberate, and it comes back in <a href="../deployment/index.html">Deployment</a>
+        when these same images get built in Azure.
+      </p>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-dockerfile.html"><span class="pn-label">&larr; Back</span>Inside a Dockerfile</a>
+      <a class="next" href="04-api-image.html"><span class="pn-label">Next &rarr;</span>The API image</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Commands covered &mdash; time to read the two real Dockerfiles in this repository, starting with the API.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">docker-compose.yml</span>, <span class="mono">metals_api/Dockerfile</span>, and <span class="mono">metals_ui/Dockerfile</span> in this repository.
+</footer>
+
+</body>
+</html>

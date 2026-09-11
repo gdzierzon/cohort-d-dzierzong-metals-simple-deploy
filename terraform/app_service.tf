@@ -141,3 +141,57 @@ resource "azurerm_role_assignment" "ui_acr_pull" {
   principal_id         = azurerm_linux_web_app.ui.identity[0].principal_id
   principal_type       = "ServicePrincipal"
 }
+
+# The tutorial site. Independent of the application: it reads no database and
+# calls no API, so it needs no app settings beyond the container plumbing.
+resource "azurerm_linux_web_app" "tutorials" {
+  name                = "${local.prefix}-tutorials"
+  resource_group_name = azurerm_resource_group.metals.name
+  location            = azurerm_service_plan.metals.location
+  service_plan_id     = azurerm_service_plan.metals.id
+  https_only          = true
+
+  ftp_publish_basic_authentication_enabled       = false
+  webdeploy_publish_basic_authentication_enabled = false
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  site_config {
+    always_on                               = true
+    health_check_path                       = "/health"
+    health_check_eviction_time_in_min       = 2
+    container_registry_use_managed_identity = true
+
+    application_stack {
+      docker_image_name   = "metals-tutorials:${var.image_tag}"
+      docker_registry_url = "https://${azurerm_container_registry.metals.login_server}"
+    }
+  }
+
+  logs {
+    detailed_error_messages = false
+    failed_request_tracing  = false
+
+    http_logs {
+      file_system {
+        retention_in_days = 3
+        retention_in_mb   = 100
+      }
+    }
+  }
+
+  app_settings = {
+    WEBSITES_PORT                       = "8080"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
+    SCM_DO_BUILD_DURING_DEPLOYMENT      = "false"
+  }
+}
+
+resource "azurerm_role_assignment" "tutorials_acr_pull" {
+  scope                = azurerm_container_registry.metals.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_linux_web_app.tutorials.identity[0].principal_id
+  principal_type       = "ServicePrincipal"
+}

@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>az_create_resources</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Deployment</a> &rsaquo; <a href="index.html">Manual</a> &rsaquo; az_create_resources</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Manual Deployment &middot; Script 1 of 4</p>
+        <h1>az_create_resources</h1>
+        <p class="lede">
+          Creates every Azure resource this project needs, directly with the Azure CLI: the
+          resource group, the PostgreSQL server and database, a container registry, and two
+          container web apps &mdash; one for the API, one for the UI &mdash; then loads the starting
+          database tables and configures every application setting. It creates infrastructure only;
+          the images themselves are built later by <a href="02-deploy.html">az_deploy</a>.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Files &rarr; <b>az_create_resources.ps1</b> &middot; <b>.sh</b></span>
+      <span class="fact">Web apps created &rarr; <b>3</b>, sharing one plan</span>
+      <span class="fact">Registry auth &rarr; <b>managed identity, no passwords</b></span>
+      <span class="fact">Resume with &rarr; <b>-SkipProvisioning</b></span>
+      <span class="fact">Terraform equivalent &rarr; <a href="../../terraform/04-main.html"><b>main.tf</b></a>, <a href="../../terraform/05-database.html"><b>database.tf</b></a>, <a href="../../terraform/06-app-service.html"><b>app_service.tf</b></a></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Manual overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#prereqs">Before you run it</a></li>
+      <li><a href="#code">Walking through the script</a></li>
+      <li><a href="#settings">The application settings it writes</a></li>
+      <li><a href="#rerunning">Rerunning it safely</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="purpose">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this script</p>
+          <p>Provision every Azure resource this project needs, in order, using individual <span class="mono">az</span> commands &mdash; then load the starting database schema and data.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one command per resource</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        This is the manual equivalent of running <a href="../../terraform/commands/04-plan.html">terraform plan</a>
+        and <a href="../../terraform/commands/05-apply.html">terraform apply</a> against
+        <a href="../../terraform/04-main.html">main.tf</a>, <a href="../../terraform/05-database.html">database.tf</a>,
+        and <a href="../../terraform/06-app-service.html">app_service.tf</a> together &mdash; except
+        each Azure resource is created by its own explicit command, with no plan preview and no
+        state file tracking what already exists.
+      </p>
+    </section>
+
+    <section class="block" id="prereqs">
+      <h2>Before you run it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Azure CLI installed, and authenticated (<span class="mono">az login</span>) as an identity that can create resources <i>and assign roles</i> &mdash; the script grants each web app <span class="mono">AcrPull</span> on the registry.</li>
+            <li>Either <span class="mono">psql</span> (the PostgreSQL command-line client) on your PATH, or Python with the <span class="mono">psycopg</span> package installed &mdash; used to load <span class="mono">sql/metals-db.sql</span> into the new database.</li>
+            <li>The <span class="mono">Microsoft.ContainerRegistry</span> resource provider registered on the subscription. If it isn't, registry creation fails with <span class="mono">MissingSubscriptionRegistration</span> &mdash; see <a href="#errors">Common errors</a>.</li>
+            <li>Docker is <b>not</b> required &mdash; this script creates infrastructure and never builds an image.</li>
+          </ul>
+        </div>
+      </div>
+      <pre class="code"><span class="filename">PowerShell, from the repository root</span>.\utility_scripts\az_create_resources.ps1 -UserName dzierzon</pre>
+      <p class="bonus-banner">
+        The script <b>prompts for the PostgreSQL administrator password</b> as a hidden
+        <span class="mono">SecureString</span> rather than accepting it on the command line, so it
+        never lands in your shell history. Save what you type &mdash; you'll need the same value to
+        resume with <span class="mono">-SkipProvisioning</span>, and it's what the API is configured
+        with.
+      </p>
+    </section>
+
+    <section class="block" id="code">
+      <h2>Walking through the script <span class="tag">PowerShell version</span></h2>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">1. Resolve your public IP address</span><span class="qnum">before anything is created</span></div>
+          <pre class="code">if (-not $ClientIp) {
+    $ClientIp = ([string](Invoke-RestMethod -Uri 'https://api4.ipify.org' -TimeoutSec 15)).Trim()
+}</pre>
+          <p class="desc">
+            Calls a public &ldquo;what's my IP&rdquo; service so the script knows which address to
+            open the database firewall for later. The same idea as the
+            <a href="../../terraform/03-variables.html">client_ip variable</a> in Terraform &mdash; pass
+            <span class="mono">-ClientIp</span> explicitly if you're behind a VPN or proxy with a
+            different egress address.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">2. Resource group</span><span class="qnum">az group create</span></div>
+          <pre class="code">az group create --name $resourceGroup --location $Location</pre>
+          <p class="desc">The same purpose as <a href="../../terraform/04-main.html">main.tf</a>'s <span class="mono">azurerm_resource_group</span> &mdash; the container every other resource below gets placed into.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">3. PostgreSQL server and database</span><span class="qnum">az postgres flexible-server create</span></div>
+          <pre class="code">az postgres flexible-server create `
+    --resource-group $resourceGroup `
+    --name $dbServer `
+    --location $Location `
+    --admin-user metalsadmin `
+    --admin-password $dbPassword `
+    --tier Burstable `
+    --sku-name Standard_B1ms `
+    --storage-size 32 `
+    --storage-auto-grow Disabled `
+    --backup-retention 7 `
+    --geo-redundant-backup Disabled `
+    --version 16 `
+    --public-access 0.0.0.0 `
+    --tags Environment=Development
+
+az postgres flexible-server db create `
+    --resource-group $resourceGroup --server-name $dbServer --name metals</pre>
+          <p class="desc">
+            Every flag here has a direct match in <a href="../../terraform/05-database.html">database.tf</a>'s
+            <span class="mono">azurerm_postgresql_flexible_server</span> resource &mdash; same
+            Burstable tier, same 32 GB storage, same PostgreSQL version 16, same
+            <span class="mono">0.0.0.0</span> special-case meaning &ldquo;allow Azure
+            services.&rdquo; Reading these two forms side by side is one of the fastest ways to see
+            what Terraform is actually doing underneath its declarative syntax.
+          </p>
+          <p class="note">
+            <span class="mono">$dbPassword</span> is the value you were prompted for, converted from
+            the <span class="mono">SecureString</span> only at the moment it's needed.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">4. Open the firewall for your own computer</span><span class="qnum">az postgres flexible-server firewall-rule create</span></div>
+          <pre class="code">az postgres flexible-server firewall-rule create `
+    --resource-group $resourceGroup --server-name $dbServer `
+    --name "LocalClient-$($ClientIp.Replace('.', '-'))" `
+    --start-ip-address $ClientIp --end-ip-address $ClientIp</pre>
+          <p class="desc">The manual equivalent of <a href="../../terraform/05-database.html">database.tf</a>'s <span class="mono">local_client</span> firewall rule &mdash; without it, the next step (loading data from your own machine) can't reach the server at all.</p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">5. Load the starting data, if the database is empty</span><span class="qnum">psql, with a Python fallback</span></div>
+          <p class="desc">
+            First it counts the existing tables. If any are found it prints
+            <span class="mono">Existing database tables found; preserving schema and data</span> and
+            skips loading entirely &mdash; so rerunning the script can't wipe a database you've been
+            using. On an empty database it runs <span class="mono">sql/metals-db.sql</span>, using
+            <span class="mono">psql</span> if available or a small inline Python script with
+            <span class="mono">psycopg</span> if not.
+          </p>
+          <p class="note">
+            This step has no Terraform equivalent &mdash; Terraform only creates the empty database;
+            loading starting data is handled separately by
+            <span class="mono">terraform/scripts/initialize_database.py</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">6. Container registry</span><span class="qnum">az acr create</span></div>
+          <pre class="code">az acr create --name $RegistryName --resource-group $resourceGroup `
+    --location $Location --sku Basic --admin-enabled false `
+    --role-assignment-mode rbac</pre>
+          <p class="desc">
+            Creates the private registry every image will be pushed to. Two details matter:
+            <span class="mono">--admin-enabled false</span> disables the registry's built-in
+            username/password account entirely, and
+            <span class="mono">--role-assignment-mode rbac</span> selects classic role-based access
+            so the <span class="mono">AcrPull</span> grant in the next step behaves as expected.
+          </p>
+          <p class="note">
+            Registry names are globally unique across all of Azure and may contain only letters and
+            digits &mdash; hence the generated
+            <span class="mono">expeditors&lt;user&gt;metalsacr</span> form, with hyphens stripped.
+            Pass <span class="mono">-RegistryName</span> if the generated one is taken.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">7. One plan, three container web apps</span><span class="qnum">az appservice plan create, az webapp create</span></div>
+          <pre class="code">az appservice plan create --name $planName --resource-group $resourceGroup `
+    --sku B1 --is-linux --location $Location
+
+# ...then, for each of the API, the UI, and the tutorial site:
+az webapp create --name $name --resource-group $resourceGroup `
+    --plan $planName --container-image-name $image `
+    --assign-identity '[system]' --acr-use-identity --acr-identity '[system]'</pre>
+          <p class="desc">
+            All three apps share the single B1 plan &mdash; App Service bills per plan instance, not
+            per app, so the UI and tutorial site cost nothing extra to host. Each app gets a
+            <b>system-assigned managed identity</b>
+            (<span class="mono">--assign-identity '[system]'</span>) and is told to use that identity
+            when pulling from the registry, which is why no registry credentials are ever stored.
+          </p>
+          <p class="note">
+            The image doesn't exist yet at this point, and that's fine &mdash; the app is created,
+            just not serving until <a href="02-deploy.html">az_deploy</a> builds and pushes one.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">8. Grant each identity permission to pull</span><span class="qnum">az role assignment create</span></div>
+          <pre class="code">$principalId = az webapp identity assign --name $name `
+    --resource-group $resourceGroup --query principalId --output tsv
+
+az role assignment create --assignee-object-id $principalId `
+    --assignee-principal-type ServicePrincipal --scope $registry.id `
+    --role AcrPull</pre>
+          <p class="desc">
+            An identity with no roles can't do anything. <span class="mono">AcrPull</span>, scoped to
+            this one registry, is the minimum needed to download image layers &mdash; the app can't
+            push, delete, or read anything else. Matching Terraform resources are the
+            <span class="mono">api_acr_pull</span> and <span class="mono">ui_acr_pull</span>
+            assignments in <a href="../../terraform/06-app-service.html">app_service.tf</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">9. Container config and platform settings</span><span class="qnum">az webapp config set</span></div>
+          <pre class="code">az webapp config container set --name $name --resource-group $resourceGroup `
+    --container-image-name $image `
+    --container-registry-url "https://$($registry.loginServer)"
+
+# generic-configurations, as JSON:
+#   acrUseManagedIdentityCreds = true
+#   appCommandLine  = ''          # use the image's own CMD
+#   alwaysOn        = true
+#   healthCheckPath = '/health'
+
+az webapp update --name $name --resource-group $resourceGroup --https-only true</pre>
+          <p class="desc">
+            <span class="mono">appCommandLine = ''</span> is deliberate: it clears any startup
+            command so the image's own <span class="mono">CMD</span> runs &mdash; Gunicorn for the
+            API, Nginx for the UI. <span class="mono">healthCheckPath</span> points Azure's probe at
+            the same <span class="mono">/health</span> endpoint the containers use themselves, and
+            <span class="mono">https-only</span> redirects plain HTTP.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="settings">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The application settings it writes <span class="tag">configuration, not code</span></h2>
+          <p class="dek">
+            The images contain no hostnames, passwords, or URLs &mdash; all of it arrives as
+            environment variables. These are the settings the script writes, and they're the exact
+            same set Terraform declares in
+            <a href="../../terraform/06-app-service.html">app_service.tf</a>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>same image, different settings</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:18rem;">Setting</th><th>On</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>WEBSITES_PORT</code></td><td>both</td><td>Tells Azure which port inside the container to send traffic to &mdash; <span class="mono">5000</span> for the API, <span class="mono">8080</span> for the UI. Azure doesn't read the Dockerfile's <span class="mono">EXPOSE</span>.</td></tr>
+            <tr><td><code>WEBSITES_ENABLE_APP_SERVICE_STORAGE</code></td><td>both</td><td><span class="mono">false</span> &mdash; don't mount Azure's shared file storage into the container. Containers here are stateless.</td></tr>
+            <tr><td><code>SCM_DO_BUILD_DURING_DEPLOYMENT</code></td><td>both</td><td><span class="mono">false</span> &mdash; there is no source build step any more; the image arrives finished.</td></tr>
+            <tr><td><code>DB_HOST</code>, <code>DB_PORT</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code></td><td>API</td><td>The individual connection values <span class="mono">metals_api/database/connection.py</span> reads.</td></tr>
+            <tr><td><code>PGSSLMODE</code></td><td>API</td><td><span class="mono">require</span> &mdash; Azure PostgreSQL demands TLS, and the driver picks this up from the environment.</td></tr>
+            <tr><td><code>JWT_SECRET_KEY</code>, <code>JWT_EXPIRATION_MINUTES</code></td><td>API</td><td>The token signing key and lifetime. The key is generated once and <b>preserved on reruns</b>, so re-running the script doesn't invalidate everyone's existing logins.</td></tr>
+            <tr><td><code>FLASK_DEBUG</code></td><td>API</td><td><span class="mono">0</span> &mdash; never run a debugger in a deployed environment.</td></tr>
+            <tr><td><code>API_UPSTREAM</code></td><td>UI</td><td>The API's real <span class="mono">https://</span> hostname, read back from Azure, which Nginx proxies <span class="mono">/api/</span> to.</td></tr>
+            <tr><td><code>NGINX_RESOLVER</code></td><td>UI</td><td><span class="mono">168.63.129.16</span> &mdash; Azure's platform DNS. The image defaults to Docker's <span class="mono">127.0.0.11</span>, which doesn't exist here; see <a href="../../docker/05-ui-image.html#resolver">the UI image page</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Settings are written from a temporary JSON file rather than inline arguments, so passwords
+        containing quotes, spaces, or <span class="mono">$</span> survive Windows command-line
+        parsing intact. The file is always deleted afterward.
+      </p>
+    </section>
+
+    <section class="block" id="rerunning">
+      <h2>Rerunning it safely <span class="tag">-SkipProvisioning</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What the switch skips</span><span class="qnum">and what it doesn't</span></div>
+          <p class="desc">
+            <span class="mono">-SkipProvisioning</span> skips creating the resource group,
+            PostgreSQL server, and database &mdash; the three things that fail loudly if they already
+            exist. Everything after that still runs: the firewall rule, the registry, the plan, both
+            web apps, all role assignments, and every application setting.
+          </p>
+          <p class="note">
+            Supply the <b>existing</b> administrator password when prompted. The switch does not
+            reset it, and the API's <span class="mono">DB_PASSWORD</span> setting is written from
+            whatever you type.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">It's not a read-only check</span><span class="qnum">worth being clear</span></div>
+          <p class="desc">
+            Resuming still rewrites configuration and re-applies role assignments. To merely
+            <i>inspect</i> a deployment without changing it, use the read-only
+            <span class="mono">az ... show</span> and <span class="mono">list</span> commands in
+            <span class="mono">utility_scripts/README.md</span> instead. For routine code updates,
+            use <a href="02-deploy.html">az_deploy</a> &mdash; not this script.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;Could not detect your public IPv4 address&rdquo;</td><td>The <span class="mono">api4.ipify.org</span> request failed or timed out (network restrictions, firewall).</td><td>Rerun with <span class="mono">-ClientIp &lt;your address&gt;</span> supplied explicitly.</td></tr>
+            <tr><td><span class="mono">MissingSubscriptionRegistration</span> for <span class="mono">Microsoft.ContainerRegistry</span></td><td>The subscription has never used Azure Container Registry, so the resource provider isn't registered.</td><td>Run <span class="mono">az provider register --namespace Microsoft.ContainerRegistry</span>, wait for <span class="mono">az provider show -n Microsoft.ContainerRegistry --query registrationState</span> to report <span class="mono">Registered</span>, then resume with <span class="mono">-SkipProvisioning</span>.</td></tr>
+            <tr><td>&ldquo;Specified server name is already used&rdquo;</td><td>PostgreSQL server names are globally unique, and a recently deleted one can stay reserved for a while.</td><td>Wait a few minutes and retry, or choose a different <span class="mono">-UserName</span>.</td></tr>
+            <tr><td>&ldquo;A resource with the same name already exists&rdquo; on the resource group or server</td><td>The script (or a previous run) already created these resources.</td><td>Either delete first with <a href="04-delete-resources.html">az_delete_resources</a>, or rerun with <span class="mono">-SkipProvisioning</span> to resume from the firewall-rule step onward.</td></tr>
+            <tr><td>&ldquo;Database initialization requires psql or Python with psycopg&rdquo;</td><td>Neither <span class="mono">psql</span> nor a Python environment with <span class="mono">psycopg</span> installed could be found.</td><td>Install PostgreSQL client tools, or run <span class="mono">python -m pip install "psycopg[binary]&gt;=3.0,&lt;4.0"</span>, or pass <span class="mono">-PsqlPath</span> with the full path to <span class="mono">psql.exe</span>.</td></tr>
+            <tr><td>Database initialization times out / connection refused</td><td>The firewall rule for your IP hasn't finished propagating yet, or your network blocks outbound TCP 5432.</td><td>Wait up to five minutes and rerun with <span class="mono">-SkipProvisioning</span>; if on a VPN/proxy, pass <span class="mono">-ClientIp</span> with your connection's actual public egress address.</td></tr>
+            <tr><td>The web apps exist but return an error page</td><td>Expected &mdash; no image has been pushed to the registry yet.</td><td>Run <a href="02-deploy.html">az_deploy</a> to build and deploy the images.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Manual overview</a>
+      <a class="next" href="02-deploy.html"><span class="pn-label">Next &rarr;</span>az_deploy</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The infrastructure exists &mdash; next, building the images that will actually run on it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">utility_scripts/az_create_resources.ps1</span>, <span class="mono">utility_scripts/az_create_resources.sh</span>
+</footer>
+
+</body>
+</html>

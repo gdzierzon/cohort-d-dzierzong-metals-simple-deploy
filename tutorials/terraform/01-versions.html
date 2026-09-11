@@ -80,6 +80,10 @@
       source  = "hashicorp/azurerm"
       version = "~> 5.2.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -123,6 +127,23 @@ provider "azurerm" {
             symbol means &ldquo;this version or a later patch/minor release, but not the next major
             version&rdquo; &mdash; small bug-fix updates are fine, big breaking changes are not applied
             automatically.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">required_providers &rarr; random</span><span class="qnum">not every provider is a cloud</span></div>
+          <pre class="code">random = {
+  source  = "hashicorp/random"
+  version = "~> 3.6"
+}</pre>
+          <p class="desc">
+            A second provider, and a useful illustration that providers aren't only for cloud
+            platforms. <span class="mono">random</span> generates values &mdash; this project uses it
+            in <a href="06-app-service.html#jwt">app_service.tf</a> to create the API's JWT signing
+            key once and remember it, so re-applying doesn't invalidate everyone's tokens.
+          </p>
+          <p class="note">
+            Adding a provider means the lock file must be regenerated for every platform that runs
+            Terraform, not just yours &mdash; see <a href="commands/01-init.html">terraform init</a>.
           </p>
         </div>
       </div>
@@ -174,7 +195,7 @@ provider "azurerm" {
         <div class="qcard">
           <dl class="def">
             <dt>Provider</dt>
-            <dd>A plugin that teaches Terraform how to talk to a specific platform &mdash; here, Azure. Terraform also has providers for AWS, GitHub, and many others; this project only uses the Azure one.</dd>
+            <dd>A plugin that teaches Terraform how to talk to a specific platform &mdash; here, Azure. Terraform also has providers for AWS, GitHub, and many others, as well as utility providers like <code>random</code> that talk to nothing at all. This project uses two.</dd>
             <dt>Version constraint</dt>
             <dd>A rule like <code>~&gt; 5.2.0</code> or <code>&gt;= 1.7, &lt; 2.0</code> that limits which versions of a tool are acceptable, so upgrades happen deliberately instead of by accident.</dd>
             <dt>Resource provider (Azure term)</dt>

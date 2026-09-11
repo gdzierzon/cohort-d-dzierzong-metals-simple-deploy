@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How GitHub Actions Works</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Deployment</a> &rsaquo; How GitHub Actions Works</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Deployment &middot; Page 1 of 3</p>
+        <h1>Workflows, Jobs, and Triggers</h1>
+        <p class="lede">
+          GitHub Actions runs commands on GitHub's machines in response to things happening in your
+          repository. Everything it does is described in YAML files under
+          <span class="mono">.github/workflows/</span>, and the vocabulary is small: a
+          <b>workflow</b> contains <b>jobs</b>, a job runs <b>steps</b> on a <b>runner</b>, and
+          something has to <b>trigger</b> it. This page covers those pieces generically; the
+          <a href="02-workflows.html">next page</a> reads this project's three real workflows.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Files live in &rarr; <b>.github/workflows/</b></span>
+      <span class="fact">Format &rarr; <b>YAML</b></span>
+      <span class="fact">Jobs run &rarr; <b>in parallel by default</b></span>
+      <span class="fact">Each job gets &rarr; <b>a fresh machine</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Deployment overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#anatomy">The anatomy of a workflow file</a></li>
+      <li><a href="#triggers">Triggers: when it runs</a></li>
+      <li><a href="#jobs">Jobs, runners, and ordering</a></li>
+      <li><a href="#steps">Steps: uses vs. run</a></li>
+      <li><a href="#conditions">Conditions that skip work</a></li>
+      <li><a href="#secrets">Secrets, variables, and environments</a></li>
+      <li><a href="#permissions">Permissions and tokens</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="anatomy">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Be able to read any workflow file confidently &mdash; knowing what triggers it, what order things happen in, where values come from, and why a job was skipped.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one file, top to bottom</figcaption>
+        </figure>
+      </div>
+      <h2>The anatomy of a workflow file <span class="tag">the skeleton</span></h2>
+      <p class="dek">
+        Every workflow has the same handful of top-level keys. This skeleton isn't from this
+        project &mdash; it's the smallest thing that shows each key in place.
+      </p>
+      <pre class="code"><span class="filename">.github/workflows/example.yml</span>name: A descriptive name shown in the Actions tab
+
+on:                          # what triggers this workflow
+  workflow_dispatch:
+
+env:                         # variables available to every job and step
+  SOME_SETTING: a-value
+
+permissions:                 # what the workflow is allowed to do
+  contents: read
+
+jobs:
+  a-job-id:                  # your choice of id
+    runs-on: ubuntu-latest   # which machine to run on
+    steps:
+      - uses: actions/checkout@v6        # run a prebuilt action
+      - name: Say something
+        run: echo "hello"                # run a shell command</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The three nested levels</span><span class="qnum">worth keeping straight</span></div>
+          <ul class="steps">
+            <li><b>Workflow</b> &mdash; one YAML file. Triggered as a whole.</li>
+            <li><b>Job</b> &mdash; a unit that gets its own fresh virtual machine. Jobs in a workflow run in parallel unless you say otherwise, and they share nothing by default, not even files.</li>
+            <li><b>Step</b> &mdash; one command or one action, run in order inside a job, all on the same machine.</li>
+          </ul>
+          <p class="note">
+            &ldquo;Jobs get a fresh machine&rdquo; explains a lot of otherwise-surprising behavior:
+            each job has to check out the repository again, re-install tools again, and log in to
+            Azure again.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">env at three levels</span><span class="qnum">scoping</span></div>
+          <p class="desc">
+            <span class="mono">env:</span> can appear at the top of the file (every job sees it), on
+            a job (only that job), or on a single step. The project's deploy workflows put resource
+            names at the top level, because every job needs them.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="triggers">
+      <h2>Triggers: when it runs <span class="tag">the on: block</span></h2>
+      <p class="dek">
+        The <span class="mono">on:</span> key lists the events that start the workflow. A workflow
+        can list several, and the event that fired is available to conditions later in the file.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:14rem;">Trigger</th><th>Fires when</th></tr></thead>
+          <tbody>
+            <tr><td><code>push</code></td><td>Commits land on a branch &mdash; including when a pull request is merged, since merging moves the target branch.</td></tr>
+            <tr><td><code>pull_request</code></td><td>A PR is opened or updated. Runs against a simulated merge of the PR into its target, so it tests the result rather than the branch alone.</td></tr>
+            <tr><td><code>workflow_dispatch</code></td><td>Someone clicks <b>Run workflow</b> in the Actions tab. Can declare typed <span class="mono">inputs:</span> to produce a small form.</td></tr>
+            <tr><td><code>schedule</code></td><td>On a cron timer. Not used in this project.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">paths: filters</span><span class="qnum">only when relevant files change</span></div>
+          <p class="desc">
+            Adding a <span class="mono">paths:</span> list under <span class="mono">push</span> or
+            <span class="mono">pull_request</span> means the workflow only runs when the commit
+            touches matching files. This is how the project avoids rebuilding the UI image because
+            somebody edited a Terraform file.
+          </p>
+          <p class="warn">
+            Path filters apply to the <b>whole workflow</b>, not to individual jobs. That single
+            limitation is why this project has separate <span class="mono">deploy-api.yml</span> and
+            <span class="mono">deploy-ui.yml</span> files rather than one file with two jobs.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">workflow_dispatch inputs</span><span class="qnum">a form for humans</span></div>
+          <p class="desc">
+            Inputs become fields in the Run workflow dialog and are readable as
+            <span class="mono">inputs.&lt;name&gt;</span>. The project's Terraform workflow uses a
+            <span class="mono">choice</span> input to pick between
+            <span class="mono">plan</span>, <span class="mono">apply</span>, and
+            <span class="mono">destroy</span> &mdash; one workflow, three deliberate operations.
+          </p>
+          <p class="note">
+            A <span class="mono">workflow_dispatch</span> trigger has to exist on the repository's
+            default branch before the Run workflow button appears at all.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="jobs">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Jobs, runners, and ordering <span class="tag">who runs what, where</span></h2>
+          <p class="dek">
+            <span class="mono">runs-on: ubuntu-latest</span> asks GitHub for a fresh, managed Linux
+            machine. It comes with a lot preinstalled &mdash; Git, Docker, Python, and notably the
+            <b>Azure CLI</b>, which is why this project's workflows can call
+            <span class="mono">az</span> without installing anything.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>parallel unless told otherwise</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">needs:</span><span class="qnum">turning parallel into sequential</span></div>
+          <p class="desc">
+            <span class="mono">needs: test</span> on a job means &ldquo;don't start until the
+            <span class="mono">test</span> job has finished successfully.&rdquo; If the dependency
+            fails, the dependent job doesn't run at all. Chaining
+            <span class="mono">needs</span> is how the project guarantees nothing is deployed before
+            its tests pass.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">services:</span><span class="qnum">a database for the tests</span></div>
+          <p class="desc">
+            A job can declare <span class="mono">services:</span> &mdash; extra containers started
+            alongside it, reachable on <span class="mono">localhost</span>. The API's test job starts
+            a real <span class="mono">postgres:16</span> container this way, loads the schema into
+            it, and runs the test suite against it. Real database, thrown away when the job ends.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">concurrency:</span><span class="qnum">preventing overlap</span></div>
+          <p class="desc">
+            Names a lane that only one run may occupy at a time. The Terraform workflow uses it with
+            <span class="mono">cancel-in-progress: false</span>, so two infrastructure runs can never
+            overlap &mdash; and an in-flight <span class="mono">apply</span> is never cancelled
+            partway through, which could leave real resources half-created.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="steps">
+      <h2>Steps: uses vs. run <span class="tag">two kinds of step</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">uses:</span><span class="qnum">a prebuilt action</span></div>
+          <p class="desc">
+            Pulls in a reusable action published by GitHub or a vendor, pinned to a version with
+            <span class="mono">@v6</span>. Parameters go in a <span class="mono">with:</span> block.
+            The ones this project relies on are
+            <span class="mono">actions/checkout</span> (clone the repo into the runner),
+            <span class="mono">actions/setup-python</span>,
+            <span class="mono">hashicorp/setup-terraform</span>, and
+            <span class="mono">azure/login</span>.
+          </p>
+          <p class="note">
+            Nothing is checked out automatically &mdash; a job that needs repository files must start
+            with <span class="mono">actions/checkout</span>. Jobs that only call
+            <span class="mono">az</span> against existing resources don't need it at all.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">run:</span><span class="qnum">a shell command</span></div>
+          <p class="desc">
+            Runs a command on the runner, using bash on Linux. A multi-line block with
+            <span class="mono">|</span> runs as one script, so variables set on one line are visible
+            on the next. <span class="mono">working-directory:</span> changes where it runs from
+            &mdash; which the UI workflow uses so its build runs inside
+            <span class="mono">metals_ui</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Talking back to Actions</span><span class="qnum">workflow commands</span></div>
+          <p class="desc">
+            Echoing specially-formatted lines lets a script control the run:
+            <span class="mono">::error::&hellip;</span> marks the run as failed with a message
+            attached, and appending to <span class="mono">$GITHUB_STEP_SUMMARY</span> writes Markdown
+            onto the run's summary page. The Terraform workflow uses the second to print the values
+            you need to copy into GitHub secrets.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="conditions">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Conditions that skip work <span class="tag">if:</span></h2>
+          <p class="dek">
+            An <span class="mono">if:</span> on a job or step decides whether it runs at all. A
+            skipped job shows as skipped rather than failed, and anything depending on it is skipped
+            too &mdash; which is exactly how this project keeps deployments out of pull requests.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>skipped is not failed</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:22rem;">Condition</th><th>Means</th></tr></thead>
+          <tbody>
+            <tr><td><code>github.event_name == 'workflow_dispatch'</code></td><td>Only when a person clicked Run workflow &mdash; never on a push or PR.</td></tr>
+            <tr><td><code>github.ref == 'refs/heads/main'</code></td><td>Only for activity on <span class="mono">main</span>. Combined with <span class="mono">event_name == 'push'</span>, this is &ldquo;a merge landed.&rdquo;</td></tr>
+            <tr><td><code>always()</code></td><td>Run even if earlier steps failed &mdash; used for cleanup that must happen regardless, like removing a temporary firewall rule.</td></tr>
+            <tr><td><code>steps.&lt;id&gt;.outcome == 'success'</code></td><td>Branch on whether a specific earlier step worked, which requires giving that step an <span class="mono">id:</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        The project's actual rule, which appears on the deploying jobs of both app workflows, is the
+        combination:
+        <span class="mono">github.event_name == 'workflow_dispatch' || (github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main')</span>
+        &mdash; deploy when asked explicitly, or when a merge reaches <span class="mono">main</span>,
+        and never otherwise.
+      </p>
+    </section>
+
+    <section class="block" id="secrets">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Secrets, variables, and environments <span class="tag">where values come from</span></h2>
+          <p class="dek">
+            Workflows read two kinds of stored configuration, and they behave differently:
+            <span class="mono">secrets</span> are encrypted, write-only, and masked in logs;
+            <span class="mono">vars</span> are plain text you can read back in the UI. Both can be
+            scoped to the whole repository or to a named <b>environment</b>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey holding a magnifying glass">
+          <figcaption>scoped, masked, never printable</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">environment:</span><span class="qnum">more than a label</span></div>
+          <p class="desc">
+            Declaring <span class="mono">environment: Development</span> on a job does three things:
+            it gives that job access to that environment's secrets, it applies any protection rules
+            configured on it (required reviewers, wait timers, allowed branches), and it records the
+            deployment in the repository's Environments view with a link to the deployed URL.
+          </p>
+          <p class="note">
+            This project uses two environments: <span class="mono">Development</span> for application
+            deployments and <span class="mono">Terraform</span> for infrastructure, each holding its
+            own distinct set of credentials.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Environment secrets win</span><span class="qnum">a precedence rule worth knowing</span></div>
+          <p class="desc">
+            If the same secret name exists at both repository and environment level, a job that
+            declares the environment gets the environment's value. That's useful &mdash; but it means
+            a stale repository-level secret can sit unnoticed for a long time, and will be picked up
+            by any job that <i>forgets</i> to declare an environment.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Masking isn't protection</span><span class="qnum">the honest caveat</span></div>
+          <p class="desc">
+            Actions replaces secret values with <span class="mono">***</span> in logs, and that's
+            genuinely useful &mdash; it's why Azure error messages in this project's run logs show
+            <span class="mono">client '***'</span>. But masking is pattern matching on output, not a
+            sandbox: a workflow step can do anything it likes with a secret it's been handed. Keep
+            secrets scoped narrowly and prefer short-lived tokens, which is precisely what the
+            <a href="03-identity-and-secrets.html">OIDC login</a> on the next pages achieves.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="permissions">
+      <h2>Permissions and tokens <span class="tag">what a run may do</span></h2>
+      <p class="dek">
+        Every run receives an automatic, short-lived <span class="mono">GITHUB_TOKEN</span> for
+        acting on the repository itself. The <span class="mono">permissions:</span> block narrows
+        &mdash; or, for one specific scope, widens &mdash; what that token allows.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:16rem;">Setting</th><th>Why it appears in this project</th></tr></thead>
+          <tbody>
+            <tr><td><code>contents: read</code></td><td>The default floor: clone the repository, change nothing. Declared at the top of all three workflows.</td></tr>
+            <tr><td><code>id-token: write</code></td><td>Permission to <i>request an OIDC token</i> &mdash; the short-lived, signed proof of identity that <span class="mono">azure/login</span> exchanges for Azure access. Without it, passwordless login fails; it's granted only on the jobs that actually talk to Azure.</td></tr>
+            <tr><td><code>contents: none</code></td><td>Used on deploy jobs that never touch repository files, only existing Azure resources. Least privilege, stated explicitly.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        <span class="mono">id-token: write</span> sounds alarming and isn't &mdash; it doesn't grant
+        write access to anything. It permits the run to ask GitHub for a token that <i>describes</i>
+        it (this repo, this branch, this environment). What that token can then unlock depends
+        entirely on what Azure has been configured to trust, which is
+        <a href="03-identity-and-secrets.html">the next-but-one page</a>.
+      </p>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Deployment overview</a>
+      <a class="next" href="02-workflows.html"><span class="pn-label">Next &rarr;</span>This project's workflows</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>That's the vocabulary &mdash; next, the three real workflow files that use it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">.github/workflows/terraform.yml</span>, <span class="mono">deploy-api.yml</span>, and <span class="mono">deploy-ui.yml</span> in this repository.
+</footer>
+
+</body>
+</html>

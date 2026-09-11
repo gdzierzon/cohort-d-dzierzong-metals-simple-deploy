@@ -21,7 +21,9 @@
           &mdash; elements, alloys, alloy elements, and coins &mdash; follow the exact same shape:
           list, get one, create, update, delete. The fifth, <span class="mono">/api/auth</span>, is
           how you get a token in the first place, covered in depth in
-          <a href="02-authentication.html">Section 2</a>.
+          <a href="02-authentication.html">Section 2</a>. One route sits outside that pattern
+          entirely: <span class="mono">/health</span>, with no <span class="mono">/api</span> prefix
+          and no authentication.
         </p>
       </div>
       <figure class="codey-figure">
@@ -42,6 +44,7 @@
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#overview">Resources at a glance</a></li>
+      <li><a href="#health">/health</a></li>
       <li><a href="#elements">/api/elements</a></li>
       <li><a href="#alloys">/api/alloys</a></li>
       <li><a href="#alloy-elements">/api/alloy-elements</a></li>
@@ -77,12 +80,45 @@
         </table>
       </div>
       <p class="bonus-banner">
-        Every request other than <span class="mono">/api/auth/register</span> and
-        <span class="mono">/api/auth/login</span> needs an
+        Every request other than <span class="mono">/api/auth/register</span>,
+        <span class="mono">/api/auth/login</span>, and <span class="mono">/health</span> needs an
         <span class="mono">Authorization: Bearer &lt;token&gt;</span> header. Without one, every
         endpoint below responds <span class="mono">401 Unauthorized</span> before any of its own
         logic runs &mdash; see <a href="02-authentication.html">Section 2</a> to get a token.
       </p>
+    </section>
+
+    <section class="block" id="health">
+      <h2><code>/health</code> <span class="tag">metals_api/app.py</span></h2>
+      <p class="dek">
+        The one route defined directly in <span class="mono">app.py</span> rather than a blueprint
+        &mdash; no <span class="mono">/api</span> prefix, no authentication, and deliberately no
+        database access. It returns <span class="mono">{"status":"ok"}</span> with
+        <span class="mono">200</span> whenever the HTTP server is running.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why it ignores the database</span><span class="qnum">a deliberate choice</span></div>
+          <p class="desc">
+            It answers one question: &ldquo;is this process serving HTTP?&rdquo; If it also checked
+            the database, a brief database blip would mark the container unhealthy and trigger a
+            restart &mdash; restarting a perfectly healthy API for a problem it can't fix. Deeper
+            dependency checks belong in monitoring, not in a liveness probe.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Three things consume it</span><span class="qnum">one endpoint, reused</span></div>
+          <ul class="steps">
+            <li>The image's own <span class="mono">HEALTHCHECK</span>, so Docker knows the container's status.</li>
+            <li>Compose's <span class="mono">depends_on: condition: service_healthy</span>, which holds the UI back until the API answers.</li>
+            <li>Azure's <span class="mono">healthCheckPath</span>, and the <span class="mono">/health</span> polling every deployment path does before declaring success.</li>
+          </ul>
+          <p class="note">
+            The UI container exposes its own <span class="mono">/health</span> too &mdash; answered by
+            Nginx directly, with no application code involved.
+          </p>
+        </div>
+      </div>
     </section>
 
     <section class="block" id="elements">

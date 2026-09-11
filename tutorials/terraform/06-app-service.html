@@ -17,8 +17,11 @@
         <p class="eyebrow">Terraform Tutorial &middot; File 6 of 9</p>
         <h1>app_service.tf</h1>
         <p class="lede">
-          Creates the Azure Web App that actually runs the Flask API, along with the App Service Plan
-          that hosts it, and tells the app everything it needs to know to connect to the database.
+          The largest file in the configuration. It creates the container registry every image is
+          published to, the shared App Service plan, and the three container web apps &mdash; API,
+          UI, and the tutorial site &mdash; each with its own managed identity and permission to pull
+          from that registry. It also generates the API's JWT signing key and hands both apps every
+          setting they need.
         </p>
       </div>
       <figure class="codey-figure">
@@ -26,9 +29,10 @@
       </figure>
     </div>
     <div class="factbar">
-      <span class="fact">Resources created &rarr; <b>2</b></span>
-      <span class="fact">Runtime &rarr; <b>Linux &middot; Python 3.11</b></span>
-      <span class="fact">Plan tier &rarr; <b>B1 (Basic)</b></span>
+      <span class="fact">Resources created &rarr; <b>9</b></span>
+      <span class="fact">Runtime &rarr; <b>Linux containers</b></span>
+      <span class="fact">Plan tier &rarr; <b>B1 (Basic), shared by all three apps</b></span>
+      <span class="fact">Registry auth &rarr; <b>managed identity</b></span>
     </div>
   </div>
 </header>
@@ -40,10 +44,12 @@
     <ol>
       <li><a href="#purpose">Purpose</a></li>
       <li><a href="#full-file">The full file</a></li>
-      <li><a href="#plan">The App Service Plan</a></li>
-      <li><a href="#webapp">The web app resource</a></li>
-      <li><a href="#site-config">Site config: how the app starts</a></li>
-      <li><a href="#app-settings">App settings: passing in the database connection</a></li>
+      <li><a href="#registry">The container registry</a></li>
+      <li><a href="#plan">The App Service plan</a></li>
+      <li><a href="#jwt">The generated JWT key</a></li>
+      <li><a href="#webapps">The two web apps</a></li>
+      <li><a href="#identity">Identity and AcrPull</a></li>
+      <li><a href="#app-settings">App settings</a></li>
       <li><a href="#terms">Key terms</a></li>
     </ol>
   </nav>
@@ -54,24 +60,32 @@
       <div class="purpose-band-row">
         <div class="purpose-band">
           <p class="purpose-label">Purpose of this file</p>
-          <p>Provision the hosting plan and the web app that runs the Flask API, and configure it to connect to the database created in <a href="05-database.html">database.tf</a>.</p>
+          <p>Provision the registry, the hosting plan, and the two container web apps that run the API and UI &mdash; and configure each to reach the database, the registry, and each other.</p>
         </div>
         <figure class="codey-figure">
           <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
-          <figcaption>where the API actually runs</figcaption>
+          <figcaption>six resources, one file</figcaption>
         </figure>
       </div>
       <p class="dek">
-        This is the piece of infrastructure the API's own code (covered by a future tutorial)
-        actually runs on top of. Terraform's job here stops at creating the empty, configured
-        hosting environment &mdash; the application code itself gets deployed into it separately by
-        the <span class="mono">azure-webapps-python.yml</span> GitHub Actions workflow.
+        This file declares infrastructure only &mdash; it never builds an image. The web apps are
+        created pointing at <span class="mono">metals-api:&lt;image_tag&gt;</span> and
+        <span class="mono">metals-ui:&lt;image_tag&gt;</span>, which may not exist yet; building and
+        pushing them is <a href="../deployment/index.html">the Deployment tutorial's</a> job.
       </p>
     </section>
 
     <section class="block" id="full-file">
-      <h2>The full file <span class="tag">code sample</span></h2>
-      <pre class="code"><span class="filename">terraform/app_service.tf</span>resource "azurerm_service_plan" "metals" {
+      <h2>The full file <span class="tag">all nine resources</span></h2>
+      <pre class="code"><span class="filename">terraform/app_service.tf (abridged &mdash; the UI and tutorials apps mirror the API app)</span>resource "azurerm_container_registry" "metals" {
+  name                = replace("${local.prefix}acr", "-", "")
+  resource_group_name = azurerm_resource_group.metals.name
+  location            = azurerm_resource_group.metals.location
+  sku                 = "Basic"
+  admin_enabled       = false
+}
+
+resource "azurerm_service_plan" "metals" {
   name                = "${local.prefix}-appservice-plan"
   resource_group_name = azurerm_resource_group.metals.name
   location            = azurerm_resource_group.metals.location
@@ -79,182 +93,304 @@
   sku_name            = "B1"
 }
 
-resource "azurerm_linux_web_app" "metals" {
+resource "random_id" "jwt_secret" {
+  byte_length = 48
+}
+
+resource "azurerm_linux_web_app" "api" {
   name                = "${local.prefix}-api"
   resource_group_name = azurerm_resource_group.metals.name
   location            = azurerm_service_plan.metals.location
   service_plan_id     = azurerm_service_plan.metals.id
+  https_only          = true
 
-  # Deployment authenticates through OIDC, not a publish profile.
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   site_config {
-    always_on        = false
-    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 app:app"
+    always_on                               = true
+    health_check_path                       = "/health"
+    health_check_eviction_time_in_min       = 2
+    container_registry_use_managed_identity = true
 
     application_stack {
-      python_version = "3.11"
+      docker_image_name   = "metals-api:${var.image_tag}"
+      docker_registry_url = "https://${azurerm_container_registry.metals.login_server}"
+    }
+  }
+
+  logs {
+    detailed_error_messages = false
+    failed_request_tracing  = false
+
+    http_logs {
+      file_system {
+        retention_in_days = 3
+        retention_in_mb   = 100
+      }
     }
   }
 
   app_settings = {
-    DB_HOST                        = azurerm_postgresql_flexible_server.metals.fqdn
-    DB_NAME                        = azurerm_postgresql_flexible_server_database.metals.name
-    DB_USER                        = local.db_user
-    DB_PASSWORD                    = var.db_password
-    DB_URL                         = "postgresql://${local.db_user}:${replace(urlencode(var.db_password), "+", "%20")}@${azurerm_postgresql_flexible_server.metals.fqdn}:5432/${local.db_name}?sslmode=require"
-    SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
-    FLASK_DEBUG                    = "0"
+    WEBSITES_PORT                       = "5000"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
+    SCM_DO_BUILD_DURING_DEPLOYMENT      = "false"
+    DB_HOST                             = azurerm_postgresql_flexible_server.metals.fqdn
+    DB_PORT                             = "5432"
+    DB_NAME                             = azurerm_postgresql_flexible_server_database.metals.name
+    DB_USER                             = local.db_user
+    DB_PASSWORD                         = var.db_password
+    PGSSLMODE                           = "require"
+    JWT_SECRET_KEY                      = random_id.jwt_secret.b64_std
+    JWT_EXPIRATION_MINUTES              = "60"
+    FLASK_DEBUG                         = "0"
   }
+}
+
+resource "azurerm_role_assignment" "api_acr_pull" {
+  scope                = azurerm_container_registry.metals.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_linux_web_app.api.identity[0].principal_id
+  principal_type       = "ServicePrincipal"
 }</pre>
+      <p class="bonus-banner">
+        The UI app and its <span class="mono">ui_acr_pull</span> assignment follow the same shape,
+        differing only in the image name, the port, and their app settings &mdash; covered in
+        <a href="#app-settings">App settings</a> below.
+      </p>
+    </section>
+
+    <section class="block" id="registry">
+      <h2>The container registry <span class="tag">where images live</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">name = replace("${local.prefix}acr", "-", "")</span><span class="qnum">a naming rule, enforced in code</span></div>
+          <p class="desc">
+            Registry names must be globally unique across all of Azure and may contain only letters
+            and digits &mdash; no hyphens. Since <span class="mono">local.prefix</span> is
+            <span class="mono">expeditors-&lt;user&gt;-metals</span>, the
+            <span class="mono">replace()</span> function strips the hyphens to produce
+            <span class="mono">expeditors&lt;user&gt;metalsacr</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">admin_enabled = false</span><span class="qnum">no username and password</span></div>
+          <p class="desc">
+            Every registry can have a built-in admin account with a password. Disabling it removes
+            that credential entirely, forcing all access through Entra ID identities and role
+            assignments. There is consequently no registry password anywhere in this project &mdash;
+            not in Terraform, not in GitHub, not in app settings.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">sku = "Basic"</span><span class="qnum">sized for this project</span></div>
+          <p class="desc">
+            The cheapest tier, with less included storage and throughput than Standard or Premium.
+            For two small images redeployed a few times a day, it's ample &mdash; and the tier can be
+            raised later without recreating the registry.
+          </p>
+        </div>
+      </div>
     </section>
 
     <section class="block" id="plan">
-      <h2>The App Service Plan <span class="tag">azurerm_service_plan</span></h2>
-      <div class="qgrid">
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">What a service plan is</span><span class="qnum">the hosting slot</span></div>
-          <p class="desc">
-            An App Service Plan is the actual compute capacity &mdash; think of it as renting a slot
-            of server hardware. The web app resource below doesn't include its own hardware; it
-            gets deployed <i>onto</i> a plan. One plan can even host multiple web apps, though this
-            project only puts one app on it.
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The App Service plan <span class="tag">one plan, two apps</span></h2>
+          <p class="dek">
+            The plan is the compute you rent; the web apps are applications placed onto it. Both
+            apps here reference the same <span class="mono">azurerm_service_plan.metals</span>, which
+            has a real consequence: <b>the UI costs nothing extra to host</b>, because App Service
+            bills per plan instance rather than per app.
           </p>
         </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>rent once, host twice</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">os_type = "Linux"</span><span class="qnum">operating system</span></div>
-          <p class="desc">Runs Linux rather than Windows. Azure App Service supports both; Python apps on Azure typically run on Linux.</p>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">sku_name = "B1"</span><span class="qnum">pricing tier</span></div>
+          <div class="qhead"><span class="qtitle">sku_name = "B1", os_type = "Linux"</span><span class="qnum">the smallest always-on tier</span></div>
           <p class="desc">
-            The <b>Basic</b> tier, size 1 &mdash; enough compute for development and light traffic,
-            at a lower cost than the Standard or Premium tiers meant for production workloads.
+            B1 is the cheapest tier that supports <span class="mono">always_on</span>, which both
+            apps need &mdash; without it, App Service unloads an idle app and the next visitor waits
+            for a cold container start. Linux is required for container web apps.
+          </p>
+          <p class="note">
+            Sharing one plan is a deliberate trade-off: cheap, but the two apps compete for the same
+            CPU and memory. Splitting them onto separate plans would isolate them, at roughly double
+            the cost.
           </p>
         </div>
       </div>
     </section>
 
-    <section class="block" id="webapp">
-      <h2>The web app resource <span class="tag">azurerm_linux_web_app</span></h2>
+    <section class="block" id="jwt">
+      <h2>The generated JWT key <span class="tag">random_id</span></h2>
       <div class="qgrid">
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">service_plan_id</span><span class="qnum">attaching to its plan</span></div>
+          <div class="qhead"><span class="qtitle">Why a resource, not a function</span><span class="qnum">the crucial detail</span></div>
           <p class="desc">
-            <span class="mono">service_plan_id = azurerm_service_plan.metals.id</span> is the
-            reference that actually places this app onto the plan created above &mdash; the same
-            reference pattern used throughout this project to connect resources without
-            hardcoding IDs.
+            The API needs a secret to sign tokens with. Generating one with a plain function would
+            produce a <i>new</i> value on every plan, and every apply would silently invalidate every
+            issued token. Declaring it as a <span class="mono">random_id</span> <b>resource</b> means
+            Terraform generates it once, stores it in state, and reuses that same value forever after
+            &mdash; so re-applying doesn't log everybody out.
           </p>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">ftp_publish_basic_authentication_enabled = false<br>webdeploy_publish_basic_authentication_enabled = false</span><span class="qnum">security</span></div>
-          <p class="desc">
-            Azure Web Apps normally support deploying code over FTP or WebDeploy using a simple
-            username/password (a &ldquo;publish profile&rdquo;). Both are turned off here, because
-            this project's deployment instead authenticates using the OIDC identity built in
-            <a href="07-github-oidc.html">github_oidc.tf</a> &mdash; one less password-style
-            credential that could leak.
+          <p class="note">
+            <span class="mono">byte_length = 48</span> produces 48 random bytes; the app setting uses
+            the <span class="mono">.b64_std</span> attribute, which is the standard base64 rendering
+            of those bytes. The manual scripts achieve the same stability differently &mdash; by
+            reading back any existing key before generating a new one.
           </p>
         </div>
       </div>
     </section>
 
-    <section class="block" id="site-config">
-      <h2>Site config: how the app starts <span class="tag">site_config</span></h2>
+    <section class="block" id="webapps">
+      <h2>The three web apps <span class="tag">containers, not code</span></h2>
       <div class="qgrid">
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">always_on = false</span><span class="qnum">cost vs. responsiveness</span></div>
+          <div class="qhead"><span class="qtitle">application_stack with docker_image_name</span><span class="qnum">what makes it a container app</span></div>
           <p class="desc">
-            When <span class="mono">false</span>, Azure can let the app go idle after a period of
-            no traffic, and it takes a moment to wake back up on the next request. Turning this
-            <span class="mono">true</span> keeps the app running (and billed) continuously; this
-            project accepts the occasional cold start to save cost in a development environment.
+            This block is what distinguishes a container web app from a source-code one. Instead of
+            naming a language runtime, it names an image and the registry to fetch it from &mdash;
+            <span class="mono">"metals-api:${var.image_tag}"</span>, built from the
+            <a href="03-variables.html">image_tag variable</a>. Azure runs that image's own
+            <span class="mono">CMD</span>; there's no startup command to configure.
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">app_command_line</span><span class="qnum">how the app actually starts</span></div>
-          <pre class="code">app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 app:app"</pre>
+          <div class="qhead"><span class="qtitle">health_check_path = "/health"</span><span class="qnum">and its eviction window</span></div>
           <p class="desc">
-            The exact command Azure runs to start the application. <span class="mono">gunicorn</span>
-            is a production-grade Python web server; <span class="mono">--bind=0.0.0.0</span>
-            listens on all network interfaces (required so Azure can route traffic to it),
-            <span class="mono">--timeout 600</span> allows up to 10 minutes for a single request
-            before giving up, and <span class="mono">app:app</span> tells Gunicorn to run the
-            Flask application object named <span class="mono">app</span> inside the Python module
-            <span class="mono">app.py</span>.
+            Azure probes this path and takes an instance out of rotation if it stops answering.
+            Both images expose the same endpoint &mdash; Flask for the API, a hardcoded Nginx
+            response for the UI. <span class="mono">health_check_eviction_time_in_min = 2</span> is
+            how long an unhealthy instance is given before removal, and the provider requires it
+            whenever a path is set.
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">application_stack { python_version = "3.11" }</span><span class="qnum">runtime</span></div>
-          <p class="desc">Tells Azure which managed language runtime to install and run the app under &mdash; Python 3.11.</p>
+          <div class="qhead"><span class="qtitle">https_only and the two publish settings</span><span class="qnum">hardening</span></div>
+          <p class="desc">
+            <span class="mono">https_only = true</span> redirects plain HTTP.
+            <span class="mono">ftp_publish_basic_authentication_enabled</span> and
+            <span class="mono">webdeploy_publish_basic_authentication_enabled</span> are both
+            <span class="mono">false</span>, disabling the legacy username/password publishing
+            endpoints &mdash; deployment happens through the registry and OIDC, so those doors have
+            no reason to be open.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The logs block</span><span class="qnum">present to prevent drift</span></div>
+          <p class="desc">
+            It records the filesystem log retention the platform applies anyway. Declaring it
+            explicitly stops Terraform from seeing Azure's defaults as unmanaged configuration and
+            proposing to strip them on every plan &mdash; a small but common source of perpetual
+            &ldquo;changes&rdquo; in a plan that should be empty.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="identity">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Identity and AcrPull <span class="tag">how the image gets pulled</span></h2>
+          <p class="dek">
+            A private registry needs authentication. Rather than storing credentials, each app is
+            given its own identity and that identity is granted read access &mdash; three
+            cooperating pieces that are easy to miss individually.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey holding a magnifying glass">
+          <figcaption>three pieces, one pull</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><b><span class="mono">identity { type = "SystemAssigned" }</span></b> &mdash; Azure creates an identity tied to this app's lifetime. Delete the app and the identity goes with it.</li>
+            <li><b><span class="mono">container_registry_use_managed_identity = true</span></b> &mdash; tells App Service to authenticate to the registry as that identity instead of looking for a stored credential.</li>
+            <li><b>The <span class="mono">azurerm_role_assignment</span></b> &mdash; grants that identity <span class="mono">AcrPull</span>, scoped to the registry. Without this the app has an identity but no permission, and startup fails with an image-pull error.</li>
+          </ol>
+          <p class="note">
+            <span class="mono">principal_id = azurerm_linux_web_app.api.identity[0].principal_id</span>
+            reads the ID Azure generated. That reference is also what tells Terraform the app must
+            exist before the role assignment can be created &mdash; no explicit
+            <span class="mono">depends_on</span> needed.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">AcrPull and nothing more</span><span class="qnum">least privilege</span></div>
+          <p class="desc">
+            The apps only ever need to download images, so that's all they're granted &mdash; no
+            push, no delete, no visibility into other resources. The identity that <i>does</i> need
+            to build and push is GitHub's, and it's granted separately in
+            <a href="07-github-oidc.html">github_oidc.tf</a>.
+          </p>
         </div>
       </div>
     </section>
 
     <section class="block" id="app-settings">
-      <h2>App settings: passing in the database connection <span class="tag">app_settings</span></h2>
+      <h2>App settings <span class="tag">the same image, configured twice</span></h2>
       <p class="dek">
-        <span class="mono">app_settings</span> becomes environment variables inside the running
-        app &mdash; this is how the Flask API, without any hardcoded values of its own, learns how to
-        reach the database that <a href="05-database.html">database.tf</a> created.
+        Both images are environment-agnostic, so everything environment-specific arrives here.
+        Terraform's advantage is visible in these maps: values like the database hostname and the
+        API's public URL are <i>references</i> to other resources, so they can't drift or be
+        mistyped.
       </p>
-      <div class="qgrid">
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">DB_HOST, DB_NAME, DB_USER, DB_PASSWORD</span><span class="qnum">individual pieces</span></div>
-          <p class="desc">
-            Four separate values the app can read individually if it prefers to build its own
-            connection: the database server's address
-            (<span class="mono">azurerm_postgresql_flexible_server.metals.fqdn</span>), the
-            database name, the admin username, and the password &mdash; each pulled from the same
-            resources and variables used to create the database itself, so they can never drift
-            out of sync with the real values.
-          </p>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">DB_URL</span><span class="qnum">one ready-to-use connection string</span></div>
-          <pre class="code">DB_URL = "postgresql://${local.db_user}:${replace(urlencode(var.db_password), "+", "%20")}@${azurerm_postgresql_flexible_server.metals.fqdn}:5432/${local.db_name}?sslmode=require"</pre>
-          <p class="desc">
-            The same information as the four settings above, pre-assembled into one standard
-            PostgreSQL connection URL, for code that prefers a single connection string.
-            <span class="mono">urlencode()</span> escapes any characters in the password that
-            would otherwise break the URL's structure (like <span class="mono">@</span> or
-            <span class="mono">:</span>); the surrounding <span class="mono">replace()</span> then
-            swaps <span class="mono">urlencode()</span>'s <span class="mono">+</span> (its way of
-            encoding a space) for <span class="mono">%20</span>, the encoding most PostgreSQL
-            client libraries expect instead. <span class="mono">?sslmode=require</span> at the end
-            forces the connection to use encryption.
-          </p>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">SCM_DO_BUILD_DURING_DEPLOYMENT = "true"</span><span class="qnum">deployment behavior</span></div>
-          <p class="desc">
-            Tells Azure's deployment engine (Kudu) to run its normal Python build steps &mdash;
-            installing <span class="mono">requirements.txt</span> dependencies &mdash; every time new
-            code is deployed, rather than expecting a pre-built package.
-          </p>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">FLASK_DEBUG = "0"</span><span class="qnum">production-style behavior</span></div>
-          <p class="desc">Disables Flask's debug mode. Debug mode is convenient locally (auto-reload, detailed error pages) but is a security risk if left on for anything reachable from the internet.</p>
-        </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:17rem;">Setting</th><th>API</th><th>UI</th><th>Where the value comes from</th></tr></thead>
+          <tbody>
+            <tr><td><code>WEBSITES_PORT</code></td><td>5000</td><td>8080</td><td>Literal &mdash; must match the port inside each image.</td></tr>
+            <tr><td><code>WEBSITES_ENABLE_APP_SERVICE_STORAGE</code></td><td>false</td><td>false</td><td>Literal &mdash; containers here are stateless.</td></tr>
+            <tr><td><code>SCM_DO_BUILD_DURING_DEPLOYMENT</code></td><td>false</td><td>false</td><td>Literal &mdash; no source build step exists any more.</td></tr>
+            <tr><td><code>DB_HOST</code></td><td>&#10003;</td><td>&mdash;</td><td><span class="mono">azurerm_postgresql_flexible_server.metals.fqdn</span> &mdash; read from the real server.</td></tr>
+            <tr><td><code>DB_NAME</code></td><td>&#10003;</td><td>&mdash;</td><td><span class="mono">azurerm_postgresql_flexible_server_database.metals.name</span>.</td></tr>
+            <tr><td><code>DB_USER</code> / <code>DB_PASSWORD</code> / <code>DB_PORT</code></td><td>&#10003;</td><td>&mdash;</td><td><span class="mono">local.db_user</span>, <a href="03-variables.html">var.db_password</a>, and a literal port.</td></tr>
+            <tr><td><code>PGSSLMODE</code></td><td>require</td><td>&mdash;</td><td>Literal &mdash; Azure PostgreSQL requires TLS.</td></tr>
+            <tr><td><code>JWT_SECRET_KEY</code></td><td>&#10003;</td><td>&mdash;</td><td><span class="mono">random_id.jwt_secret.b64_std</span> &mdash; <a href="#jwt">generated once</a>.</td></tr>
+            <tr><td><code>API_UPSTREAM</code></td><td>&mdash;</td><td>&#10003;</td><td><span class="mono">"https://${azurerm_linux_web_app.api.default_hostname}"</span> &mdash; the API's real hostname, whatever Azure assigned.</td></tr>
+            <tr><td><code>NGINX_RESOLVER</code></td><td>&mdash;</td><td>168.63.129.16</td><td>Literal &mdash; Azure's platform DNS, overriding the image's Docker default.</td></tr>
+          </tbody>
+        </table>
       </div>
+      <p class="bonus-banner">
+        The <span class="mono">API_UPSTREAM</span> row is worth pausing on. Because it's a reference
+        rather than a hardcoded string, Terraform knows the UI depends on the API and creates them in
+        the right order &mdash; and if the API's hostname ever changed, the UI's setting would update
+        with it automatically. It's also why the UI can't be created before the API exists.
+        Background on both UI settings is on
+        <a href="../docker/05-ui-image.html">the UI image page</a>.
+      </p>
     </section>
 
     <section class="block" id="terms">
-      <h2>Key terms <span class="tag">for beginners</span></h2>
+      <h2>Key terms <span class="tag">glossary</span></h2>
       <div class="qgrid">
         <div class="qcard">
           <dl class="def">
             <dt>App Service Plan</dt>
-            <dd>The compute capacity a web app runs on in Azure &mdash; its size and pricing tier. Distinct from the web app resource itself, which is the application configuration deployed onto that capacity.</dd>
+            <dd>The compute capacity web apps run on in Azure &mdash; its size and pricing tier. Distinct from the web app resources themselves, which are applications placed onto that capacity. Several apps can share one plan.</dd>
+            <dt>Container registry</dt>
+            <dd>A server that stores built container images so other systems can pull them. Azure Container Registry is the private, Azure-hosted equivalent of Docker Hub.</dd>
+            <dt>Managed identity</dt>
+            <dd>An Entra ID identity that Azure creates and manages for a resource, with no password for anyone to store or rotate. A <i>system-assigned</i> one lives and dies with the resource it belongs to.</dd>
+            <dt>Role assignment</dt>
+            <dd>The grant that connects an identity, a role (a set of permitted actions), and a scope (the resources it applies to). Without one, an identity can authenticate but do nothing.</dd>
             <dt>Environment variable</dt>
-            <dd>A named value made available to a running program by its operating environment, rather than hardcoded in its source code. Terraform's <code>app_settings</code> map becomes these inside the web app.</dd>
-            <dt>Gunicorn</dt>
-            <dd>A widely-used production web server for Python applications, responsible for actually receiving HTTP requests and handing them to the Flask app.</dd>
-            <dt>URL encoding</dt>
-            <dd>Converting characters that have special meaning inside a URL (like <code>@</code>, <code>:</code>, or a space) into a safe escaped form, so the URL still parses correctly.</dd>
+            <dd>A named value made available to a running program by its environment rather than hardcoded in source. Terraform's <code>app_settings</code> map becomes these inside each container.</dd>
+            <dt>Image tag</dt>
+            <dd>The label identifying a specific version of an image in a registry, like <code>metals-api:latest</code>. Reusing a tag for new content is convenient but means a restart is needed to pick it up.</dd>
           </dl>
         </div>
       </div>
@@ -270,7 +406,7 @@ resource "azurerm_linux_web_app" "metals" {
 
 <div class="codey-signoff">
   <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
-  <p>The API has somewhere to run and knows how to reach the database &mdash; next, how GitHub gets in.</p>
+  <p>Both apps have somewhere to run and know how to reach the database and the registry &mdash; next, how GitHub gets in.</p>
 </div>
 
 <footer class="page">

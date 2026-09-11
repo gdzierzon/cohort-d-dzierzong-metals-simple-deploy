@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>az_deploy</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Deployment</a> &rsaquo; <a href="index.html">Manual</a> &rsaquo; az_deploy</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Manual Deployment &middot; Script 2 of 4</p>
+        <h1>az_deploy: Building and Shipping Both Images</h1>
+        <p class="lede">
+          Once the infrastructure exists, this is the script you run over and over. It builds the
+          <span class="mono">metals-api</span> and <span class="mono">metals-ui</span> images
+          <i>inside</i> Azure Container Registry, points each Web App at the resulting tag, restarts
+          them so they actually re-pull, and waits until both answer
+          <span class="mono">/health</span>. No local Docker installation is involved at any point.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Script &rarr; <b>az_deploy.ps1 / .sh</b></span>
+      <span class="fact">Builds &rarr; <b>in Azure, not locally</b></span>
+      <span class="fact">Images &rarr; <b>metals-api, metals-ui</b></span>
+      <span class="fact">Default tag &rarr; <b>latest</b></span>
+      <span class="fact">Terraform equivalent &rarr; <b>none &mdash; Terraform doesn't build images</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Manual overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#prereqs">Before you run it</a></li>
+      <li><a href="#code">What the script does</a></li>
+      <li><a href="#params">The parameters</a></li>
+      <li><a href="#acr-build">Why az acr build</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="prereqs">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Deploy a new version of the API, the UI, or both to Azure by hand &mdash; and understand each of the four steps well enough to run them individually when something needs debugging.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>build, point, restart, verify</figcaption>
+        </figure>
+      </div>
+      <h2>Before you run it <span class="tag">prerequisites</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <ul class="steps">
+            <li>Azure CLI installed, and <span class="mono">az login</span> already done &mdash; the script never logs you in.</li>
+            <li>The resources from <a href="01-create-resources.html">az_create_resources</a> must already exist; this script only updates them.</li>
+            <li>Run it from the <b>repository root</b>, not from inside <span class="mono">utility_scripts/</span> &mdash; it locates the build contexts relative to the project.</li>
+            <li><b>No Docker needed.</b> The images are built by Azure Container Registry, not on your machine.</li>
+          </ul>
+        </div>
+      </div>
+      <pre class="code"><span class="filename">PowerShell, from the repository root</span>.\utility_scripts\az_deploy.ps1 -UserName dzierzon</pre>
+      <pre class="code"><span class="filename">Bash</span>bash utility_scripts/az_deploy.sh --user-name dzierzon</pre>
+    </section>
+
+    <section class="block" id="code">
+      <h2>What the script does <span class="tag">four steps, twice</span></h2>
+      <p class="dek">
+        The same four operations are applied to each of the two applications. Everything below is
+        from <span class="mono">az_deploy.ps1</span>; the Bash version does the same work with
+        <span class="mono">--kebab-case</span> options.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Step 1 &mdash; build each image in the registry</span><span class="qnum">az acr build</span></div>
+          <pre class="code">Push-Location $webApp.Context
+try {
+    Invoke-Az acr build --registry $RegistryName --resource-group $resourceGroup `
+        --image "$($webApp.Image):$ImageTag" --file $webApp.DockerfilePath .
+}
+finally { Pop-Location }</pre>
+          <p class="desc">
+            One command per image. It packs the build context into an archive, uploads it, and asks
+            the registry to run the Dockerfile on a managed build agent &mdash; the finished image is
+            pushed into the registry without ever existing on your machine.
+          </p>
+          <p class="note">
+            The <span class="mono">Push-Location</span> isn't decoration. <span class="mono">az acr
+            build</span> validates <span class="mono">--file</span> against the <i>current
+            directory</i> rather than the source argument, so the API (context: repo root, file:
+            <span class="mono">metals_api/Dockerfile</span>) and the UI (context:
+            <span class="mono">metals_ui</span>, file: <span class="mono">Dockerfile</span>) each
+            have to run from their own context.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Step 2 &mdash; point the Web App at the tag</span><span class="qnum">config container set</span></div>
+          <pre class="code">Invoke-Az webapp config container set --name $name --resource-group $resourceGroup `
+    --container-image-name $image `
+    --container-registry-url "https://$($registry.loginServer)" --output none</pre>
+          <p class="desc">
+            Sets which image the app should run. Strictly it's only needed when the tag changes, but
+            running it every time makes the script idempotent &mdash; and it's what converts an app
+            that was previously configured for something else.
+          </p>
+          <p class="note">
+            No registry credentials appear here. The Web App authenticates to the registry with its
+            own managed identity, configured back in
+            <a href="01-create-resources.html">az_create_resources</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Step 3 &mdash; restart so it re-pulls</span><span class="qnum">the easily-missed one</span></div>
+          <pre class="code">Invoke-Az webapp restart --name $name --resource-group $resourceGroup --output none</pre>
+          <p class="desc">
+            Because this project reuses the <span class="mono">latest</span> tag, step 2 usually sets
+            the image name to the value it already had &mdash; so Azure sees no change and keeps
+            running the old container indefinitely. An explicit restart forces a fresh pull. Skip
+            this and the deployment silently does nothing.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Step 4 &mdash; wait for healthy</span><span class="qnum">don't trust a restart</span></div>
+          <pre class="code">for ($attempt = 1; $attempt -le 10; $attempt++) {
+    try {
+        $response = Invoke-WebRequest -Uri "https://$hostName/health" -TimeoutSec 10 -UseBasicParsing
+        if ($response.StatusCode -eq 200) { $healthy = $true; break }
+    }
+    catch { Start-Sleep -Seconds 10 }
+}</pre>
+          <p class="desc">
+            <span class="mono">webapp restart</span> returns immediately, long before the new
+            container is serving traffic. The script polls each app's
+            <span class="mono">/health</span> endpoint up to ten times, ten seconds apart, and warns
+            clearly if one never comes up &mdash; so a broken rollout looks like a failure rather
+            than a success.
+          </p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        The hostname is read back from Azure with
+        <span class="mono">az webapp show --query defaultHostName</span> rather than assembled from
+        the app name, because Azure's actual hostname can include a region or uniqueness suffix.
+      </p>
+    </section>
+
+    <section class="block" id="params">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The parameters <span class="tag">and when you'd use them</span></h2>
+          <p class="dek">
+            Defaults are chosen so that the bare command does the common thing: build every image
+            as <span class="mono">latest</span> and deploy them.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>defaults cover the common case</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:13rem;">PowerShell</th><th style="width:13rem;">Bash</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>-UserName</code></td><td><code>--user-name</code></td><td>Resource-name suffix; default <span class="mono">dzierzon</span>. Must match what you created resources with.</td></tr>
+            <tr><td><code>-RegistryName</code></td><td><code>--registry-name</code></td><td>Override the generated registry name, if you had to pick a different one.</td></tr>
+            <tr><td><code>-ImageTag</code></td><td><code>--image-tag</code></td><td>Tag to build and deploy; default <span class="mono">latest</span>.</td></tr>
+            <tr><td><code>-SkipBuild</code></td><td><code>--skip-build</code></td><td>Skip building entirely and just repoint and restart at an already-pushed tag &mdash; useful for rollbacks and for retrying a failed deploy.</td></tr>
+            <tr><td><code>-FollowLogs</code></td><td><code>--follow-logs</code></td><td>Stream the API's container logs after deploying, instead of returning to the prompt.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Without <span class="mono">-FollowLogs</span> the script prints the two
+        <span class="mono">az webapp log tail</span> commands you'd need to watch either app, so you
+        can follow whichever one you care about.
+      </p>
+    </section>
+
+    <section class="block" id="acr-build">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Why az acr build <span class="tag">instead of docker build + push</span></h2>
+          <p class="dek">
+            The obvious alternative is building locally and pushing. Letting the registry build
+            instead removes several moving parts &mdash; and it's exactly what the
+            <a href="../02-workflows.html">GitHub Actions workflows</a> do too, for the same reasons.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>upload source, not layers</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What you avoid</span><span class="qnum">four things</span></div>
+          <ul class="steps">
+            <li><b>Installing Docker</b> on every machine that might deploy, including CI runners.</li>
+            <li><b>A separate registry login.</b> Your existing <span class="mono">az login</span> is the only authentication involved.</li>
+            <li><b>Uploading image layers.</b> Only the source is sent; the built layers never leave Azure.</li>
+            <li><b>Architecture mismatches.</b> The image is always built on the platform it will run on, so an ARM laptop can't accidentally produce an image the x86 Web App can't start.</li>
+          </ul>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The trade-off</span><span class="qnum">be fair about it</span></div>
+          <p class="desc">
+            You lose the local build cache &mdash; each <span class="mono">az acr build</span> starts
+            fresh, so a small code change costs a full rebuild rather than a few cached seconds. For
+            a deployment step that's an acceptable price; for the tight edit-and-test loop you'd
+            still use <a href="../../docker/06-compose.html">Compose</a> locally.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">Unable to find 'Dockerfile'</span></td><td><span class="mono">az acr build</span> resolved <span class="mono">--file</span> against your current directory, not the source argument.</td><td>Run the script from the repository root. This is exactly what the <span class="mono">Push-Location</span> in step 1 exists to handle.</td></tr>
+            <tr><td><span class="mono">AuthorizationFailed</span> on <span class="mono">listBuildSourceUploadUrl</span></td><td>The identity can reach the registry but lacks permission to start a build.</td><td>Building needs <span class="mono">Contributor</span> on the registry &mdash; see <a href="../03-identity-and-secrets.html#roles">the roles table</a>. Your own <span class="mono">az login</span> account usually already has it.</td></tr>
+            <tr><td>Deploy succeeds, but the site is unchanged</td><td>The new image was pushed under the same tag and nothing restarted.</td><td>Confirm step 3 ran. Rerun with <span class="mono">-SkipBuild</span> to repoint and restart without rebuilding.</td></tr>
+            <tr><td><span class="mono">did not report healthy ... within the timeout</span></td><td>The container started but is failing, or is slower than 100 seconds to come up.</td><td>Read the container logs: <span class="mono">az webapp log tail --resource-group &lt;rg&gt; --name &lt;app&gt;</span>. A missing app setting is the usual culprit.</td></tr>
+            <tr><td><span class="mono">ResourceNotFound</span> for the registry</td><td>The resources don't exist yet, or <span class="mono">-UserName</span> doesn't match what they were created with.</td><td>Run <a href="01-create-resources.html">az_create_resources</a> first, using the same username.</td></tr>
+            <tr><td>The UI loads but every API call fails</td><td>The UI container can't reach the API &mdash; typically a DNS resolver or upstream setting.</td><td>Check the UI app's <span class="mono">API_UPSTREAM</span> and <span class="mono">NGINX_RESOLVER</span> settings; see <a href="../../docker/05-ui-image.html#resolver">the UI image page</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-create-resources.html"><span class="pn-label">&larr; Back</span>az_create_resources</a>
+      <a class="next" href="03-setup-github-oidc.html"><span class="pn-label">Next &rarr;</span>az_setup_github_oidc</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Deploying by hand works &mdash; next, hand the same job to GitHub Actions so a merge does it for you.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">utility_scripts/az_deploy.ps1</span> and <span class="mono">utility_scripts/az_deploy.sh</span> in this repository.
+</footer>
+
+</body>
+</html>

@@ -71,7 +71,7 @@
       <div class="qgrid">
         <div class="qcard">
           <pre class="code">terraform -chdir=terraform output
-terraform -chdir=terraform output -raw webapp_url
+terraform -chdir=terraform output -raw ui_webapp_url
 terraform -chdir=terraform output -json github_secrets</pre>
           <ul class="steps">
             <li>No arguments &mdash; prints every output, formatted for a person to read.</li>
@@ -117,9 +117,13 @@ terraform -chdir=terraform output -json github_secrets</pre>
 echo '```json'
 terraform -chdir=terraform output -json github_secrets
 echo '```'
-echo 'Web App name:'
-terraform -chdir=terraform output -raw webapp_name</pre>
-          <p class="desc">Right after a successful apply, the workflow uses exactly these two forms &mdash; structured JSON for the identifiers someone needs to paste into GitHub secrets, and a raw string for the web app name &mdash; to write a copy-pasteable summary at the end of the run.</p>
+echo 'API Web App name:'
+terraform -chdir=terraform output -raw api_webapp_name
+echo 'UI Web App name:'
+terraform -chdir=terraform output -raw ui_webapp_name
+echo 'Container registry:'
+terraform -chdir=terraform output -raw container_registry_login_server</pre>
+          <p class="desc">Right after a successful apply, the workflow uses exactly these two forms &mdash; structured JSON for the identifiers someone needs to paste into GitHub secrets, and raw strings for the two web app names and the registry &mdash; to write a copy-pasteable summary at the end of the run.</p>
         </div>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">Locally, before running the app-settings script</span><span class="qnum">terraform/README.md</span></div>

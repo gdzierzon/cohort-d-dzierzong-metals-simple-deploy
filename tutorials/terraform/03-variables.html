@@ -27,9 +27,9 @@
       </figure>
     </div>
     <div class="factbar">
-      <span class="fact">Variables defined &rarr; <b>7</b></span>
+      <span class="fact">Variables defined &rarr; <b>8</b></span>
       <span class="fact">Sensitive &rarr; <b>db_password</b></span>
-      <span class="fact">With validation &rarr; <b>3</b></span>
+      <span class="fact">With validation &rarr; <b>4</b></span>
     </div>
   </div>
 </header>
@@ -102,6 +102,17 @@ variable "db_password" {
   validation {
     condition     = length(var.db_password) >= 8 && length(var.db_password) <= 128
     error_message = "Use a password between 8 and 128 characters that meets Azure PostgreSQL password requirements."
+  }
+}
+
+variable "image_tag" {
+  description = "Tag for the metals-api/metals-ui images in the container registry. Build and push with az_deploy.ps1/.sh before applying a new tag."
+  type        = string
+  default     = "latest"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$", var.image_tag))
+    error_message = "Use a valid Docker image tag."
   }
 }
 
@@ -191,6 +202,22 @@ variable "github_federated_subject" {
             is exactly why the state file is protected in a private, access-controlled storage
             location rather than committed to Git. The validation enforces an 8&ndash;128 character
             length, matching what Azure Database for PostgreSQL requires.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">image_tag</span><span class="qnum">default + validation</span></div>
+          <p class="desc">
+            Which tag of <span class="mono">metals-api</span> and
+            <span class="mono">metals-ui</span> the two web apps should run. Defaults to
+            <span class="mono">"latest"</span>, and the validation is a regular expression matching
+            Docker's own rules for a legal tag. Terraform doesn't build or push images &mdash; this
+            variable only decides which already-published tag the apps point at, which is why the
+            description tells you to push first.
+          </p>
+          <p class="note">
+            Changing it and re-applying moves both apps to the new tag. Leaving it alone and pushing
+            new content under the same tag does <i>not</i> redeploy anything &mdash; see
+            <a href="../deployment/index.html#restart">why a restart is required</a>.
           </p>
         </div>
         <div class="qcard">

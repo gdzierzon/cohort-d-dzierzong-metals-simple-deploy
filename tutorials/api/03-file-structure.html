@@ -67,7 +67,8 @@
         <table class="tree">
           <thead><tr><th style="width:16rem;">File / folder</th><th>What it's for, in plain terms</th></tr></thead>
           <tbody>
-            <tr><td class="path">app.py</td><td>Creates the Flask app, reads <span class="mono">JWT_SECRET_KEY</span> / <span class="mono">JWT_EXPIRATION_MINUTES</span> from the environment, and registers every blueprint (auth, elements, alloys, alloy elements, coins).</td></tr>
+            <tr><td class="path">app.py</td><td>Creates the Flask app, reads <span class="mono">JWT_SECRET_KEY</span> / <span class="mono">JWT_EXPIRATION_MINUTES</span> from the environment, registers every blueprint (auth, elements, alloys, alloy elements, coins), and defines the one route that isn't in a blueprint: <span class="mono">/health</span>. The module-level <span class="mono">app</span> object it creates is what Gunicorn serves in the container.</td></tr>
+            <tr><td class="path">Dockerfile</td><td>Builds the <span class="mono">metals-api</span> container image &mdash; Python 3.11, the dependencies, this folder, and Gunicorn on port 5000. Its build context is the repository root, not this folder. <a href="../docker/04-api-image.html">(dig deeper)</a></td></tr>
             <tr><td class="path">auth.py</td><td>The two decorators covered in <a href="02-authentication.html#how-this-api-uses-it">Section 2</a>: <span class="mono">require_auth</span> and <span class="mono">require_roles</span>. Shared by every route file below.</td></tr>
             <tr><td class="path indent">database/connection.py</td><td>Builds the SQLAlchemy <span class="mono">engine</span> and <span class="mono">SessionFactory</span> from the <span class="mono">DB_*</span> variables in <span class="mono">.env</span>.</td></tr>
             <tr><td class="path indent">models/</td><td>One SQLAlchemy class per table (<span class="mono">Element</span>, <span class="mono">Alloy</span>, <span class="mono">AlloyElement</span>, <span class="mono">Coin</span>, <span class="mono">User</span>, <span class="mono">Role</span>), plus <span class="mono">user_role.py</span> for the users&harr;roles join table and <span class="mono">base.py</span> for the shared declarative base.</td></tr>
@@ -85,6 +86,14 @@
         same naming pattern: <span class="mono">&lt;resource&gt;_routes.py</span>,
         <span class="mono">&lt;resource&gt;_service.py</span>, and so on. Once you understand one
         resource end to end, all five (including <span class="mono">auth</span>) read the same way.
+      </p>
+      <p class="bonus-banner">
+        Two more files live at the <b>repository root</b> rather than in this folder, because the
+        image build needs them there: <span class="mono">requirements-container.txt</span>, which
+        pulls in <span class="mono">requirements.txt</span> and adds Gunicorn, and
+        <span class="mono">.dockerignore</span>, which restricts what the build is even allowed to
+        see &mdash; notably excluding <span class="mono">tests/</span> and any
+        <span class="mono">.env</span> file.
       </p>
     </section>
 

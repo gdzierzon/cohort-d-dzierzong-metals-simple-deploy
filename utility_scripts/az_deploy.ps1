@@ -5,7 +5,7 @@ Builds the API and UI container images in Azure Container Registry and
 deploys them to their Web Apps.
 .DESCRIPTION
 Requires Azure CLI (az login) and the resources created by
-az_create_resources.ps1. Builds both images with `az acr build` (no local
+az_create_resources.ps1. Builds all three images with `az acr build` (no local
 Docker required), points each Web App at the new tag, then restarts it so
 the container actually re-pulls the image. Does not touch the database.
 .EXAMPLE
@@ -42,6 +42,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $resourceGroup = "expeditors-${UserName}-metals-rg"
 $appName = "expeditors-${UserName}-metals-api"
 $uiAppName = "expeditors-${UserName}-metals-ui"
+$tutorialsAppName = "expeditors-${UserName}-metals-tutorials"
 if (-not $RegistryName) {
     $RegistryName = "expeditors$($UserName.Replace('-', ''))metalsacr"
 }
@@ -52,7 +53,8 @@ $registry = Invoke-Az acr show --name $RegistryName --resource-group $resourceGr
 
 $apps = @(
     @{ Name = $appName; Image = 'metals-api'; Context = $projectRoot; DockerfilePath = 'metals_api/Dockerfile' },
-    @{ Name = $uiAppName; Image = 'metals-ui'; Context = (Join-Path $projectRoot 'metals_ui'); DockerfilePath = 'Dockerfile' }
+    @{ Name = $uiAppName; Image = 'metals-ui'; Context = (Join-Path $projectRoot 'metals_ui'); DockerfilePath = 'Dockerfile' },
+    @{ Name = $tutorialsAppName; Image = 'metals-tutorials'; Context = (Join-Path $projectRoot 'tutorials'); DockerfilePath = 'Dockerfile' }
 )
 
 if (-not $SkipBuild) {
@@ -87,7 +89,7 @@ foreach ($webApp in $apps) {
     Invoke-Az webapp restart --name $name --resource-group $resourceGroup --output none
 }
 
-Write-Host 'Waiting for both Web Apps to report healthy...'
+Write-Host 'Waiting for every Web App to report healthy...'
 foreach ($webApp in $apps) {
     $name = $webApp.Name
     $hostName = Invoke-Az webapp show --name $name --resource-group $resourceGroup --query defaultHostName --output tsv
@@ -108,11 +110,12 @@ foreach ($webApp in $apps) {
 }
 
 if ($FollowLogs) {
-    Write-Host "Streaming logs for $appName. Press Ctrl+C to stop, then rerun with -UserName $UserName to follow $uiAppName separately."
+    Write-Host "Streaming logs for $appName. Press Ctrl+C to stop; use the commands below to follow the other apps."
     Invoke-Az webapp log config --name $appName --resource-group $resourceGroup --docker-container-logging filesystem --output none
     Invoke-Az webapp log tail --name $appName --resource-group $resourceGroup
 }
 else {
     Write-Host "To stream logs: az webapp log tail --resource-group $resourceGroup --name $appName"
     Write-Host "           or: az webapp log tail --resource-group $resourceGroup --name $uiAppName"
+    Write-Host "           or: az webapp log tail --resource-group $resourceGroup --name $tutorialsAppName"
 }

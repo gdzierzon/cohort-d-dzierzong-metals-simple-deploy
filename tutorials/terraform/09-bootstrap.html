@@ -97,7 +97,7 @@
           <p class="desc">
             The identity created here needs subscription-level permissions, because it has to be
             able to create and destroy the application's entire resource group. That's
-            meaningfully broader than the narrow, single-web-app permission granted in
+            meaningfully broader than the narrowly-scoped, per-resource permissions granted in
             <a href="07-github-oidc.html">github_oidc.tf</a>. Keeping that broader-privilege setup
             in a separate, manually-run configuration &mdash; rather than something any application
             code change could trigger &mdash; is a deliberate safety boundary.
@@ -219,7 +219,7 @@ resource "azurerm_role_assignment" "deployment_roles" {
       (!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}))
       OR
       (
-        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}
+        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, b24988ac-6180-42a0-ab88-20f7382dd24c}
         AND @Request[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
       )
     )
@@ -228,7 +228,7 @@ resource "azurerm_role_assignment" "deployment_roles" {
       (!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}))
       OR
       (
-        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772}
+        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, b24988ac-6180-42a0-ab88-20f7382dd24c}
         AND @Resource[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
       )
     )
@@ -367,12 +367,27 @@ output "github_variables" {
             to do in practice.
           </p>
           <p class="note">
-            In plain terms, the condition says: this identity may only assign or remove <b>one
-            specific role</b> (the GUID <span class="mono">de139f84-...</span>, which is
-            <span class="mono">Website Contributor</span>) and only when the recipient is a
-            <span class="mono">ServicePrincipal</span> &mdash; never a role that grants broader
-            access, and never assigned to a human account. It cannot use this permission to make
-            itself, or anything else, an Owner or Contributor.
+            In plain terms, the condition says: this identity may only assign or remove <b>two
+            specific roles</b> &mdash; <span class="mono">de139f84-...</span>
+            (<span class="mono">Website Contributor</span>) and
+            <span class="mono">b24988ac-...</span> (<span class="mono">Contributor</span>) &mdash; and
+            only when the recipient is a <span class="mono">ServicePrincipal</span>, never a human
+            account. It cannot use this permission to make itself, or anything else, an Owner.
+          </p>
+          <p class="warn">
+            <span class="mono">Contributor</span> was added to the allow-list because
+            <a href="07-github-oidc.html">github_oidc.tf</a> needs to grant it on the container
+            registry for <span class="mono">az acr build</span> to work. Be clear-eyed about the
+            trade-off: the condition constrains <i>which role</i> may be granted, not <i>at what
+            scope</i>, and this assignment is held at subscription level &mdash; so the Terraform
+            identity could grant <span class="mono">Contributor</span> to a service principal
+            anywhere in the subscription. Acceptable for a teaching subscription; a production setup
+            would constrain the scope too.
+          </p>
+          <p class="note">
+            Changing this condition requires applying the bootstrap module <b>locally</b> with an
+            elevated account. The CI pipeline deliberately cannot edit its own guardrail &mdash;
+            which is much of the point of keeping bootstrap in separate state.
           </p>
         </div>
         <div class="qcard">

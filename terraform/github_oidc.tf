@@ -26,6 +26,13 @@ resource "azurerm_role_assignment" "github_deployment_ui" {
   principal_type       = "ServicePrincipal"
 }
 
+resource "azurerm_role_assignment" "github_deployment_tutorials" {
+  scope                = azurerm_linux_web_app.tutorials.id
+  role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
 # Lets the deployment workflow build/push images with az acr build, matching
 # az_deploy.ps1/.sh. AcrPush (data-plane push/pull) and Reader (control-plane
 # "registries/read") both turned out insufficient: az acr build also needs

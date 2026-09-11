@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running the Whole Stack</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; Running the Whole Stack</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 6 of 6</p>
+        <h1>docker-compose.yml, Four Services in One Command</h1>
+        <p class="lede">
+          Running this project used to mean three terminals: a database container, a Python process,
+          and a static file server. <span class="mono">docker-compose.yml</span> replaces all of
+          that with <span class="mono">docker compose up</span>. It builds the images, starts
+          PostgreSQL alongside them, puts them all on a private network where they can find each
+          other by name, and &mdash; the part worth studying &mdash; starts them in the right order
+          by waiting for each to report <i>healthy</i>, not merely <i>started</i>.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Services &rarr; <b>tutorials, ui, api, db</b></span>
+      <span class="fact">Start &rarr; <b>docker compose up -d --build</b></span>
+      <span class="fact">UI at &rarr; <b>localhost:8888</b></span>
+      <span class="fact">Tutorials at &rarr; <b>localhost:8890</b></span>
+      <span class="fact">API at &rarr; <b>localhost:5000</b></span>
+      <span class="fact">Requires &rarr; <b>JWT_SECRET_KEY in .env</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#what">What Compose adds</a></li>
+      <li><a href="#full-file">The whole file</a></li>
+      <li><a href="#services">Service by service</a></li>
+      <li><a href="#ordering">Start order and health gates</a></li>
+      <li><a href="#env">The .env file it expects</a></li>
+      <li><a href="#running">Day-to-day commands</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="what">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Get the entire application running locally with one command, and understand how the containers find each other, when each one starts, and where their configuration comes from.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one file, four containers</figcaption>
+        </figure>
+      </div>
+      <h2>What Compose adds <span class="tag">beyond docker run</span></h2>
+      <p class="dek">
+        Everything here <i>could</i> be done with four long <span class="mono">docker run</span>
+        commands and a hand-created network. Compose turns that into a checked-in file, which means
+        the setup is identical for everyone and reviewable in a pull request.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">A private network with DNS</span><span class="qnum">the big one</span></div>
+          <p class="desc">
+            Compose creates a network for the project and puts every container on it. Each
+            service name becomes a hostname: the API reaches the database at
+            <span class="mono">db</span>, and Nginx reaches the API at
+            <span class="mono">api</span>. No IP addresses, no discovery mechanism &mdash; the
+            service key in the YAML <i>is</i> the DNS name.
+          </p>
+          <p class="note">
+            That name resolution is provided by Docker's embedded DNS at
+            <span class="mono">127.0.0.11</span> &mdash; the address the UI's Nginx config points its
+            <a href="05-ui-image.html#resolver">resolver</a> at.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Build and run in one step</span><span class="qnum">no separate docker build</span></div>
+          <p class="desc">
+            Services with a <span class="mono">build:</span> key are built from source when missing
+            (or when <span class="mono">--build</span> is passed) and run immediately. That's why
+            there's no step in this project's local setup that says &ldquo;first build the
+            images.&rdquo;
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="full-file">
+      <h2>The whole file <span class="tag">all four services</span></h2>
+      <pre class="code"><span class="filename">docker-compose.yml</span>services:
+  # The tutorial site. Independent of the application: no database, no API, so
+  # it has no depends_on and starts immediately.
+  tutorials:
+    build: ./tutorials
+    image: metals-tutorials:local
+    restart: unless-stopped
+    ports:
+      - "${TUTORIALS_PORT:-8890}:8080"
+
+  ui:
+    build: ./metals_ui
+    image: metals-ui:local
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8888}:8080"
+    environment:
+      API_UPSTREAM: http://api:5000
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: metals_api/Dockerfile
+    image: metals-api:local
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-5000}:5000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: metals
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env before starting the API}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metals
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_metals:/var/lib/postgresql/data
+      - ./sql/metals-db.sql:/docker-entrypoint-initdb.d/metals-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d metals"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata_metals:</pre>
+    </section>
+
+    <section class="block" id="services">
+      <h2>Service by service <span class="tag">what each key does</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">ui</span><span class="qnum">built from metals_ui/</span></div>
+          <p class="desc">
+            <span class="mono">build: ./metals_ui</span> is the short form &mdash; that folder is
+            both the context and where the <span class="mono">Dockerfile</span> is found.
+            <span class="mono">image: metals-ui:local</span> names the result, so the built image is
+            tagged rather than left dangling. The
+            <span class="mono">API_UPSTREAM: http://api:5000</span> entry is what makes the Nginx
+            proxy point at the sibling container &mdash; the same value the image already defaults
+            to, stated explicitly here so the wiring is visible in one place.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">api</span><span class="qnum">built from the repo root</span></div>
+          <p class="desc">
+            The long form of <span class="mono">build:</span>, because context and Dockerfile
+            differ: the context is <span class="mono">.</span> (the repo root, so
+            <span class="mono">requirements.txt</span> is reachable) while the file is
+            <span class="mono">metals_api/Dockerfile</span>. That's the same split explained on
+            <a href="04-api-image.html#deps">the API image page</a>, expressed in YAML.
+          </p>
+          <p class="note">
+            Its database settings point at <span class="mono">DB_HOST: db</span> &mdash; the service
+            name, not <span class="mono">localhost</span>. Inside a container,
+            <span class="mono">localhost</span> means <i>that container</i>, which is one of the
+            most common first-time mistakes.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">db</span><span class="qnum">official image, unmodified</span></div>
+          <p class="desc">
+            No <span class="mono">build:</span> key &mdash; PostgreSQL is pulled straight from
+            Docker Hub and configured entirely through environment variables and mounts. Its two
+            volumes do very different jobs: the named
+            <span class="mono">pgdata_metals</span> volume persists the data, while the read-only
+            bind mount drops <span class="mono">sql/metals-db.sql</span> into the image's
+            auto-initialization folder so the schema loads on first start.
+          </p>
+          <p class="note">
+            The seed data, the reset procedure, and the two development login accounts are covered
+            in the <a href="../database/02-docker-compose.html">database tutorial</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">tutorials</span><span class="qnum">the odd one out</span></div>
+          <p class="desc">
+            The tutorial site you're reading, built from <span class="mono">./tutorials</span>. It's
+            the only service with <b>no <span class="mono">depends_on</span></b> &mdash; it reads no
+            database and calls no API, so there's nothing for it to wait for and it starts
+            immediately alongside the database.
+          </p>
+          <p class="note">
+            It's included here purely for convenience: one command brings up the application
+            <i>and</i> its documentation. Nothing in the application depends on it, and removing the
+            service would change nothing else.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">restart: unless-stopped</span><span class="qnum">on every service</span></div>
+          <p class="desc">
+            Restarts a container automatically if it crashes or if Docker itself restarts &mdash;
+            but not if you deliberately stopped it. It's the sensible default for a development
+            stack: survive a laptop reboot, respect an explicit
+            <span class="mono">docker compose stop</span>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="ordering">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Start order and health gates <span class="tag">the part worth studying</span></h2>
+          <p class="dek">
+            <span class="mono">depends_on</span> on its own only controls the order containers are
+            <i>started</i> in &mdash; and a started PostgreSQL is not the same as one accepting
+            connections. Adding <span class="mono">condition: service_healthy</span> changes the
+            promise from &ldquo;it has been launched&rdquo; to &ldquo;it has passed its health
+            check.&rdquo;
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>db, then api, then ui</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The chain</span><span class="qnum">db &rarr; api &rarr; ui</span></div>
+          <ol class="steps">
+            <li><b>db</b> starts and runs <span class="mono">pg_isready -U postgres -d metals</span> every five seconds. Until that succeeds, nothing else is allowed to start.</li>
+            <li><b>api</b> starts once the database is healthy, so its first connection attempt can't fail on a database that's still initializing.</li>
+            <li><b>ui</b> waits for the API to be healthy &mdash; using the <span class="mono">HEALTHCHECK</span> baked into <a href="04-api-image.html#startup">the API's own Dockerfile</a>, since the compose file defines none for that service.</li>
+          </ol>
+          <p class="note">
+            That last point is the neat part: a health check defined in a Dockerfile and a
+            dependency gate defined in Compose are the same mechanism, meeting in the middle.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">start_period: 10s</span><span class="qnum">grace, not tolerance</span></div>
+          <p class="desc">
+            During the first ten seconds, failures don't count against
+            <span class="mono">retries</span> &mdash; PostgreSQL is expected to be unavailable while
+            it initializes. Without a grace window, a slow first start (which is exactly what
+            happens the very first time, when the whole schema is loaded) could exhaust the retries
+            and mark the container unhealthy before it ever had a chance.
+          </p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        You can watch the gates work: run <span class="mono">docker compose up</span> without
+        <span class="mono">-d</span> and the terminal shows <span class="mono">db</span> reaching
+        health before <span class="mono">api</span> is created, and <span class="mono">api</span>
+        reaching health before <span class="mono">ui</span> appears.
+      </p>
+    </section>
+
+    <section class="block" id="env">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The .env file it expects <span class="tag">required before first run</span></h2>
+          <p class="dek">
+            Compose automatically reads a file named <span class="mono">.env</span> next to
+            <span class="mono">docker-compose.yml</span> and uses it to fill the
+            <span class="mono">${&hellip;}</span> placeholders in the YAML. This project uses three
+            of them, with three different behaviors.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>one required, two optional</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:15rem;">Placeholder</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>${JWT_SECRET_KEY:?...}</code></td><td><b>Required.</b> The <span class="mono">:?</span> form makes Compose <i>refuse to start</i> and print the message after the <span class="mono">?</span> if the variable is missing or empty &mdash; far better than an API that starts and then can't issue tokens.</td></tr>
+            <tr><td><code>${UI_PORT:-8888}</code></td><td>Optional with a default. Publishes the UI on 8888 unless you set <span class="mono">UI_PORT</span> to something else &mdash; useful when that port is taken.</td></tr>
+            <tr><td><code>${TUTORIALS_PORT:-8890}</code></td><td>Same pattern for the tutorial site.</td></tr>
+            <tr><td><code>${API_PORT:-5000}</code></td><td>Same pattern for the API's published port.</td></tr>
+            <tr><td><code>${JWT_EXPIRATION_MINUTES:-60}</code></td><td>Same pattern; tokens last an hour unless overridden.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Minimum viable <span class="mono">.env</span>: a single line setting
+        <span class="mono">JWT_SECRET_KEY</span> to any long random string. Copy
+        <span class="mono">.env.example</span> and fill it in. Note the database credentials are
+        <i>not</i> read from <span class="mono">.env</span> here &mdash; they're written literally
+        into the compose file, so the API and PostgreSQL containers can't disagree about them.
+      </p>
+    </section>
+
+    <section class="block" id="running">
+      <h2>Day-to-day commands <span class="tag">from the project root</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:19rem;">Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>docker compose up -d --build</code></td><td>The one to use. Builds every image, starts all four services in dependency order, returns your prompt.</td></tr>
+            <tr><td><code>docker compose ps</code></td><td>Shows all three with their health status &mdash; the fastest way to see which piece isn't up.</td></tr>
+            <tr><td><code>docker compose logs -f api</code></td><td>Follows one service. Swap in <span class="mono">ui</span> or <span class="mono">db</span>, or omit the name for everything at once.</td></tr>
+            <tr><td><code>docker compose up -d --build ui</code></td><td>Rebuilds and restarts just the UI &mdash; enough after editing anything under <span class="mono">metals_ui/</span>.</td></tr>
+            <tr><td><code>docker compose down</code></td><td>Stops and removes all three containers and the network. The database volume survives.</td></tr>
+            <tr><td><code>docker compose down -v</code></td><td>Also deletes the volume &mdash; a full database reset. <b>All local data is lost.</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Once everything is healthy, open <span class="mono">http://localhost:8888</span> and sign in
+        with <span class="mono">admin</span> / <span class="mono">password</span>. These tutorials are
+        at <span class="mono">http://localhost:8890</span>. The API is also
+        directly reachable at <span class="mono">http://localhost:5000</span> if you want to call it
+        with <span class="mono">curl</span> or Postman &mdash; though the UI itself always goes
+        through the proxy at <span class="mono">/api</span>.
+      </p>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">Set JWT_SECRET_KEY in .env before starting the API</span></td><td>Working as designed &mdash; the required variable is missing.</td><td>Create <span class="mono">.env</span> with <span class="mono">JWT_SECRET_KEY=&lt;any long random string&gt;</span>.</td></tr>
+            <tr><td>Ports 5432, 5000, or 8888 already allocated</td><td>A local PostgreSQL install, a previously started container, or another project holds the port.</td><td>Stop the other process, or set <span class="mono">UI_PORT</span> / <span class="mono">API_PORT</span> in <span class="mono">.env</span>. For 5432, edit the mapping in the compose file.</td></tr>
+            <tr><td><span class="mono">dependency failed to start: container ... is unhealthy</span></td><td>A service never passed its health check, so everything downstream was cancelled.</td><td>Read that service's logs directly: <span class="mono">docker compose logs db</span> (or <span class="mono">api</span>).</td></tr>
+            <tr><td><span class="mono">relation "users" does not exist</span></td><td>An old volume from before a schema change; the init script only runs on an empty data directory.</td><td><span class="mono">docker compose down -v</span> then <span class="mono">up -d --build</span> &mdash; see <a href="../database/02-docker-compose.html#reset">the database reset steps</a>.</td></tr>
+            <tr><td>Code changes have no effect</td><td>Compose reused the existing image.</td><td>Add <span class="mono">--build</span>. Files are copied in at build time, not mounted from your working tree.</td></tr>
+            <tr><td>UI loads but shows errors for every request</td><td>The API is running but unhealthy, or the proxy can't reach it.</td><td><span class="mono">docker compose ps</span> to check the API's health, then <span class="mono">docker compose logs api</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="05-ui-image.html"><span class="pn-label">&larr; Back</span>The UI image</a>
+      <a class="next" href="../deployment/index.html"><span class="pn-label">Finish &rarr;</span>Deploying to Azure</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The whole stack runs locally &mdash; next, see how these same images get to Azure in the <a href="../deployment/index.html">Deployment tutorial</a>.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">docker-compose.yml</span> and <span class="mono">.env.example</span> at the root of this repository.
+</footer>
+
+</body>
+</html>

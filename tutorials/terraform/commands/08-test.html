@@ -75,6 +75,12 @@ mock_provider "azurerm" {
       fqdn = "test-pg.postgres.database.azure.com"
     }
   }
+  mock_resource "azurerm_container_registry" {
+    defaults = {
+      id           = "/subscriptions/.../registries/test-acr"
+      login_server = "testacr.azurecr.io"
+    }
+  }
   # ...more mocked resource types
 }</pre>
           <p class="desc">
@@ -140,18 +146,24 @@ terraform -chdir=terraform/bootstrap test</pre>
     error_message = "Database sizing and version must match the PowerShell demo."
   }
   assert {
-    condition     = strcontains(azurerm_linux_web_app.metals.app_settings["DB_URL"], "Test%20%40Password%2B123@")
-    error_message = "Database URL must percent-encode spaces, @, and + in the password."
+    condition     = azurerm_linux_web_app.api.site_config[0].application_stack[0].docker_image_name == "metals-api:latest"
+      && azurerm_linux_web_app.api.app_settings["WEBSITES_PORT"] == "5000"
+    error_message = "The API app must run the metals-api container on port 5000."
   }
-  # ...more assertions, covering the firewall rule, OIDC subject, and role assignment
+  assert {
+    condition     = azurerm_linux_web_app.ui.app_settings["API_UPSTREAM"] == "https://${azurerm_linux_web_app.api.default_hostname}"
+    error_message = "The UI app must proxy to the API app's actual hostname."
+  }
+  # ...more assertions, covering the firewall rule, OIDC subject, and role assignments
 }</pre>
           <p class="desc">
             These assertions catch exactly the kind of mistake that's easy to introduce while
             editing <a href="../05-database.html">database.tf</a>,
             <a href="../06-app-service.html">app_service.tf</a>, or
-            <a href="../07-github-oidc.html">github_oidc.tf</a> &mdash; for example, the URL-encoding
-            logic covered on the <a href="../06-app-service.html">app_service.tf page</a> failing
-            silently for a password containing spaces or symbols.
+            <a href="../07-github-oidc.html">github_oidc.tf</a> &mdash; a web app pointed at the
+            wrong image or port, or the UI's <span class="mono">API_UPSTREAM</span> hardcoded to a
+            hostname instead of referencing the API resource. Both are silent in a plan and obvious
+            in a test.
           </p>
         </div>
         <div class="qcard">

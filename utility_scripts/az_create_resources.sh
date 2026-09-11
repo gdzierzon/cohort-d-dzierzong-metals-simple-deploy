@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Creates PostgreSQL, a container registry, and API/UI container Web Apps.
+# Creates PostgreSQL, a container registry, and the API, UI, and tutorials
+# container Web Apps.
 # Requires Azure CLI (az login), permission to assign AcrPull roles, and psql
 # or Python with psycopg. Creates infrastructure only; images must subsequently
-# be built and pushed as metals-api:<image-tag> and metals-ui:<image-tag>
-# (see az_deploy.sh). Existing database tables are preserved. Use
-# --skip-provisioning to resume after the resource group, database server,
-# and database have already been created.
+# be built and pushed as metals-api, metals-ui, and metals-tutorials, each
+# tagged <image-tag> (see az_deploy.sh). Existing database tables are
+# preserved. Use --skip-provisioning to resume after the resource group,
+# database server, and database have already been created.
 set -euo pipefail
 
 usage() {
@@ -16,7 +17,7 @@ Options:
   --user-name NAME          Resource-name suffix (default: dzierzon).
   --location LOCATION       Azure region (default: westus2).
   --registry-name NAME      Override the generated registry name.
-  --image-tag TAG           Expected tag for both images (default: latest).
+  --image-tag TAG           Expected tag for every image (default: latest).
   --database-password PASS  PostgreSQL admin password. Prompted if omitted.
                              Use the EXISTING password when resuming.
   --psql-path PATH          Full path to a psql executable.
@@ -97,6 +98,7 @@ db_server="expeditors-${user_name}-metals-pg"
 app_name="expeditors-${user_name}-metals-api"
 plan_name="expeditors-${user_name}-metals-appservice-plan"
 ui_app_name="expeditors-${user_name}-metals-ui"
+tutorials_app_name="expeditors-${user_name}-metals-tutorials"
 if [[ -z "$registry_name" ]]; then
     registry_name="expeditors${user_name//-/}metalsacr"
 fi
@@ -218,9 +220,9 @@ registry_id=${registry_id//$'\r'/}
 az appservice plan create --name "$plan_name" --resource-group "$resource_group" \
     --sku B1 --is-linux --location "$location" --output none
 
-app_names=("$app_name" "$ui_app_name")
-app_images=('metals-api' 'metals-ui')
-app_ports=('5000' '8080')
+app_names=("$app_name" "$ui_app_name" "$tutorials_app_name")
+app_images=('metals-api' 'metals-ui' 'metals-tutorials')
+app_ports=('5000' '8080' '8080')
 
 existing_apps=$(az webapp list --resource-group "$resource_group" --query '[].name' --output tsv)
 for i in "${!app_names[@]}"; do
@@ -285,15 +287,21 @@ api_host=$(az webapp show --name "$app_name" --resource-group "$resource_group" 
 api_host=${api_host//$'\r'/}
 ui_host=$(az webapp show --name "$ui_app_name" --resource-group "$resource_group" --query defaultHostName --output tsv)
 ui_host=${ui_host//$'\r'/}
+tutorials_host=$(az webapp show --name "$tutorials_app_name" --resource-group "$resource_group" --query defaultHostName --output tsv)
+tutorials_host=${tutorials_host//$'\r'/}
 az webapp config appsettings set --resource-group "$resource_group" --name "$ui_app_name" \
     --settings "API_UPSTREAM=https://${api_host}" \
                'NGINX_RESOLVER=168.63.129.16' \
     --output none
+# The tutorial site is fully static and needs no settings beyond the container
+# defaults applied in the loop above.
 
 printf 'Resource group: %s\n' "$resource_group"
 printf 'Container registry: %s\n' "$registry_login_server"
 printf 'API image: %s/metals-api:%s\n' "$registry_login_server" "$image_tag"
 printf 'UI image: %s/metals-ui:%s\n' "$registry_login_server" "$image_tag"
+printf 'Tutorials image: %s/metals-tutorials:%s\n' "$registry_login_server" "$image_tag"
 printf 'API URL: https://%s\n' "$api_host"
 printf 'UI URL: https://%s\n' "$ui_host"
-printf 'Infrastructure configured. Build and push both images (see az_deploy.sh), then restart the Web Apps.\n'
+printf 'Tutorials URL: https://%s\n' "$tutorials_host"
+printf 'Infrastructure configured. Build and push the images (see az_deploy.sh), then restart the Web Apps.\n'

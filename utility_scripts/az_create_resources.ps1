@@ -1,14 +1,14 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-Creates PostgreSQL, a container registry, and API/UI container Web Apps.
+Creates PostgreSQL, a container registry, and the API, UI, and tutorials container Web Apps.
 .DESCRIPTION
 Requires Azure CLI (az login), permission to assign AcrPull roles, and psql
 or Python with psycopg. Creates infrastructure only; images must subsequently
-be built and pushed as metals-api:<ImageTag> and metals-ui:<ImageTag>.
-Existing database tables are preserved. Use -SkipProvisioning to resume after
-the resource group, database server, and database have already been created.
-The existing az_deploy.ps1 ZIP deployment must be updated before using it.
+be built and pushed as metals-api, metals-ui, and metals-tutorials, each tagged
+<ImageTag> (see az_deploy.ps1). Existing database tables are preserved. Use
+-SkipProvisioning to resume after the resource group, database server, and
+database have already been created.
 .EXAMPLE
 .\utility_scripts\az_create_resources.ps1 -UserName dzierzon
 .EXAMPLE
@@ -88,6 +88,7 @@ $dbServer = "expeditors-${UserName}-metals-pg"
 $appName = "expeditors-${UserName}-metals-api"
 $planName = "expeditors-${UserName}-metals-appservice-plan"
 $uiAppName = "expeditors-${UserName}-metals-ui"
+$tutorialsAppName = "expeditors-${UserName}-metals-tutorials"
 if (-not $RegistryName) {
     $RegistryName = "expeditors$($UserName.Replace('-', ''))metalsacr"
 }
@@ -243,7 +244,8 @@ function Set-WebAppSettings {
 
 foreach ($webApp in @(
     @{ Name = $appName; Image = 'metals-api'; Port = '5000' },
-    @{ Name = $uiAppName; Image = 'metals-ui'; Port = '8080' }
+    @{ Name = $uiAppName; Image = 'metals-ui'; Port = '8080' },
+    @{ Name = $tutorialsAppName; Image = 'metals-tutorials'; Port = '8080' }
 )) {
     $name = $webApp.Name
     $image = "$($registry.loginServer)/$($webApp.Image):$ImageTag"
@@ -318,18 +320,23 @@ finally { Remove-Variable dbPassword, jwtSecret -ErrorAction SilentlyContinue }
 # Use Azure's actual hostname (which may include a region/unique suffix).
 $apiHost = Invoke-Az webapp show --name $appName --resource-group $resourceGroup --query defaultHostName --output tsv
 $uiHost = Invoke-Az webapp show --name $uiAppName --resource-group $resourceGroup --query defaultHostName --output tsv
+$tutorialsHost = Invoke-Az webapp show --name $tutorialsAppName --resource-group $resourceGroup --query defaultHostName --output tsv
 Set-WebAppSettings -Name $uiAppName -Settings @{
     API_UPSTREAM = "https://$apiHost"
     # Docker's embedded DNS (127.0.0.11, the image default) does not exist on
     # Azure Web Apps; 168.63.129.16 is Azure's platform DNS address instead.
     NGINX_RESOLVER = '168.63.129.16'
 }
+# The tutorial site is fully static and needs no settings beyond the container
+# defaults applied in the loop above.
 
 Write-Host "Resource group: $resourceGroup"
 Write-Host "Container registry: $($registry.loginServer)"
 Write-Host "API image: $($registry.loginServer)/metals-api:$ImageTag"
 Write-Host "UI image: $($registry.loginServer)/metals-ui:$ImageTag"
+Write-Host "Tutorials image: $($registry.loginServer)/metals-tutorials:$ImageTag"
 Write-Host "API URL: https://$apiHost"
 Write-Host "UI URL: https://$uiHost"
-Write-Host 'Infrastructure configured. Build and push both images, then restart the Web Apps.'
-Write-Host 'The current az_deploy.ps1 still uses ZIP deployment; update it before deploying containers.'
+Write-Host "Tutorials URL: https://$tutorialsHost"
+Write-Host 'Infrastructure configured. Build and push the images, then restart the Web Apps.'
+Write-Host 'Run az_deploy.ps1 to build and deploy all three images.'

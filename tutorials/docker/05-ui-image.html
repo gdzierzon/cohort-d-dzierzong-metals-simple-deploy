@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The UI Image</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; The UI Image</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 5 of 6</p>
+        <h1>metals_ui/Dockerfile and the Nginx Proxy</h1>
+        <p class="lede">
+          The UI has no runtime to install &mdash; it's plain HTML, CSS, and JavaScript. What it
+          needs is a web server, and this image gets one by inheriting almost everything from
+          Nginx's own hardened base. The interesting part is what it adds: a config
+          <i>template</i> that lets one built image point at a different API in every environment,
+          and a reverse proxy that makes the API look like it lives at the same address as the UI.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Image name &rarr; <b>metals-ui</b></span>
+      <span class="fact">Base &rarr; <b>nginx-unprivileged:stable-alpine</b></span>
+      <span class="fact">Port &rarr; <b>8080</b></span>
+      <span class="fact">Proxies &rarr; <b>/api/ &rarr; API_UPSTREAM</b></span>
+      <span class="fact">Build context &rarr; <b>metals_ui/</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#full-file">The whole file</a></li>
+      <li><a href="#base">Why this base image</a></li>
+      <li><a href="#template">The config template trick</a></li>
+      <li><a href="#proxy">One origin, two services</a></li>
+      <li><a href="#resolver">The resolver that bit us</a></li>
+      <li><a href="#build">Building and running it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="full-file">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Understand how a static site becomes a container that serves itself and forwards API calls &mdash; and how one image is retargeted between local Docker and Azure without rebuilding.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>mostly inherited</figcaption>
+        </figure>
+      </div>
+      <h2>The whole file <span class="tag">start here</span></h2>
+      <pre class="code"><span class="filename">metals_ui/Dockerfile</span>FROM nginxinc/nginx-unprivileged:stable-alpine
+
+# The base image substitutes these variables into the Nginx template at startup.
+ENV API_UPSTREAM=http://api:5000
+# Docker's embedded DNS. Azure Web Apps must override this to 168.63.129.16.
+ENV NGINX_RESOLVER=127.0.0.11
+
+COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
+COPY index.html /usr/share/nginx/html/index.html
+COPY css/ /usr/share/nginx/html/css/
+COPY js/ /usr/share/nginx/html/js/
+COPY assets/ /usr/share/nginx/html/assets/
+COPY docker/runtime-config.js /usr/share/nginx/html/runtime-config.js
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+
+# Use the base image's entrypoint and foreground Nginx command.</pre>
+      <p class="bonus-banner">
+        Notice what <i>isn't</i> here: no <span class="mono">RUN</span>, no
+        <span class="mono">USER</span>, and no <span class="mono">CMD</span>. Nothing needs
+        installing, the base image already runs unprivileged, and its existing startup command is
+        exactly what we want. The entire file is &ldquo;copy files into the right folders and set two
+        defaults.&rdquo;
+      </p>
+    </section>
+
+    <section class="block" id="base">
+      <h2>Why this base image <span class="tag">nginx-unprivileged</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Not the plain nginx image</span><span class="qnum">a security choice</span></div>
+          <p class="desc">
+            The standard <span class="mono">nginx</span> image starts as
+            <span class="mono">root</span> so it can bind port 80, then drops privileges for its
+            worker processes. <span class="mono">nginx-unprivileged</span> is the same Nginx
+            repackaged to run entirely as a non-root user, which is why it listens on
+            <b>8080</b> &mdash; ports below 1024 require privileges this container doesn't have.
+          </p>
+          <p class="note">
+            That's the whole reason the UI's port is 8080 rather than 80. It isn't arbitrary; it's
+            the consequence of not running as root.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">stable-alpine</span><span class="qnum">the smallest sensible option</span></div>
+          <p class="desc">
+            <span class="mono">stable</span> is Nginx's conservative release line, and
+            <span class="mono">alpine</span> is the tiny Alpine Linux base. The
+            <span class="mono">musl</span>-vs-<span class="mono">glibc</span> concern that pushed the
+            API toward <span class="mono">-slim</span> doesn't apply here &mdash; nothing in this
+            image compiles &mdash; so the smallest variant is a free win.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What the COPY lines land on</span><span class="qnum">two destinations</span></div>
+          <p class="desc">
+            <span class="mono">/usr/share/nginx/html/</span> is the document root the inherited
+            config serves from, so the UI's <span class="mono">index.html</span>,
+            <span class="mono">css/</span>, <span class="mono">js/</span>, and
+            <span class="mono">assets/</span> go there.
+            <span class="mono">/etc/nginx/templates/</span> is the special folder covered next.
+          </p>
+          <p class="note">
+            Because the build context is <span class="mono">metals_ui/</span> itself, all these
+            source paths are relative to that folder &mdash; hence
+            <span class="mono">docker build -t metals-ui:local metals_ui</span> with no
+            <span class="mono">-f</span> needed.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="template">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The config template trick <span class="tag">the clever bit</span></h2>
+          <p class="dek">
+            An image is immutable, but the API's address isn't: locally it's another container named
+            <span class="mono">api</span>, in Azure it's an
+            <span class="mono">https://&hellip;.azurewebsites.net</span> hostname. Rather than build
+            two images, this one ships a config <i>template</i> and fills in the blanks at startup.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>one image, many environments</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">How /etc/nginx/templates works</span><span class="qnum">inherited behavior</span></div>
+          <p class="desc">
+            The official Nginx images ship an entrypoint script that, on every container start,
+            looks in <span class="mono">/etc/nginx/templates/</span> for
+            <span class="mono">*.template</span> files, runs
+            <span class="mono">envsubst</span> over each one to replace
+            <span class="mono">${VARIABLE}</span> references with real environment values, and writes
+            the result into <span class="mono">/etc/nginx/conf.d/</span> before starting Nginx. We
+            get that for free by not overriding the entrypoint.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The two variables it substitutes</span><span class="qnum">with defaults in the image</span></div>
+          <p class="desc">
+            <span class="mono">API_UPSTREAM</span> and <span class="mono">NGINX_RESOLVER</span> are
+            declared with <span class="mono">ENV</span> so the image works out of the box under
+            Compose. Both are plain defaults &mdash; Compose overrides the first, and Azure
+            overrides both, as covered on the
+            <a href="../deployment/index.html">Deployment</a> pages.
+          </p>
+        </div>
+      </div>
+      <p class="dek">
+        Here's the template itself, which is the real configuration for the whole UI container:
+      </p>
+      <pre class="code"><span class="filename">metals_ui/docker/default.conf.template</span>server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Resolve the API upstream at request time so a recreated container (local
+    # Docker) or a new App Service instance (Azure) is picked up without a
+    # config reload. 127.0.0.11 is Docker's embedded DNS; Azure Web Apps have
+    # no such address and must override NGINX_RESOLVER to 168.63.129.16.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+    set $api_upstream "${API_UPSTREAM}";
+
+    location /api/ {
+        proxy_pass $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+    }
+
+    location = /health {
+        access_log off;
+        default_type application/json;
+        return 200 '{"status":"ok"}';
+    }
+
+    location / {
+        # Hash routing requires no server-side fallback. Missing assets are 404s.
+        try_files $uri $uri/ =404;
+        add_header Cache-Control "no-cache";
+    }
+}</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">location = /health</span><span class="qnum">answered by Nginx itself</span></div>
+          <p class="desc">
+            The UI's health endpoint is a hardcoded 200 response &mdash; no file, no application
+            code. It reports &ldquo;this web server is up,&rdquo; which is exactly the right
+            question for a container health check and for Azure's health probe. It deliberately says
+            nothing about whether the API behind it is reachable.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">try_files $uri $uri/ =404</span><span class="qnum">hash routing needs no fallback</span></div>
+          <p class="desc">
+            Single-page apps using <i>path</i> routing need every unknown URL rewritten to
+            <span class="mono">index.html</span>. This UI routes with the URL
+            <i>hash</i> (<span class="mono">#/elements</span>), which the browser never sends to the
+            server &mdash; so every real request is for a file that exists, and a genuine missing
+            asset should honestly return 404 rather than silently serving the homepage.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="proxy">
+      <h2>One origin, two services <span class="tag">why proxy at all</span></h2>
+      <p class="dek">
+        The UI could call the API directly at its own address. Proxying instead means the browser
+        only ever talks to one origin, which removes a whole class of problems.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What the browser sees</span><span class="qnum">same-origin requests</span></div>
+          <p class="desc">
+            The page is served from <span class="mono">http://localhost:8888</span> and its API
+            calls go to <span class="mono">http://localhost:8888/api/&hellip;</span>. Same protocol,
+            host, and port &mdash; so they're same-origin, and the browser's cross-origin rules
+            (CORS preflights, blocked responses) never come into play. Nginx is the one that reaches
+            across to the API, server-to-server, where those rules don't apply.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">runtime-config.js</span><span class="qnum">how the JS knows</span></div>
+          <p class="desc">
+            The image overwrites the UI's config file with a container-specific version whose API
+            base URL is simply <span class="mono">/api</span> &mdash; a relative path, so it resolves
+            against whatever host the page was loaded from:
+          </p>
+          <pre class="code"><span class="filename">metals_ui/docker/runtime-config.js</span>// The container serves the UI and proxies API requests on the same origin.
+globalThis.METALS_ATLAS_CONFIG = {
+  apiBaseUrl: "/api",
+};</pre>
+          <p class="note">
+            This is why the JavaScript needs no knowledge of environments. Local or Azure, the
+            answer is always <span class="mono">/api</span>; only Nginx's
+            <span class="mono">API_UPSTREAM</span> changes.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The prefix is preserved</span><span class="qnum">a subtle nginx rule</span></div>
+          <p class="desc">
+            Because <span class="mono">proxy_pass</span> is given a bare scheme and host with no
+            path, Nginx forwards the original URI untouched &mdash;
+            <span class="mono">/api/auth/login</span> arrives at the API as
+            <span class="mono">/api/auth/login</span>. That's exactly what's wanted here, since every
+            Flask blueprint is already registered under an
+            <span class="mono">/api/&hellip;</span> prefix. Had the target included a path, Nginx
+            would have stripped the matched <span class="mono">/api/</span> instead.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="resolver">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The resolver that bit us <span class="tag">a real bug, found late</span></h2>
+          <p class="dek">
+            <span class="mono">proxy_pass</span> here targets a <i>variable</i>
+            (<span class="mono">$api_upstream</span>), not a literal. That's what allows the address
+            to come from the environment &mdash; but it changes when Nginx resolves the name. With a
+            literal, Nginx resolves once at startup. With a variable, it resolves per request, and
+            that requires an explicitly configured DNS <span class="mono">resolver</span>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <figcaption>right locally, wrong in Azure</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">127.0.0.11 is Docker-only</span><span class="qnum">the trap</span></div>
+          <p class="desc">
+            Docker runs an embedded DNS server at <span class="mono">127.0.0.11</span> inside every
+            container on a user-defined network &mdash; that's what makes the hostname
+            <span class="mono">api</span> resolve to the API container. Azure App Service has no such
+            address. Hardcoding it works perfectly under Compose and then fails in Azure, where
+            every <span class="mono">/api/</span> request would return
+            <span class="mono">502 Bad Gateway</span> because the upstream name can't be resolved.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The fix: make it a variable too</span><span class="qnum">168.63.129.16 in Azure</span></div>
+          <p class="desc">
+            The resolver address is itself substituted from
+            <span class="mono">NGINX_RESOLVER</span>, defaulting to Docker's
+            <span class="mono">127.0.0.11</span> so local development is unaffected. Azure's Web Apps
+            set it to <span class="mono">168.63.129.16</span> &mdash; a fixed, Azure-wide virtual IP
+            that provides DNS to App Service and virtual machines. One variable, two environments,
+            no second image.
+          </p>
+          <p class="note">
+            <span class="mono">valid=10s</span> re-checks the name every ten seconds, so a replaced
+            API container or a scaled App Service instance is picked up without restarting Nginx;
+            <span class="mono">ipv6=off</span> avoids pointless AAAA lookups.
+          </p>
+        </div>
+      </div>
+      <p class="bonus-banner">
+        Where that value gets set per environment: the <span class="mono">ENV</span> default in this
+        Dockerfile, nothing extra under Compose, and an explicit
+        <span class="mono">NGINX_RESOLVER</span> app setting on the UI Web App created by both
+        <a href="../deployment/manual/01-create-resources.html">the manual script</a> and
+        <a href="../terraform/06-app-service.html">Terraform</a>.
+      </p>
+    </section>
+
+    <section class="block" id="build">
+      <h2>Building and running it <span class="tag">standalone</span></h2>
+      <p class="dek">
+        The UI image is genuinely useful on its own &mdash; it will serve the pages and answer
+        <span class="mono">/health</span> with no API present.
+      </p>
+      <pre class="code"># context is metals_ui, so no --file flag is needed
+docker build -t metals-ui:local metals_ui
+
+# serve it on http://localhost:18080
+docker run --rm -d --name metals-ui-test -p 18080:8080 metals-ui:local
+
+# confirm the template rendered: expect "resolver 127.0.0.11 valid=10s ipv6=off;"
+docker exec metals-ui-test cat /etc/nginx/conf.d/default.conf
+
+# try an Azure-style override
+docker run --rm -d --name metals-ui-azure -e NGINX_RESOLVER=168.63.129.16 -p 18081:8080 metals-ui:local</pre>
+      <p class="bonus-banner">
+        That third command is the quickest way to prove the templating works at all: the file in
+        <span class="mono">conf.d/</span> is generated, so whatever you see there is what Nginx is
+        really running &mdash; variables already substituted.
+      </p>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td>UI loads, but every API call returns <span class="mono">502 Bad Gateway</span></td><td>Nginx can't resolve or reach <span class="mono">API_UPSTREAM</span>.</td><td>Check the API container is healthy (<span class="mono">docker compose ps</span>), and that the resolver address suits the environment &mdash; <span class="mono">127.0.0.11</span> for Docker, <span class="mono">168.63.129.16</span> for Azure.</td></tr>
+            <tr><td><span class="mono">host not found in resolver</span> in the container's logs</td><td>The configured resolver address doesn't exist in this environment.</td><td>Override <span class="mono">NGINX_RESOLVER</span> to match where the container is running.</td></tr>
+            <tr><td>Edits to <span class="mono">index.html</span> or <span class="mono">js/</span> don't appear</td><td>The running container still uses the previously built image.</td><td><span class="mono">docker compose up -d --build ui</span> &mdash; the files are baked in at build time, not mounted.</td></tr>
+            <tr><td><span class="mono">404</span> on a CSS or JS file</td><td>The asset wasn't copied in, or <span class="mono">metals_ui/.dockerignore</span> excluded it.</td><td>Confirm with <span class="mono">docker exec &lt;name&gt; ls /usr/share/nginx/html</span>, then check the <span class="mono">COPY</span> lines and the ignore file's <span class="mono">!</span> entries.</td></tr>
+            <tr><td>Port <span class="mono">8888</span> already in use</td><td>Another process (often a previous container) holds the published port.</td><td><span class="mono">docker ps</span> to find it, then stop it &mdash; or change the left-hand side of the port mapping.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="04-api-image.html"><span class="pn-label">&larr; Back</span>The API image</a>
+      <a class="next" href="06-compose.html"><span class="pn-label">Next &rarr;</span>Running the whole stack</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Both images built &mdash; last step is wiring them together with the database in one command.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_ui/Dockerfile</span>, <span class="mono">metals_ui/docker/default.conf.template</span>, and <span class="mono">metals_ui/docker/runtime-config.js</span> in this repository.
+</footer>
+
+</body>
+</html>

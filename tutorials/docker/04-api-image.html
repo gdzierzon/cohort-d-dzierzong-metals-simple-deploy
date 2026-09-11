@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The API Image</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; The API Image</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 4 of 6</p>
+        <h1>metals_api/Dockerfile, Line by Line</h1>
+        <p class="lede">
+          The first of this project's images: a Python 3.11 environment containing the Flask
+          application and its dependencies, served by Gunicorn on port 5000, running as a non-root
+          user. Nineteen lines of Dockerfile, every one of which is here for a reason &mdash; this
+          page goes through all of them, then covers how to build and run it on its own.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Image name &rarr; <b>metals-api</b></span>
+      <span class="fact">Base &rarr; <b>python:3.11-slim</b></span>
+      <span class="fact">Port &rarr; <b>5000</b></span>
+      <span class="fact">Server &rarr; <b>Gunicorn, 2 workers</b></span>
+      <span class="fact">Build context &rarr; <b>the repo root</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#full-file">The whole file</a></li>
+      <li><a href="#base">The base and its environment</a></li>
+      <li><a href="#deps">Dependencies before code</a></li>
+      <li><a href="#user">Running as a non-root user</a></li>
+      <li><a href="#startup">Port, health check, and startup</a></li>
+      <li><a href="#build">Building and running it</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="full-file">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Read the API's Dockerfile with full understanding of why each instruction is there and in that order &mdash; including the two that exist purely to make Python behave well inside a container.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>nineteen deliberate lines</figcaption>
+        </figure>
+      </div>
+      <h2>The whole file <span class="tag">start here</span></h2>
+      <pre class="code"><span class="filename">metals_api/Dockerfile</span>FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+COPY requirements.txt requirements-container.txt ./
+RUN python -m pip install --no-cache-dir -r requirements-container.txt \
+    &amp;&amp; useradd --create-home --uid 10001 appuser
+
+COPY metals_api/ ./metals_api/
+WORKDIR /app/metals_api
+USER appuser
+
+EXPOSE 5000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-", "app:app"]</pre>
+    </section>
+
+    <section class="block" id="base">
+      <h2>The base and its environment <span class="tag">lines 1&ndash;4</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">FROM python:3.11-slim</span><span class="qnum">the starting filesystem</span></div>
+          <p class="desc">
+            Debian with Python 3.11 and pip pre-installed. The version is pinned to
+            <span class="mono">3.11</span> deliberately &mdash; it matches the version the project's
+            tests run against in CI and the version the API was developed on.
+            <span class="mono">-slim</span> keeps the image small while retaining
+            <span class="mono">glibc</span>, so <span class="mono">psycopg</span> and
+            <span class="mono">argon2-cffi</span> install as pre-built wheels instead of compiling
+            from source.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">PYTHONDONTWRITEBYTECODE=1</span><span class="qnum">no .pyc clutter</span></div>
+          <p class="desc">
+            Stops Python writing <span class="mono">__pycache__</span> folders next to the source.
+            In a container those cached files are pure overhead: the code never changes after the
+            image is built, so nothing is ever saved by caching it, and the files just add weight
+            and noise to the writable layer.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">PYTHONUNBUFFERED=1</span><span class="qnum">the one that saves you at 2am</span></div>
+          <p class="desc">
+            By default Python buffers its output when it isn't writing to a terminal &mdash; which is
+            exactly the situation inside a container. Without this, log lines sit in a buffer
+            instead of appearing, and a crash can lose the very messages explaining it. Setting it
+            makes <span class="mono">docker logs</span> and Azure's log stream show output the
+            moment it's produced.
+          </p>
+          <p class="note">
+            These two variables show up in nearly every production Python Dockerfile you'll read.
+            Now you know why.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="deps">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Dependencies before code <span class="tag">lines 6&ndash;11</span></h2>
+          <p class="dek">
+            This is the <a href="01-images-and-containers.html#cache">build cache</a> shaping the
+            file. The dependency manifests are copied and installed first; the application source
+            arrives afterward, in its own layer.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>install once, edit freely</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why two requirements files</span><span class="qnum">a small but important split</span></div>
+          <p class="desc">
+            <span class="mono">requirements.txt</span> is the application's own dependency list,
+            shared with local development and CI.
+            <span class="mono">requirements-container.txt</span> simply includes it and adds the one
+            package only the container needs:
+          </p>
+          <pre class="code"><span class="filename">requirements-container.txt</span>-r requirements.txt
+gunicorn&gt;=23.0,&lt;24.0</pre>
+          <p class="desc">
+            That keeps Gunicorn out of local development environments, where Flask's built-in
+            server is used, while guaranteeing the container and the tests agree on every other
+            version.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">COPY metals_api/ ./metals_api/</span><span class="qnum">the source, last</span></div>
+          <p class="desc">
+            The application code is the most frequently changed input, so it's copied as late as
+            possible. Editing a route handler invalidates only this layer and the ones below it
+            &mdash; the <span class="mono">pip install</span> above stays cached, and the rebuild
+            takes a second or two instead of a minute.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why the build context is the repo root</span><span class="qnum">a consequence worth noting</span></div>
+          <p class="desc">
+            <span class="mono">requirements.txt</span> lives at the repository root while the
+            Dockerfile lives in <span class="mono">metals_api/</span>. Since
+            <span class="mono">COPY</span> can't reach outside the build context, the context must
+            be the root &mdash; hence <span class="mono">docker build -f metals_api/Dockerfile .</span>
+            with the dot at the end. The root
+            <a href="02-dockerfile.html#context"><span class="mono">.dockerignore</span></a> then
+            trims that context back down so the rest of the repository isn't shipped to the builder.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="user">
+      <h2>Running as a non-root user <span class="tag">lines 8&ndash;13</span></h2>
+      <p class="dek">
+        The <span class="mono">python</span> base image runs as <span class="mono">root</span>, so
+        this Dockerfile arranges its own account.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">useradd --create-home --uid 10001 appuser</span><span class="qnum">tucked into the RUN</span></div>
+          <p class="desc">
+            Creating the user is chained onto the <span class="mono">pip install</span> with
+            <span class="mono">&amp;&amp;</span> so both land in a single layer. The explicit high
+            <span class="mono">--uid</span> matters in Kubernetes-style environments that refuse to
+            run containers whose user ID falls in the system range, and it keeps the ID stable
+            across rebuilds rather than depending on whatever the system assigns next.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">USER appuser, after the install</span><span class="qnum">order is load-bearing</span></div>
+          <p class="desc">
+            The switch happens <i>after</i> <span class="mono">pip install</span>, because
+            installing into system site-packages needs root. Everything from that line onward
+            &mdash; including the container's main Gunicorn process &mdash; runs as the unprivileged
+            account. If the API were ever compromised, the attacker lands as
+            <span class="mono">appuser</span> with no ability to modify the installed runtime.
+          </p>
+          <p class="note">
+            This is the same protection the UI image gets for free by choosing the
+            <span class="mono">nginx-unprivileged</span> base &mdash; see
+            <a href="05-ui-image.html">the next page</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="startup">
+      <h2>Port, health check, and startup <span class="tag">lines 15&ndash;19</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The HEALTHCHECK calls /health</span><span class="qnum">a real endpoint</span></div>
+          <p class="desc">
+            The check fetches <span class="mono">http://127.0.0.1:5000/health</span> from inside the
+            container, using Python's standard library so no extra tool has to be installed. That
+            endpoint is defined in <span class="mono">app.py</span> and deliberately
+            <b>doesn't touch the database</b> &mdash; it reports whether the HTTP server is alive,
+            not whether every dependency is. A health check that fails when the database blips would
+            restart a perfectly healthy API.
+          </p>
+          <p class="note">
+            The same <span class="mono">/health</span> path is reused by Compose's
+            <span class="mono">depends_on</span> gate and by Azure's
+            <span class="mono">healthCheckPath</span> setting &mdash; one endpoint, three consumers.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">--bind 0.0.0.0:5000</span><span class="qnum">not 127.0.0.1</span></div>
+          <p class="desc">
+            Binding to <span class="mono">0.0.0.0</span> means &ldquo;listen on every network
+            interface in this container.&rdquo; Binding to
+            <span class="mono">127.0.0.1</span> instead would accept only connections originating
+            <i>inside</i> the container, so published ports and requests from the UI container would
+            both be refused &mdash; a classic first-container bug that looks like a networking
+            failure but isn't.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">app:app</span><span class="qnum">module, then variable</span></div>
+          <p class="desc">
+            Gunicorn's final argument is <span class="mono">module:callable</span>: load
+            <span class="mono">app.py</span> and serve the object named
+            <span class="mono">app</span> inside it &mdash; the Flask instance created by
+            <span class="mono">create_app()</span>. It resolves relative to the working directory,
+            which is why the second <span class="mono">WORKDIR /app/metals_api</span> exists.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">--workers 2</span><span class="qnum">sized for a B1</span></div>
+          <p class="desc">
+            Two worker processes, each able to handle a request at a time. That's a modest,
+            deliberate number matched to the single small Azure App Service instance this project
+            runs on; a larger machine would warrant more. Logs from both workers are pointed at
+            standard output with <span class="mono">-</span>, so the container's logs are the
+            application's logs.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="build">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Building and running it <span class="tag">on its own</span></h2>
+          <p class="dek">
+            Normally you'd start this image through
+            <a href="06-compose.html">Compose</a>, which supplies the database and all the
+            variables. But building it alone is a fast way to confirm the image itself is sound.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>build, then verify</figcaption>
+        </figure>
+      </div>
+      <pre class="code"># from the project root &mdash; note the context is "." and the Dockerfile is named explicitly
+docker build -t metals-api:local -f metals_api/Dockerfile .
+
+# check the layers and final size
+docker images metals-api</pre>
+      <p class="bonus-banner">
+        Running it standalone with <span class="mono">docker run -p 5000:5000 metals-api:local</span>
+        will start successfully and answer <span class="mono">/health</span>, but any endpoint that
+        touches data will fail &mdash; there's no database and no
+        <span class="mono">DB_*</span> variables. That's the image behaving correctly:
+        configuration comes from outside, and <a href="06-compose.html">Compose</a> is what supplies
+        it.
+      </p>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">failed to compute cache key: "/requirements.txt" not found</span></td><td>You built with <span class="mono">metals_api</span> as the context, so the root <span class="mono">requirements.txt</span> is out of reach.</td><td>Build from the repo root with <span class="mono">-f metals_api/Dockerfile .</span> &mdash; the context is the dot.</td></tr>
+            <tr><td>Container exits immediately, <span class="mono">ModuleNotFoundError: No module named 'app'</span></td><td>Gunicorn is resolving <span class="mono">app:app</span> from the wrong directory.</td><td>Confirm the second <span class="mono">WORKDIR /app/metals_api</span> is present &mdash; it's what puts <span class="mono">app.py</span> on the path.</td></tr>
+            <tr><td>No log output at all, even on a crash</td><td>Python's output is being buffered.</td><td>Ensure <span class="mono">PYTHONUNBUFFERED=1</span> is set; it's in the <span class="mono">ENV</span> block for exactly this reason.</td></tr>
+            <tr><td>Health status stuck at <span class="mono">starting</span>, then <span class="mono">unhealthy</span></td><td>The app isn't listening on 5000, or is bound to <span class="mono">127.0.0.1</span>.</td><td>Check <span class="mono">docker logs</span> for a startup traceback, and confirm the bind address is <span class="mono">0.0.0.0:5000</span>.</td></tr>
+            <tr><td><span class="mono">could not translate host name "db"</span></td><td>The container was started on its own, outside the Compose network.</td><td>Expected when running standalone. Use <span class="mono">docker compose up</span>, where the <span class="mono">db</span> service name resolves.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="03-commands.html"><span class="pn-label">&larr; Back</span>The commands</a>
+      <a class="next" href="05-ui-image.html"><span class="pn-label">Next &rarr;</span>The UI image</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>One image down &mdash; the UI's is shorter, but it has the more interesting trick in it.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/Dockerfile</span>, <span class="mono">requirements-container.txt</span>, and <span class="mono">.dockerignore</span> in this repository.
+</footer>
+
+</body>
+</html>

@@ -15,11 +15,12 @@
         <p class="eyebrow">Metals Simple Deploy &middot; Project Tutorials</p>
         <h1>Learning This Project</h1>
         <p class="lede">
-          This project has four moving parts that work together: a small web <b>API</b>, a
+          This project has six moving parts that work together: a small web <b>API</b>, a
           <b>database</b> the API reads and writes, a browser-based <b>UI</b> that calls the API,
-          and <b>Terraform</b>, the tool that creates the cloud infrastructure the API and database
-          run on. Codey the Sr. Developer will be your guide through this tutorial series, one part
-          at a time, starting with Terraform.
+          <b>Docker</b> images that package the API and UI so they run identically everywhere,
+          <b>Terraform</b> to create the cloud infrastructure they run on, and the
+          <b>deployment</b> pipeline that ships new versions. Codey the Sr. Developer will be your
+          guide through this tutorial series, one part at a time.
         </p>
       </div>
       <figure class="codey-figure">
@@ -31,7 +32,8 @@
       <span class="fact">Infrastructure tool &rarr; <b>Terraform</b></span>
       <span class="fact">App language &rarr; <b>Python (Flask)</b></span>
       <span class="fact">Database &rarr; <b>PostgreSQL</b></span>
-      <span class="fact">UI &rarr; <b>vanilla JS, no build step</b></span>
+      <span class="fact">UI &rarr; <b>vanilla JS, served by Nginx</b></span>
+      <span class="fact">Packaging &rarr; <b>Docker, 2 images</b></span>
     </div>
   </div>
 </header>
@@ -45,26 +47,25 @@
           <h2>What this project is <span class="tag">start here</span></h2>
           <p class="dek">
             <span class="mono">metals-simple-deploy</span> is a small, complete application: a
-            Python API backed by a PostgreSQL database, running in Azure. &ldquo;Complete&rdquo;
-            means it isn't just application code &mdash; it also includes everything needed to
-            actually stand up the cloud resources that code runs on, and to deploy changes to
-            both safely and repeatably.
+            Python API backed by a PostgreSQL database, with a browser UI in front of it, all
+            running in Azure. &ldquo;Complete&rdquo; means it isn't just application code &mdash; it
+            also includes everything needed to package that code into containers, stand up the cloud
+            resources they run on, and deploy changes to both safely and repeatably.
           </p>
         </div>
         <figure class="codey-figure">
           <img src="images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
-          <figcaption>four parts, one project</figcaption>
+          <figcaption>six parts, one project</figcaption>
         </figure>
       </div>
     </section>
 
     <section class="block" id="components">
-      <h2>The four parts of this project <span class="tag">overview</span></h2>
+      <h2>The six parts of this project <span class="tag">overview</span></h2>
       <p class="dek">
-        Each part has a narrow, distinct job. Skimming what each one is <i>for</i> here will make
-        the deeper tutorials easier to follow, since Terraform's whole purpose is to build the
-        infrastructure the API and database run on, and the UI's whole purpose is to be a browser
-        window onto the API.
+        Each part has a narrow, distinct job, and every one has its own tutorial. The first three
+        are the application itself, the fourth is how it gets packaged, and the last two are two
+        different routes for getting that package running in Azure.
       </p>
       <div class="card-grid">
         <div class="info-card">
@@ -73,10 +74,10 @@
           <p>
             A Python web application (built with Flask) that answers requests over the internet
             &mdash; for example, looking up or saving metals-pricing data. It contains the actual
-            business logic of the app: what happens when someone calls a given endpoint, and, now,
+            business logic of the app: what happens when someone calls a given endpoint, and
             who's allowed to call it.
           </p>
-          <div class="stack"><span class="chip">Python</span><span class="chip">Flask</span><span class="chip">JWT</span><span class="chip">Azure App Service</span></div>
+          <div class="stack"><span class="chip">Python</span><span class="chip">Flask</span><span class="chip">JWT</span><span class="chip">Gunicorn</span></div>
           <p style="margin-top:0.9rem;"><a href="api/index.html"><b>Start the Metals API tutorial &rarr;</b></a></p>
         </div>
         <div class="info-card">
@@ -98,22 +99,52 @@
             the catalog itself is visible only once logged in, and only accounts with the
             <span class="mono">Admin</span> role can add, edit, or delete anything.
           </p>
-          <div class="stack"><span class="chip">Vanilla JS</span><span class="chip">Hash routing</span><span class="chip">JWT</span></div>
+          <div class="stack"><span class="chip">Vanilla JS</span><span class="chip">Hash routing</span><span class="chip">Nginx</span></div>
           <p style="margin-top:0.9rem;"><a href="ui/index.html"><b>Start the Metals UI tutorial &rarr;</b></a></p>
         </div>
         <div class="info-card">
           <p class="ieyebrow">Part 4</p>
-          <h3>Terraform</h3>
+          <h3>Docker</h3>
           <p>
-            The infrastructure layer underneath the API and database. Terraform creates the actual
-            Azure resources &mdash; the resource group, the web app hosting the API, and the
-            database server &mdash; and wires them together, before either piece of application code
-            ever runs.
+            The packaging layer. Three <span class="mono">Dockerfile</span>s turn the API, the UI, and
+            this tutorial site into self-contained images holding their code, runtime, and
+            dependencies &mdash; and one Compose file runs them all, plus a database, on your machine
+            with a single command.
           </p>
-          <div class="stack"><span class="chip">Terraform</span><span class="chip">Azure</span><span class="chip">GitHub Actions</span></div>
-          <p style="margin-top:0.9rem;"><a href="terraform/index.html"><b>Start the Terraform tutorial &rarr;</b></a></p>
+          <div class="stack"><span class="chip">Docker</span><span class="chip">Compose</span><span class="chip">Nginx</span><span class="chip">ACR</span></div>
+          <p style="margin-top:0.9rem;"><a href="docker/index.html"><b>Start the Docker tutorial &rarr;</b></a></p>
+        </div>
+        <div class="info-card">
+          <p class="ieyebrow">Part 5</p>
+          <h3>Manual Deployment</h3>
+          <p>
+            Building the whole Azure environment by hand, one <span class="mono">az</span> command at
+            a time, with the scripts in <span class="mono">utility_scripts/</span>. No preview, no
+            state file &mdash; which makes it the clearest way to see exactly which Azure calls a
+            deployment really makes.
+          </p>
+          <div class="stack"><span class="chip">Azure CLI</span><span class="chip">PowerShell</span><span class="chip">Bash</span></div>
+          <p style="margin-top:0.9rem;"><a href="deployment/manual/index.html"><b>Start the Manual Deployment tutorial &rarr;</b></a></p>
+        </div>
+        <div class="info-card">
+          <p class="ieyebrow">Part 6</p>
+          <h3>Automated Deployment &mdash; With Terraform</h3>
+          <p>
+            The same environment, declared as code instead of typed: Terraform creates and updates
+            the infrastructure with a preview before every change, and GitHub Actions builds and
+            ships the two container images whenever a pull request is merged.
+          </p>
+          <div class="stack"><span class="chip">Terraform</span><span class="chip">GitHub Actions</span><span class="chip">OIDC</span></div>
+          <p style="margin-top:0.9rem;"><a href="deployment/index.html"><b>Start the Automated Deployment tutorial &rarr;</b></a></p>
+          <p style="margin-top:0.4rem;"><a href="terraform/index.html">Straight to the Terraform tutorial &rarr;</a></p>
         </div>
       </div>
+      <p class="bonus-banner">
+        Parts 5 and 6 build the <i>same</i> Azure environment &mdash; a resource group, a PostgreSQL
+        server, a container registry, and two container web apps. Reading both is one of the best
+        ways to understand what the automation is actually doing underneath, so start with whichever
+        suits how you learn.
+      </p>
     </section>
 
     <section class="block" id="run-locally">
@@ -121,102 +152,62 @@
         <div class="intro-text">
           <h2>Running the entire application in development <span class="tag">quickstart</span></h2>
           <p class="dek">
-            All three application pieces &mdash; database, API, and UI &mdash; run locally at the
-            same time, each in its own terminal, each listening on its own port. Start them in this
-            order; each step depends on the one before it. Every command below runs from the
-            project root unless noted otherwise.
+            All three application pieces &mdash; database, API, and UI &mdash; start together with
+            one command. Docker Compose builds the images, starts PostgreSQL alongside them, and
+            waits for each service to report healthy before starting the next. No local Python or
+            PostgreSQL installation is needed.
           </p>
         </div>
         <figure class="codey-figure">
           <img src="images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
-          <figcaption>three terminals, one stack</figcaption>
+          <figcaption>one command, three containers</figcaption>
         </figure>
       </div>
       <div class="cheat-wrap">
         <table class="cheat">
-          <thead><tr><th style="width:3rem;">Step</th><th>What it starts</th><th>Command</th></tr></thead>
+          <thead><tr><th style="width:3rem;">Step</th><th>What it does</th><th>Command</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td>One-time setup: Python dependencies and environment variables</td><td><code>pip install -r requirements.txt</code>, then copy <code>.env.example</code> to <code>.env</code> and fill in <code>DB_*</code> and <code>JWT_SECRET_KEY</code></td></tr>
-            <tr><td>2</td><td>Database, via Docker Compose</td><td><code>docker compose up -d db</code></td></tr>
-            <tr><td>3</td><td>API (Flask, defaults to port 5000)</td><td><code>python metals_api/app.py</code></td></tr>
-            <tr><td>4</td><td>UI (static file server, port 8888)</td><td><code>cd metals_ui</code> then <code>python -m http.server 8888</code></td></tr>
+            <tr><td>1</td><td>One-time setup: create the environment file Compose requires</td><td>Copy <code>.env.example</code> to <code>.env</code> and set <code>JWT_SECRET_KEY</code> to any long random string</td></tr>
+            <tr><td>2</td><td>Build the images and start every service</td><td><code>docker compose up -d --build</code></td></tr>
+            <tr><td>3</td><td>Confirm everything came up healthy</td><td><code>docker compose ps</code></td></tr>
+            <tr><td>4</td><td>When you're done, stop it all (keeping your data)</td><td><code>docker compose down</code></td></tr>
           </tbody>
         </table>
       </div>
       <p class="bonus-banner">
-        Once all three are up, open <span class="mono">http://localhost:8888</span> and log in with
-        one of the seed accounts (<span class="mono">admin</span> or <span class="mono">customer</span>,
-        password <span class="mono">password</span> for both &mdash; see
-        <a href="database/02-docker-compose.html#accounts">the database tutorial</a>). For the full
-        detail behind each step &mdash; the schema and reset process, every endpoint and how
-        authentication works, or how the UI decides what to show &mdash; see the
-        <a href="database/index.html">Database</a>, <a href="api/index.html">API</a>, and
-        <a href="ui/index.html">UI</a> tutorials.
+        Once all three are healthy, open <span class="mono">http://localhost:8888</span> and log in
+        with one of the seed accounts (<span class="mono">admin</span> or
+        <span class="mono">customer</span>, password <span class="mono">password</span> for both
+        &mdash; see <a href="database/02-docker-compose.html#accounts">the database tutorial</a>).
+        The API is also reachable directly at <span class="mono">http://localhost:5000</span>. Step 1
+        is genuinely required: Compose refuses to start without
+        <span class="mono">JWT_SECRET_KEY</span> rather than starting an API that can't issue
+        tokens. Full detail on the Compose file is in the
+        <a href="docker/06-compose.html">Docker tutorial</a>.
       </p>
     </section>
 
     <section class="block" id="how-they-fit">
       <div class="section-intro codey-left">
         <div class="intro-text">
-          <h2>How the four parts fit together <span class="tag">the big picture</span></h2>
+          <h2>How the six parts fit together <span class="tag">the big picture</span></h2>
           <p class="dek">
-            Terraform runs first and builds the empty, configured Azure environment (the database
-            server, the web app hosting slot, the security identities). Only once that
-            environment exists does it make sense to deploy the API's code into it, or load
-            starting data into the database. The UI, by contrast, isn't deployed into that Azure
-            environment at all in local development &mdash; it's a static folder that simply points
-            at wherever the API is running, over an ordinary HTTP connection. Change the
-            infrastructure through Terraform, change the application through its own code &mdash;
-            each part is deployed independently, but none of them work without the ones underneath.
+            Infrastructure comes first &mdash; whether you build it by hand (part 5) or declare it in
+            Terraform (part 6), the result is the same empty, configured Azure environment: the
+            database server, the container registry, and the two web app hosting slots, along with
+            the identities that let them talk to each other. Only once that exists does it make
+            sense to build the Docker images, push them to the registry, and have the web apps pull
+            them. The UI is no longer a folder of files you serve yourself; it's an Nginx container
+            that serves the pages <i>and</i> forwards <span class="mono">/api/</span> requests on to
+            the API, so the browser only ever talks to one address. Change the infrastructure through
+            whichever path you picked, change the application by building a new image &mdash; the two
+            move independently, but neither works without the other underneath.
           </p>
         </div>
         <figure class="codey-figure">
           <img src="images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
-          <figcaption>infrastructure first, then code</figcaption>
+          <figcaption>infrastructure, then images, then traffic</figcaption>
         </figure>
-      </div>
-    </section>
-
-    <section class="block" id="deployment">
-      <div class="section-intro">
-        <div class="intro-text">
-          <h2>Deployment: two ways to build the infrastructure <span class="tag">pick a path</span></h2>
-          <p class="dek">
-            Every Azure resource this project needs &mdash; the resource group, the database, the
-            web app, the GitHub deployment identity &mdash; can be created two different ways. Both
-            end up in the same place; they just get there differently, and reading both is one of
-            the best ways to understand what Terraform is actually doing underneath its own
-            syntax.
-          </p>
-        </div>
-        <figure class="codey-figure">
-          <img src="images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
-          <figcaption>same destination, two roads</figcaption>
-        </figure>
-      </div>
-      <div class="card-grid">
-        <a class="info-card linkable" href="manual/index.html">
-          <p class="ieyebrow">Option 1</p>
-          <h3>Manual</h3>
-          <p>
-            Run individual Azure CLI commands by hand, one resource at a time, using the scripts
-            in <span class="mono">utility_scripts/</span>. No preview, no state file &mdash; just the
-            same <span class="mono">az</span> commands you'd type yourself, in a fixed order. The
-            most direct way to see exactly what's happening in Azure.
-          </p>
-          <div class="stack"><span class="chip">Azure CLI</span><span class="chip">PowerShell</span><span class="chip">Bash</span></div>
-        </a>
-        <a class="info-card linkable" href="terraform/index.html">
-          <p class="ieyebrow">Option 2</p>
-          <h3>Automated (Terraform)</h3>
-          <p>
-            Describe the infrastructure you want as code, and let Terraform figure out how to get
-            there &mdash; previewing every change first, remembering what it already built, and
-            tearing everything down cleanly when you're done. The approach this project actually
-            uses day to day.
-          </p>
-          <div class="stack"><span class="chip">Terraform</span><span class="chip">Azure</span><span class="chip">GitHub Actions</span></div>
-        </a>
       </div>
     </section>
 
@@ -225,7 +216,7 @@
 
 <div class="codey-signoff">
   <img src="images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
-  <p>Pick manual or automated above and dig in &mdash; both tutorials are ready whenever you are.</p>
+  <p>New here? Read the parts in order &mdash; or jump straight to <a href="docker/index.html">Docker</a> if you just want to get the project running locally.</p>
 </div>
 
 <footer class="page">

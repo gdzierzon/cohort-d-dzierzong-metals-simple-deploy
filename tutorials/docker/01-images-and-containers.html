@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Images and Containers</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Docker</a> &rsaquo; Images &amp; Containers</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Docker &middot; Page 1 of 6</p>
+        <h1>Images, Layers, and Choosing a Base</h1>
+        <p class="lede">
+          An image isn't one big file &mdash; it's a stack of read-only <b>layers</b>, each one the
+          result of a single instruction in the <span class="mono">Dockerfile</span>. Understanding
+          that stack explains almost everything else: why rebuilds are sometimes instant and
+          sometimes slow, why the order of instructions matters, and why
+          <span class="mono">FROM python:3.11-slim</span> means you inherit a working Python
+          install without doing anything yourself.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">One instruction &rarr; <b>one layer</b></span>
+      <span class="fact">Layers are &rarr; <b>read-only &amp; cached</b></span>
+      <span class="fact">This project's bases &rarr; <b>python:3.11-slim</b>, <b>nginx-unprivileged:stable-alpine</b></span>
+      <span class="fact">Never pin to &rarr; <b>:latest</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Docker overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#layers">An image is a stack of layers</a></li>
+      <li><a href="#cache">The build cache, and why order matters</a></li>
+      <li><a href="#base">What FROM actually pulls in</a></li>
+      <li><a href="#tags">Reading an image tag</a></li>
+      <li><a href="#choosing">How this project chose its two bases</a></li>
+      <li><a href="#running">What changes when a container runs</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="layers">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Understand what an image is made of and how a base image is picked, so the Dockerfiles later in this section read as deliberate choices rather than magic incantations.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>layers all the way down</figcaption>
+        </figure>
+      </div>
+      <h2>An image is a stack of layers <span class="tag">the core idea</span></h2>
+      <p class="dek">
+        Each instruction in a <span class="mono">Dockerfile</span> that changes the filesystem
+        produces a new layer containing only what changed &mdash; the files added, modified, or
+        deleted by that step. The finished image is those layers stacked in order, presented to the
+        running container as one merged filesystem.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why anyone should care</span><span class="qnum">three consequences</span></div>
+          <ul class="steps">
+            <li><b>Rebuilds can skip work.</b> If a layer's inputs haven't changed, Docker reuses the cached layer instead of redoing it &mdash; this is what makes the second build of the API image take seconds instead of a minute.</li>
+            <li><b>Storage and pulls are shared.</b> Both this project's images and thousands of others start from a common base; a machine that already has <span class="mono">python:3.11-slim</span> downloads only the layers built on top of it.</li>
+            <li><b>Deleting isn't undoing.</b> A file added in one layer and deleted in a later one still occupies space in the first layer &mdash; and is still recoverable from the image. That's why secrets must never be copied in, even temporarily.</li>
+          </ul>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Seeing the stack yourself</span><span class="qnum">try it</span></div>
+          <p class="desc">
+            <span class="mono">docker history metals-api:local</span> prints one row per layer,
+            newest first, with the instruction that created it and the space it added. Most rows
+            will be <span class="mono">0B</span> &mdash; metadata-only instructions like
+            <span class="mono">ENV</span>, <span class="mono">EXPOSE</span>, and
+            <span class="mono">CMD</span> don't touch the filesystem, so they add no bytes.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="cache">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The build cache, and why order matters <span class="tag">the practical payoff</span></h2>
+          <p class="dek">
+            Docker walks the instructions top to bottom. For each one it asks: &ldquo;have I built
+            this exact step, on top of this exact parent layer, before?&rdquo; If yes, it reuses the
+            cached result and moves on. The moment one instruction misses, <b>every instruction
+            after it rebuilds too</b> &mdash; the cache can't resume once broken.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>slow-changing things first</figcaption>
+        </figure>
+      </div>
+      <p class="dek">
+        That single rule dictates the shape of this project's API Dockerfile: dependencies are
+        copied and installed <i>before</i> the application code is copied in.
+      </p>
+      <pre class="code"><span class="filename">metals_api/Dockerfile (excerpt)</span>COPY requirements.txt requirements-container.txt ./
+RUN python -m pip install --no-cache-dir -r requirements-container.txt \
+    && useradd --create-home --uid 10001 appuser
+
+COPY metals_api/ ./metals_api/</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why not just copy everything at once?</span><span class="qnum">the thing this avoids</span></div>
+          <p class="desc">
+            Application code changes constantly; the dependency list barely ever does. With this
+            order, editing a route handler invalidates only the last <span class="mono">COPY</span>
+            &mdash; the expensive <span class="mono">pip install</span> layer above it is still
+            cached, so the rebuild is nearly instant. Flip the two, and every one-character code
+            change would re-download and reinstall every Python package from scratch.
+          </p>
+          <p class="note">
+            The general rule: order instructions from least likely to change to most likely to
+            change.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What counts as &ldquo;changed&rdquo; for a COPY</span><span class="qnum">a common surprise</span></div>
+          <p class="desc">
+            For <span class="mono">COPY</span>, Docker hashes the <i>contents</i> of the files being
+            copied &mdash; so touching a file without editing it won't break the cache, but changing
+            one byte will. For <span class="mono">RUN</span>, Docker only compares the command
+            <i>text</i>: a command like <span class="mono">apt-get update</span> will happily serve
+            a months-old cached result, because the string never changed.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="base">
+      <h2>What FROM actually pulls in <span class="tag">inheritance</span></h2>
+      <p class="dek">
+        Every <span class="mono">Dockerfile</span> starts with <span class="mono">FROM</span>,
+        naming the image to build on top of. You inherit that image's entire filesystem &mdash; its
+        Linux distribution, its package manager, any runtime it ships with &mdash; plus its defaults
+        for things like the working directory, the user, and the startup command.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">FROM python:3.11-slim</span><span class="qnum">what the API inherits</span></div>
+          <p class="desc">
+            A minimal Debian system with Python 3.11 and <span class="mono">pip</span> already
+            installed and on the <span class="mono">PATH</span>. That's why the API's Dockerfile
+            never installs Python &mdash; it starts from a machine that already has it. It does still
+            have to install the <i>application's</i> libraries, because those are this project's
+            concern, not the base image's.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">FROM nginxinc/nginx-unprivileged:stable-alpine</span><span class="qnum">what the UI inherits</span></div>
+          <p class="desc">
+            A working Nginx install <i>and</i> a startup script, already configured to run as a
+            non-root user on port 8080. The UI's Dockerfile is unusually short precisely because
+            almost everything it needs is inherited &mdash; it only has to drop its own files and
+            config template into the right folders.
+          </p>
+          <p class="note">
+            It also inherits an entrypoint that expands environment variables into config templates
+            at startup &mdash; the mechanism covered on <a href="05-ui-image.html">the UI image page</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="tags">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Reading an image tag <span class="tag">anatomy</span></h2>
+          <p class="dek">
+            An image reference packs several pieces of information into one string. Knowing where
+            the boundaries are makes it obvious what you're actually pulling.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey holding a magnifying glass">
+          <figcaption>every part means something</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:14rem;">Reference</th><th>How it breaks down</th></tr></thead>
+          <tbody>
+            <tr><td><code>python:3.11-slim</code></td><td>No registry and no namespace, so this is an <b>official image</b> on Docker Hub. Repository <span class="mono">python</span>, tag <span class="mono">3.11-slim</span>.</td></tr>
+            <tr><td><code>nginxinc/nginx-unprivileged:stable-alpine</code></td><td>Namespace <span class="mono">nginxinc</span> (the Nginx company's own account), repository <span class="mono">nginx-unprivileged</span>, tag <span class="mono">stable-alpine</span>.</td></tr>
+            <tr><td><code>expeditorsdzierzonmetalsacr<wbr>.azurecr.io/metals-api:latest</code></td><td>A private registry hostname, then repository <span class="mono">metals-api</span>, tag <span class="mono">latest</span> &mdash; this project's own image in Azure.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The variant suffixes</span><span class="qnum">slim, alpine, and friends</span></div>
+          <p class="desc">
+            Most official images publish the same software on several base systems.
+            <span class="mono">-slim</span> is a trimmed Debian &mdash; the usual default for Python,
+            since it keeps <span class="mono">glibc</span> and therefore works with pre-built binary
+            wheels. <span class="mono">-alpine</span> is Alpine Linux: far smaller, but built on
+            <span class="mono">musl</span> instead of <span class="mono">glibc</span>, which can
+            force Python packages to compile from source. A plain tag with no suffix
+            (<span class="mono">python:3.11</span>) is the full Debian image &mdash; convenient,
+            considerably larger.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why not :latest</span><span class="qnum">the reproducibility trap</span></div>
+          <p class="desc">
+            <span class="mono">latest</span> isn't a version &mdash; it's just the tag applied when
+            no tag is given, and whatever it points to changes over time. Building against it means
+            two builds a month apart can silently produce different runtimes. Both bases in this
+            project pin a real version line instead.
+          </p>
+          <p class="warn">
+            This project <i>does</i> tag its own images <span class="mono">metals-api:latest</span>.
+            That's a deliberate, different trade-off &mdash; a moving pointer to &ldquo;current
+            deployment&rdquo; &mdash; and it comes with a catch covered in
+            <a href="../deployment/index.html">Deployment</a>: re-pushing the same tag doesn't
+            restart anything on its own.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="choosing">
+      <h2>How this project chose its two bases <span class="tag">decisions</span></h2>
+      <p class="dek">
+        Picking a base image is mostly answering four questions in order. Here's how each one
+        landed for the two application images in this repository.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:16rem;">Question</th><th>API image</th><th>UI image</th></tr></thead>
+          <tbody>
+            <tr><td>What runtime does the app need?</td><td>Python 3.11, matching what the code is developed and tested against.</td><td>None &mdash; the UI is plain HTML/CSS/JS. It needs a <i>web server</i>, not a runtime.</td></tr>
+            <tr><td>Is there an official or vendor image?</td><td>Yes &mdash; the official <span class="mono">python</span> image.</td><td>Yes &mdash; Nginx's own <span class="mono">nginxinc</span> account publishes a hardened variant.</td></tr>
+            <tr><td>Which variant?</td><td><span class="mono">-slim</span>: small, but keeps glibc so <span class="mono">psycopg</span> and <span class="mono">argon2-cffi</span> install as pre-built wheels rather than compiling.</td><td><span class="mono">-alpine</span>: nothing here compiles, so the smallest option is free of downsides.</td></tr>
+            <tr><td>Does it run as root by default?</td><td>Yes, so the Dockerfile creates and switches to an <span class="mono">appuser</span> account itself.</td><td>No &mdash; that's the entire point of <span class="mono">nginx-unprivileged</span>, which is why it was chosen over plain <span class="mono">nginx</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        That last row is worth internalizing: a container that runs as <span class="mono">root</span>
+        and gets compromised hands the attacker root inside the container. Running as an ordinary
+        user is a cheap, large improvement, and every image here does it &mdash; one by inheriting it,
+        one by arranging it explicitly.
+      </p>
+    </section>
+
+    <section class="block" id="running">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>What changes when a container runs <span class="tag">image vs. instance</span></h2>
+          <p class="dek">
+            Starting a container adds one thin, writable layer on top of the image's read-only
+            stack. Everything the process writes &mdash; log files, temp files, rows in a database
+            &mdash; lands in that layer, and that layer is destroyed with the container.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey thinking with a rubber duck">
+          <figcaption>writable, but temporary</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Which is why the database needs a volume</span><span class="qnum">the exception that proves it</span></div>
+          <p class="desc">
+            The API and UI containers hold nothing worth keeping &mdash; delete and recreate them
+            freely. PostgreSQL is the opposite, so
+            <a href="06-compose.html">docker-compose.yml</a> attaches a named <b>volume</b> to it:
+            storage that lives outside any container's writable layer and survives being stopped,
+            removed, and recreated. Data you actually care about always belongs in a volume, never
+            in the container's own filesystem.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Configuration comes in from outside</span><span class="qnum">same image, many environments</span></div>
+          <p class="desc">
+            If an image is fixed, how does the same <span class="mono">metals-api</span> image talk
+            to a local Postgres container on your laptop and a managed Azure database in
+            production? Environment variables, supplied at <i>run</i> time. The image contains no
+            hostnames, no passwords, no connection strings &mdash; only the code that reads
+            <span class="mono">DB_HOST</span>, <span class="mono">DB_PASSWORD</span> and friends
+            from its environment.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="index.html"><span class="pn-label">&larr; Back</span>Docker overview</a>
+      <a class="next" href="02-dockerfile.html"><span class="pn-label">Next &rarr;</span>Inside a Dockerfile</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Layers, bases, and tags covered &mdash; next, the instructions that actually build them.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/Dockerfile</span> and <span class="mono">metals_ui/Dockerfile</span> in this repository.
+</footer>
+
+</body>
+</html>

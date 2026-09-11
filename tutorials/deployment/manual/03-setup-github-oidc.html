@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>az_setup_github_oidc</title>
-<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../../assets/style.css">
 </head>
 <body>
 
-<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Manual Deployment</a> &rsaquo; az_setup_github_oidc</div>
+<div class="crumbs"><a href="../../index.html">Tutorials</a> &rsaquo; <a href="../index.html">Deployment</a> &rsaquo; <a href="index.html">Manual</a> &rsaquo; az_setup_github_oidc</div>
 
 <header class="masthead">
   <div class="masthead-inner">
@@ -17,33 +17,35 @@
         <p class="eyebrow">Manual Deployment &middot; Script 3 of 4</p>
         <h1>az_setup_github_oidc</h1>
         <p class="lede">
-          Creates a passwordless Azure identity that GitHub Actions can use to deploy code to the
+          Creates a passwordless Azure identity that GitHub Actions can use to deploy to the API
           web app &mdash; the manual, hand-run version of what
-          <a href="../terraform/07-github-oidc.html">github_oidc.tf</a> automates. Same concepts,
+          <a href="../../terraform/07-github-oidc.html">github_oidc.tf</a> automates. Same concepts,
           same security model, one <span class="mono">az</span> command at a time instead of a
-          declared resource.
+          declared resource. Note that it grants <i>less</i> than the Terraform version does &mdash;
+          see <a href="#parity">the gap below</a> before relying on it for container deployments.
         </p>
       </div>
       <figure class="codey-figure">
-        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+        <img src="../../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
       </figure>
     </div>
     <div class="factbar">
       <span class="fact">Files &rarr; <b>az_setup_github_oidc.ps1</b> &middot; <b>.sh</b></span>
       <span class="fact">Requires first &rarr; <a href="01-create-resources.html"><b>az_create_resources</b></a></span>
-      <span class="fact">Terraform equivalent &rarr; <a href="../terraform/07-github-oidc.html"><b>github_oidc.tf</b></a></span>
+      <span class="fact">Terraform equivalent &rarr; <a href="../../terraform/07-github-oidc.html"><b>github_oidc.tf</b></a></span>
     </div>
   </div>
 </header>
 
 <div class="shell">
   <nav class="toc" aria-label="Table of contents">
-    <a class="toc-back" href="index.html">&larr; Manual Deployment overview</a>
+    <a class="toc-back" href="index.html">&larr; Manual overview</a>
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#purpose">Purpose</a></li>
       <li><a href="#prereqs">Before you run it</a></li>
       <li><a href="#code">Walking through the script</a></li>
+      <li><a href="#parity">The gap versus Terraform</a></li>
       <li><a href="#repair">Repairing a broken credential</a></li>
       <li><a href="#errors">Common errors</a></li>
     </ol>
@@ -55,15 +57,15 @@
       <div class="purpose-band-row">
         <div class="purpose-band">
           <p class="purpose-label">Purpose of this script</p>
-          <p>Create a managed identity trusted by GitHub Actions through OIDC, and grant it just enough permission to deploy to this one web app.</p>
+          <p>Create a managed identity trusted by GitHub Actions through OIDC, and grant it permission to deploy to the API web app &mdash; the hand-run half of what Terraform now does more completely.</p>
         </div>
         <figure class="codey-figure">
-          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <img src="../../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
           <figcaption>same trust model as github_oidc.tf</figcaption>
         </figure>
       </div>
       <p class="dek">
-        Everything explained on the <a href="../terraform/07-github-oidc.html">github_oidc.tf
+        Everything explained on the <a href="../../terraform/07-github-oidc.html">github_oidc.tf
         tutorial page</a> about <i>why</i> OIDC is used instead of a stored password, and why the
         permission is scoped to one web app instead of the whole subscription, applies here
         unchanged &mdash; this script just issues the equivalent <span class="mono">az identity</span>
@@ -93,7 +95,7 @@
           <pre class="code">$encodedEnvironment = $GitHubEnvironment.Replace(':', '%3A')
 $FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-deploy@1361521533:environment:${encodedEnvironment}"</pre>
           <p class="desc">
-            The exact same computed value as <a href="../terraform/04-main.html">main.tf</a>'s
+            The exact same computed value as <a href="../../terraform/04-main.html">main.tf</a>'s
             <span class="mono">local.oidc_subject</span> &mdash; a fixed string identifying
             &ldquo;GitHub Actions, running in this exact repository, in this exact
             environment.&rdquo; For any repository other than this project's own, you have to pass
@@ -112,7 +114,7 @@ $FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-dep
           <div class="qhead"><span class="qtitle">3. Create the identity</span><span class="qnum">az identity create</span></div>
           <pre class="code">$identity = Invoke-Az identity create --resource-group $resourceGroup --name $identityName `
     --location $app.location --output json | ConvertFrom-Json</pre>
-          <p class="desc">The manual equivalent of <a href="../terraform/07-github-oidc.html">github_oidc.tf</a>'s <span class="mono">azurerm_user_assigned_identity</span> &mdash; an empty identity, with no permissions yet.</p>
+          <p class="desc">The manual equivalent of <a href="../../terraform/07-github-oidc.html">github_oidc.tf</a>'s <span class="mono">azurerm_user_assigned_identity</span> &mdash; an empty identity, with no permissions yet.</p>
         </div>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">4. Trust GitHub's tokens for that exact subject</span><span class="qnum">az identity federated-credential create</span></div>
@@ -123,7 +125,7 @@ $FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-dep
           <p class="desc">
             Same <span class="mono">issuer</span>, <span class="mono">audience</span>, and
             <span class="mono">subject</span> concepts covered on the
-            <a href="../terraform/07-github-oidc.html">github_oidc.tf page</a> &mdash; this is the
+            <a href="../../terraform/07-github-oidc.html">github_oidc.tf page</a> &mdash; this is the
             trust rule itself, deciding exactly which GitHub Actions tokens Azure will accept.
           </p>
         </div>
@@ -133,10 +135,15 @@ $FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-dep
     --assignee-object-id $identity.principalId --assignee-principal-type ServicePrincipal `
     --role 'Website Contributor' --scope $app.id</pre>
           <p class="desc">
-            The same least-privilege pattern as <a href="../terraform/07-github-oidc.html">github_oidc.tf</a>'s
-            <span class="mono">azurerm_role_assignment</span>: <span class="mono">Website
-            Contributor</span>, scoped to <span class="mono">$app.id</span> &mdash; this one web app
-            &mdash; not the resource group and not the subscription.
+            The same least-privilege pattern as <a href="../../terraform/07-github-oidc.html">github_oidc.tf</a>'s
+            role assignments: <span class="mono">Website Contributor</span>, scoped to
+            <span class="mono">$app.id</span> &mdash; this one web app &mdash; not the resource group
+            and not the subscription.
+          </p>
+          <p class="warn">
+            One assignment, on the API app only. That was sufficient when the API was the only
+            deployable thing; it no longer covers everything the workflows need. See
+            <a href="#parity">the gap below</a>.
           </p>
         </div>
         <div class="qcard">
@@ -144,9 +151,45 @@ $FederatedSubject = "repo:gdzierzon@9723466/cohort-d-dzierzong-metals-simple-dep
           <pre class="code">Write-Host "AZURE_CLIENT_ID = $($identity.clientId)"
 Write-Host "AZURE_TENANT_ID = $($identity.tenantId)"
 Write-Host "AZURE_SUBSCRIPTION_ID = $subscriptionId"</pre>
-          <p class="desc">The same three identifiers Terraform's <a href="../terraform/08-outputs.html">outputs.tf</a> publishes as its <span class="mono">github_secrets</span> output &mdash; ready to paste into the repository's <span class="mono">Development</span> environment secrets.</p>
+          <p class="desc">The same three identifiers Terraform's <a href="../../terraform/08-outputs.html">outputs.tf</a> publishes as its <span class="mono">github_secrets</span> output &mdash; ready to paste into the repository's <span class="mono">Development</span> environment secrets.</p>
         </div>
       </div>
+    </section>
+
+    <section class="block" id="parity">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The gap versus Terraform <span class="tag">read this before relying on it</span></h2>
+          <p class="dek">
+            This script predates the move to containers and hasn't been extended to match. It still
+            grants exactly one role on exactly one app, while
+            <a href="../../terraform/07-github-oidc.html">github_oidc.tf</a> now grants three
+            assignments &mdash; because deploying containers needs more than deploying code did.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-hunting net">
+          <figcaption>a known, deliberate gap</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:15rem;">Role assignment</th><th>This script</th><th>Terraform</th><th>Needed for</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">Website Contributor</span> on the API app</td><td>Yes</td><td>Yes</td><td>Configuring and restarting the API.</td></tr>
+            <tr><td><span class="mono">Website Contributor</span> on the UI app</td><td><b>No</b></td><td>Yes</td><td>Configuring and restarting the UI.</td></tr>
+            <tr><td><span class="mono">Contributor</span> on the registry</td><td><b>No</b></td><td>Yes</td><td><span class="mono">az acr build</span> &mdash; building and pushing either image.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        In practice this means an identity created by this script alone will fail the deploy
+        workflows with <span class="mono">AuthorizationFailed</span>. Either add the two missing
+        assignments by hand with <span class="mono">az role assignment create</span>, or let
+        Terraform manage the identity &mdash; which is what this project actually does. The reasoning
+        behind each role is on the
+        <a href="../03-identity-and-secrets.html#roles">Identity &amp; permissions</a> page.
+      </p>
     </section>
 
     <section class="block" id="repair">
@@ -160,8 +203,8 @@ Write-Host "AZURE_SUBSCRIPTION_ID = $subscriptionId"</pre>
             credential's subject, without recreating the identity or re-granting the role. This
             trades the safety of Terraform's plan/apply cycle for a narrower, faster fix &mdash; there's
             no equivalent single-purpose &ldquo;just fix the subject&rdquo; command in the
-            Terraform workflow; you'd change <a href="../terraform/03-variables.html">the
-            relevant variable</a> and run <a href="../terraform/commands/05-apply.html">terraform apply</a>
+            Terraform workflow; you'd change <a href="../../terraform/03-variables.html">the
+            relevant variable</a> and run <a href="../../terraform/commands/05-apply.html">terraform apply</a>
             again instead.
           </p>
         </div>
@@ -192,7 +235,7 @@ Write-Host "AZURE_SUBSCRIPTION_ID = $subscriptionId"</pre>
 </div>
 
 <div class="codey-signoff">
-  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <img src="../../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
   <p>GitHub can deploy on its own now &mdash; last script, cleaning everything back up.</p>
 </div>
 

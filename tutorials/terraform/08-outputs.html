@@ -18,8 +18,9 @@
         <h1>outputs.tf</h1>
         <p class="lede">
           The receipt. After Terraform finishes creating or updating everything, this file decides
-          which details get printed back &mdash; the web app's URL, the identifiers needed to configure
-          application deployment, and the database connection details other tooling needs.
+          which details get printed back &mdash; every web app's URL, the registry to push images to,
+          the identifiers needed to configure application deployment, and the database connection
+          details other tooling needs.
         </p>
       </div>
       <figure class="codey-figure">
@@ -27,7 +28,7 @@
       </figure>
     </div>
     <div class="factbar">
-      <span class="fact">Outputs defined &rarr; <b>5</b></span>
+      <span class="fact">Outputs defined &rarr; <b>11</b></span>
       <span class="fact">Contains secrets &rarr; <b>no</b> (IDs only)</span>
       <span class="fact">Read with &rarr; <b>terraform output</b></span>
     </div>
@@ -73,13 +74,35 @@
   value = azurerm_resource_group.metals.name
 }
 
-output "webapp_name" {
+output "api_webapp_name" {
   description = "Must match AZURE_WEBAPP_NAME in the GitHub Actions workflow."
-  value       = azurerm_linux_web_app.metals.name
+  value       = azurerm_linux_web_app.api.name
 }
 
-output "webapp_url" {
-  value = "https://${azurerm_linux_web_app.metals.default_hostname}"
+output "api_webapp_url" {
+  value = "https://${azurerm_linux_web_app.api.default_hostname}"
+}
+
+output "ui_webapp_name" {
+  value = azurerm_linux_web_app.ui.name
+}
+
+output "ui_webapp_url" {
+  value = "https://${azurerm_linux_web_app.ui.default_hostname}"
+}
+
+output "tutorials_webapp_name" {
+  value = azurerm_linux_web_app.tutorials.name
+}
+
+output "tutorials_webapp_url" {
+  description = "The hosted tutorial site."
+  value       = "https://${azurerm_linux_web_app.tutorials.default_hostname}"
+}
+
+output "container_registry_login_server" {
+  description = "Push metals-api/metals-ui here, e.g. with az_deploy.ps1/.sh, before apply pulls a new image_tag."
+  value       = azurerm_container_registry.metals.login_server
 }
 
 output "database" {
@@ -115,22 +138,40 @@ output "github_federated_subject" {
           <p class="desc">The name of the resource group created in <a href="04-main.html">main.tf</a> &mdash; useful for scripting anything that needs to target it, like the Azure CLI commands the GitHub Actions workflow runs directly.</p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">webapp_name</span><span class="qnum">must stay in sync</span></div>
+          <div class="qhead"><span class="qtitle">api_ / ui_ / tutorials_webapp_name</span><span class="qnum">must stay in sync</span></div>
           <p class="desc">
-            The web app's name. The <span class="mono">description</span> is a pointed reminder:
-            this value must match <span class="mono">AZURE_WEBAPP_NAME</span> hardcoded in
-            <span class="mono">.github/workflows/azure-webapps-python.yml</span>, since that
-            separate workflow deploys application code to the app by name, not by looking it up
-            through Terraform.
+            Each web app's name. These must match the <span class="mono">API_WEBAPP_NAME</span> and
+            <span class="mono">UI_WEBAPP_NAME</span> values at the top of
+            <span class="mono">.github/workflows/deploy-api.yml</span> and
+            <span class="mono">deploy-ui.yml</span>, since those workflows address the apps by name
+            rather than looking them up through Terraform.
+          </p>
+          <p class="note">
+            They were a single <span class="mono">webapp_name</span> output when the API was the only
+            deployable app. The rename to <span class="mono">api_*</span> was necessary once a second
+            app existed &mdash; and it's exactly the kind of change that quietly breaks any script
+            still asking for the old name.
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">webapp_url</span><span class="qnum">computed value</span></div>
-          <pre class="code">value = "https://${azurerm_linux_web_app.metals.default_hostname}"</pre>
+          <div class="qhead"><span class="qtitle">api_webapp_url / ui_webapp_url</span><span class="qnum">computed values</span></div>
+          <pre class="code">value = "https://${azurerm_linux_web_app.api.default_hostname}"</pre>
           <p class="desc">
             An output's value doesn't have to be a plain attribute &mdash; here it's a small
-            expression, wrapping the web app's auto-generated hostname in a full, clickable
-            <span class="mono">https://</span> URL.
+            expression, wrapping each app's auto-generated hostname in a full, clickable
+            <span class="mono">https://</span> URL. The UI's is the one to actually open in a browser;
+            the API's is useful for <span class="mono">curl</span> and health checks.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">container_registry_login_server</span><span class="qnum">where to push</span></div>
+          <p class="desc">
+            The registry's hostname, like
+            <span class="mono">expeditorsdzierzonmetalsacr.azurecr.io</span>. Terraform creates the
+            registry but never puts anything in it, so this output is the handoff point: it tells
+            you (or a script) exactly where <span class="mono">metals-api</span> and
+            <span class="mono">metals-ui</span> need to be pushed before the web apps have anything
+            to run.
           </p>
         </div>
         <div class="qcard">
@@ -173,7 +214,7 @@ output "github_federated_subject" {
           <thead><tr><th>Command</th><th>What it shows</th></tr></thead>
           <tbody>
             <tr><td><a href="commands/07-output.html"><code>terraform output</code></a></td><td>All outputs, formatted for a person to read.</td></tr>
-            <tr><td><a href="commands/07-output.html"><code>terraform output -raw webapp_url</code></a></td><td>One output's value only, with no extra formatting &mdash; useful in scripts.</td></tr>
+            <tr><td><a href="commands/07-output.html"><code>terraform output -raw ui_webapp_url</code></a></td><td>One output's value only, with no extra formatting &mdash; useful in scripts.</td></tr>
             <tr><td><a href="commands/07-output.html"><code>terraform output -json github_secrets</code></a></td><td>One structured output as JSON, so another program can parse it directly.</td></tr>
           </tbody>
         </table>
@@ -181,9 +222,10 @@ output "github_federated_subject" {
       <p class="bonus-banner">
         The GitHub Actions workflow in this project uses exactly this pattern: after
         <a href="commands/05-apply.html"><span class="mono">apply</span></a>, it runs
-        <span class="mono">terraform output -json github_secrets</span> and
-        <span class="mono">terraform output -raw webapp_name</span> and writes both into the
-        workflow's job summary, so whoever ran it can copy the values straight into GitHub
+        <span class="mono">terraform output -json github_secrets</span> plus
+        <span class="mono">-raw api_webapp_name</span>, <span class="mono">-raw ui_webapp_name</span>,
+        and <span class="mono">-raw container_registry_login_server</span>, writing them all into the
+        workflow's job summary &mdash; so whoever ran it can copy the values straight into GitHub
         settings without opening a terminal.
       </p>
     </section>

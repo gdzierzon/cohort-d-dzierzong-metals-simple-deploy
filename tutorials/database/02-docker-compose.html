@@ -20,7 +20,7 @@
           <span class="mono">docker-compose.yml</span>, at the root of this repository, stands up a
           local PostgreSQL 16 container preloaded with the full schema and seed data from
           <span class="mono">sql/metals-db.sql</span> &mdash; no manual <span class="mono">psql</span>
-          steps required. This page walks through the file itself, then covers the one thing that
+          steps required. This page covers the database half of that file, then the one thing that
           trips people up: an old, already-running database won't pick up new tables on its own.
         </p>
       </div>
@@ -30,7 +30,8 @@
     </div>
     <div class="factbar">
       <span class="fact">File &rarr; <b>docker-compose.yml</b></span>
-      <span class="fact">Start command &rarr; <b>docker compose up -d db</b></span>
+      <span class="fact">Whole stack &rarr; <b>docker compose up -d --build</b></span>
+      <span class="fact">Database only &rarr; <b>docker compose up -d db</b></span>
       <span class="fact">Full reset &rarr; <b>docker compose down -v</b></span>
       <span class="fact">Dev accounts &rarr; <b>admin / customer, password: password</b></span>
     </div>
@@ -70,25 +71,28 @@
           <ul class="steps">
             <li>Docker Desktop (or Docker Engine + the Compose plugin) installed and running.</li>
             <li>A <span class="mono">.env</span> file at the project root, copied from
-              <span class="mono">.env.example</span>, with the <span class="mono">DB_*</span>
-              variables set to match <span class="mono">docker-compose.yml</span> (see
-              <a href="#running">Starting it up</a> below).</li>
+              <span class="mono">.env.example</span>. Compose requires
+              <span class="mono">JWT_SECRET_KEY</span> and refuses to start without it. The
+              <span class="mono">DB_*</span> values matter only if you run the API directly with
+              Python &mdash; the containerized API gets its database settings from the compose file
+              itself.</li>
             <li>Port <span class="mono">5432</span> free on your machine &mdash; stop any other local
-              PostgreSQL install first, or it will conflict.</li>
+              PostgreSQL install first, or it will conflict. Starting the whole stack also needs
+              <span class="mono">5000</span> and <span class="mono">8888</span>.</li>
           </ul>
         </div>
       </div>
     </section>
 
     <section class="block" id="compose">
-      <h2>Walking through docker-compose.yml <span class="tag">the whole file</span></h2>
+      <h2>Walking through the db service <span class="tag">one of three</span></h2>
       <p class="dek">
-        This file only defines one service, <span class="mono">db</span> &mdash; there's no
-        container for the API itself in local development; you run
-        <span class="mono">metals_api</span> directly with Python and point it at this database.
+        <span class="mono">docker-compose.yml</span> defines three services &mdash;
+        <span class="mono">ui</span>, <span class="mono">api</span>, and
+        <span class="mono">db</span> &mdash; and starts them together. The other two are covered in
+        the <a href="../docker/06-compose.html">Docker tutorial</a>; this page stays on the database.
       </p>
-      <pre class="code"><span class="filename">docker-compose.yml</span>services:
-  db:
+      <pre class="code"><span class="filename">docker-compose.yml (the db service)</span>  db:
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -100,6 +104,12 @@
     volumes:
       - pgdata_metals:/var/lib/postgresql/data
       - ./sql/metals-db.sql:/docker-entrypoint-initdb.d/metals-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d metals"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 volumes:
   pgdata_metals:</pre>
@@ -131,6 +141,17 @@ volumes:
             survives <span class="mono">docker compose down</span>, container rebuilds, and image
             updates. This is also exactly the piece you have to delete to force a full reset &mdash;
             see <a href="#reset">below</a>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">healthcheck</span><span class="qnum">what the API waits for</span></div>
+          <p class="desc">
+            <span class="mono">pg_isready</span> asks PostgreSQL whether it's actually accepting
+            connections. Compose runs it every five seconds and won't start the API until it
+            succeeds &mdash; because &ldquo;the container has started&rdquo; and &ldquo;the database
+            will accept a connection&rdquo; are very different things, especially on the first run
+            when the whole schema is being loaded. <span class="mono">start_period: 10s</span> is a
+            grace window where early failures don't count against the retries.
           </p>
         </div>
         <div class="qcard">
@@ -204,7 +225,7 @@ volumes:
         <div class="qcard">
           <ol class="steps">
             <li>Stop the container <i>and</i> delete its volume: <pre class="code">docker compose down -v</pre></li>
-            <li>Start it again from scratch: <pre class="code">docker compose up -d db</pre></li>
+            <li>Start it again from scratch: <pre class="code">docker compose up -d --build</pre></li>
             <li>Because the volume is now gone, Postgres treats this as a brand-new database and runs <span class="mono">metals-db.sql</span> again in full &mdash; creating every table, including the three new ones, and reloading all seed data.</li>
           </ol>
           <p class="warn">
@@ -258,7 +279,7 @@ volumes:
           <tbody>
             <tr><td>Port <span class="mono">5432</span> already in use / bind: address already in use</td><td>Another PostgreSQL instance (local install, another project's container) is already using the port.</td><td>Stop the other instance, or change the left-hand side of the <span class="mono">ports</span> mapping (e.g. <span class="mono">"5433:5432"</span>) and update <span class="mono">DB_PORT</span> in <span class="mono">.env</span> to match.</td></tr>
             <tr><td><span class="mono">password authentication failed for user</span></td><td><span class="mono">.env</span>'s <span class="mono">DB_USER</span> / <span class="mono">DB_PASSWORD</span> don't match the <span class="mono">environment</span> block in <span class="mono">docker-compose.yml</span>.</td><td>Set both to <span class="mono">postgres</span> / <span class="mono">postgres</span>, or change the compose file's environment block to match your <span class="mono">.env</span> &mdash; just make sure they agree.</td></tr>
-            <tr><td><span class="mono">relation "users" does not exist</span> (or similarly, <span class="mono">"roles"</span>, <span class="mono">"elements"</span>)</td><td>You have an old volume from before the schema change, so the init script never ran against it.</td><td>Follow <a href="#reset">the reset steps above</a>: <span class="mono">docker compose down -v</span>, then <span class="mono">docker compose up -d db</span>.</td></tr>
+            <tr><td><span class="mono">relation "users" does not exist</span> (or similarly, <span class="mono">"roles"</span>, <span class="mono">"elements"</span>)</td><td>You have an old volume from before the schema change, so the init script never ran against it.</td><td>Follow <a href="#reset">the reset steps above</a>: <span class="mono">docker compose down -v</span>, then <span class="mono">docker compose up -d --build</span>.</td></tr>
             <tr><td>API can't connect at all / connection refused</td><td>The container isn't running yet, or hasn't finished starting.</td><td>Run <span class="mono">docker compose ps</span> to check its status, and <span class="mono">docker compose logs -f db</span> to watch it start; give it a few seconds after <span class="mono">up -d</span>.</td></tr>
           </tbody>
         </table>

@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>This Project's Workflows</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Deployment</a> &rsaquo; This Project's Workflows</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Deployment &middot; Page 2 of 3</p>
+        <h1>Three Workflows, One Rule</h1>
+        <p class="lede">
+          This repository has three workflow files: one per deployable application, plus one for
+          infrastructure. They share a single governing principle &mdash; <b>every push is
+          validated, but nothing reaches Azure without either a merge to
+          <span class="mono">main</span> or a deliberate click</b> &mdash; and infrastructure is
+          held to the stricter half of that rule at all times.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Workflows &rarr; <b>3</b></span>
+      <span class="fact">Auto-deploys on &rarr; <b>push to main</b></span>
+      <span class="fact">Infrastructure apply &rarr; <b>manual only</b></span>
+      <span class="fact">Image tag &rarr; <b>latest</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Deployment overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#three-files">The three files</a></li>
+      <li><a href="#gating">The rule that decides what runs</a></li>
+      <li><a href="#deploy-api">deploy-api.yml</a></li>
+      <li><a href="#deploy-ui">deploy-ui.yml, and why it's separate</a></li>
+      <li><a href="#terraform">terraform.yml</a></li>
+      <li><a href="#running">Running them</a></li>
+      <li><a href="#errors">Common errors</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="three-files">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Know which workflow runs when, what each job does, and why the API and UI have separate files rather than one shared pipeline.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>two apps, one infrastructure</figcaption>
+        </figure>
+      </div>
+      <h2>The three files <span class="tag">overview</span></h2>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:15rem;">File</th><th>What it does, and what wakes it up</th></tr></thead>
+          <tbody>
+            <tr><td class="path">deploy-api.yml</td><td>Tests the API, then builds, pushes, and deploys the <span class="mono">metals-api</span> image. Triggered by changes under <span class="mono">metals_api/</span>, <span class="mono">sql/</span>, or the requirements files.</td></tr>
+            <tr><td class="path">deploy-ui.yml</td><td>Builds, pushes, and deploys the <span class="mono">metals-ui</span> image. Triggered by changes under <span class="mono">metals_ui/</span>.</td></tr>
+            <tr><td class="path">terraform.yml</td><td>Validates the Terraform configuration on every change, and runs <span class="mono">plan</span>, <span class="mono">apply</span>, or <span class="mono">destroy</span> only when a person asks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Each file's resource names live in a top-level <span class="mono">env:</span> block &mdash;
+        <span class="mono">RESOURCE_GROUP</span>, <span class="mono">REGISTRY_NAME</span>, the Web App
+        names, and <span class="mono">IMAGE_TAG</span>. If you ever change the
+        <span class="mono">user_name</span> these resources are built from, those are the values to
+        update.
+      </p>
+    </section>
+
+    <section class="block" id="gating">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The rule that decides what runs <span class="tag">the important part</span></h2>
+          <p class="dek">
+            Both application workflows trigger on pushes, pull requests, and manual dispatch &mdash;
+            but the jobs that touch Azure carry an <span class="mono">if:</span> condition, so a
+            trigger alone isn't enough to deploy anything.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>validate always, deploy deliberately</figcaption>
+        </figure>
+      </div>
+      <pre class="code"><span class="filename">the condition on every Azure-touching job</span>if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main')</pre>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:15rem;">What you did</th><th>deploy-api.yml</th><th>deploy-ui.yml</th><th>terraform.yml</th></tr></thead>
+          <tbody>
+            <tr><td>Opened or updated a PR</td><td>Tests only</td><td>Local image build only</td><td>fmt, validate, test</td></tr>
+            <tr><td>Pushed to a feature branch</td><td>Tests only</td><td>Local image build only</td><td>fmt, validate, test</td></tr>
+            <tr><td><b>Merged a PR to <span class="mono">main</span></b></td><td><b>Test &rarr; build &rarr; deploy</b></td><td><b>Build &rarr; deploy</b></td><td>fmt, validate, test</td></tr>
+            <tr><td>Clicked <b>Run workflow</b></td><td>Test &rarr; build &rarr; deploy</td><td>Build &rarr; deploy</td><td>plan / apply / destroy, as selected</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        Read the <span class="mono">terraform.yml</span> column again: there is <b>no</b> row where a
+        push changes infrastructure. Merging Terraform code to <span class="mono">main</span>
+        validates it and stops. Applying always takes a human, because a bad infrastructure change
+        can delete a database, while a bad application image can be replaced by pushing a better
+        one.
+      </p>
+    </section>
+
+    <section class="block" id="deploy-api">
+      <h2>deploy-api.yml <span class="tag">three jobs</span></h2>
+      <p class="dek">
+        A straight chain: <span class="mono">test</span> &rarr;
+        <span class="mono">build-and-push</span> &rarr; <span class="mono">deploy</span>, each job
+        waiting on the one before it via <span class="mono">needs:</span>.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">test</span><span class="qnum">runs on every trigger</span></div>
+          <p class="desc">
+            Starts a <span class="mono">postgres:16</span> service container, loads
+            <span class="mono">sql/metals-db.sql</span> into it with
+            <span class="mono">psql</span>, then runs <span class="mono">pytest metals_api/tests</span>
+            against that real database. This is the only job with no
+            <span class="mono">if:</span> &mdash; it always runs, which is the point: every push and
+            every PR gets tested.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">build-and-push</span><span class="qnum">gated</span></div>
+          <p class="desc">
+            Logs in to Azure with <span class="mono">azure/login</span>, then runs a single command:
+          </p>
+          <pre class="code">az acr build --registry "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" \
+  --image "metals-api:$IMAGE_TAG" --file metals_api/Dockerfile .</pre>
+          <p class="desc">
+            The build happens on Azure's own build agents, not the GitHub runner &mdash; the runner
+            only uploads the source. That's why no Docker setup step is needed, and why the image
+            never travels across the internet twice.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">deploy</span><span class="qnum">gated, and declares the URL</span></div>
+          <p class="desc">
+            Points the Web App at the image, restarts it, then polls
+            <span class="mono">/health</span> up to ten times with a ten-second wait, failing the run
+            with <span class="mono">::error::</span> if it never returns
+            <span class="mono">200</span>. Its <span class="mono">environment:</span> block includes a
+            <span class="mono">url:</span>, so the deployed address is linked directly from the run
+            summary and the repository's Environments view.
+          </p>
+          <p class="note">
+            It declares <span class="mono">contents: none</span> and skips
+            <span class="mono">actions/checkout</span> entirely &mdash; this job never needs
+            repository files, only the Azure CLI and its OIDC token.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="deploy-ui">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>deploy-ui.yml, and why it's separate <span class="tag">a structural decision</span></h2>
+          <p class="dek">
+            The obvious design is one workflow with an API job and a UI job. It doesn't work, for a
+            specific reason: <span class="mono">paths:</span> filters apply to the entire workflow,
+            not to individual jobs. One shared file would mean every UI tweak also rebuilt and
+            redeployed the API, and vice versa.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey thinking with a rubber duck">
+          <figcaption>one filter per file</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Separate files, independent deploys</span><span class="qnum">the payoff</span></div>
+          <p class="desc">
+            Editing a stylesheet under <span class="mono">metals_ui/</span> triggers only the UI
+            workflow; changing a route under <span class="mono">metals_api/</span> triggers only the
+            API's. Each app ships on its own schedule, and an unrelated change can't cause an
+            unnecessary restart of the other.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">No test job &mdash; a build check instead</span><span class="qnum">an honest difference</span></div>
+          <p class="desc">
+            The UI has no automated test suite, so on pushes and PRs its
+            <span class="mono">build</span> job runs a plain
+            <span class="mono">docker build</span> on the runner &mdash; no registry, no Azure login,
+            no credentials involved. It proves the image still builds, which is the useful signal
+            available here.
+          </p>
+          <p class="note">
+            That validation job is deliberately a <i>separate job</i> from
+            <span class="mono">build-and-push</span> rather than one job with conditional steps,
+            because <span class="mono">environment:</span> is a job-level setting &mdash; keeping them
+            apart means an ordinary PR never touches the Development environment or its protection
+            rules.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">working-directory: metals_ui</span><span class="qnum">a gotcha, encoded</span></div>
+          <p class="desc">
+            The UI's <span class="mono">az acr build</span> step sets its working directory before
+            running. That's not cosmetic: <span class="mono">az acr build</span> validates the
+            <span class="mono">--file</span> path against the <i>current directory</i> rather than
+            the source argument, so running it from the repository root with
+            <span class="mono">--file Dockerfile metals_ui</span> fails with
+            <span class="mono">Unable to find 'Dockerfile'</span>. The same workaround appears in the
+            <a href="manual/02-deploy.html">manual deploy script</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terraform">
+      <h2>terraform.yml <span class="tag">infrastructure, manually</span></h2>
+      <p class="dek">
+        Two jobs: one that always validates, and one that only runs on
+        <span class="mono">workflow_dispatch</span> and performs the operation you picked from a
+        dropdown.
+      </p>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">validate</span><span class="qnum">no Azure credentials at all</span></div>
+          <p class="desc">
+            Runs <span class="mono">fmt -check</span>, <span class="mono">init -backend=false</span>,
+            <span class="mono">validate</span>, and <span class="mono">test</span> for both the main
+            configuration and the bootstrap module, then the Python unit tests for the schema
+            loader. Everything here is offline &mdash; it never authenticates to Azure and can never
+            change a resource.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">infrastructure</span><span class="qnum">plan, apply, or destroy</span></div>
+          <p class="desc">
+            Guarded by <span class="mono">if: github.event_name == 'workflow_dispatch'</span>. It
+            checks that every required secret and variable is actually set before doing anything,
+            connects Terraform to its remote state in Azure Blob Storage, produces a plan, and
+            applies that same plan in the same run if the operation wasn't
+            <span class="mono">plan</span>.
+          </p>
+          <p class="note">
+            The operation defaults to <span class="mono">plan</span>, so the least destructive
+            choice is the one you get by clicking through without thinking.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The temporary firewall rule</span><span class="qnum">a neat, careful touch</span></div>
+          <p class="desc">
+            To load the database schema after an apply, the runner must reach PostgreSQL &mdash; but
+            GitHub's runners have unpredictable IP addresses. The workflow looks up its own public
+            IP, adds a firewall rule named after the run, initializes the database, and removes the
+            rule in a cleanup step marked <span class="mono">if: always()</span> so it runs even when
+            the initialization failed.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The run summary</span><span class="qnum">where to find the IDs</span></div>
+          <p class="desc">
+            After an apply it appends the Terraform outputs to
+            <span class="mono">$GITHUB_STEP_SUMMARY</span> &mdash; the client/tenant/subscription IDs
+            for the application deployment identity, both Web App names, and the registry login
+            server. Those are the values that go into the <span class="mono">Development</span>
+            environment's secrets, covered on
+            <a href="03-identity-and-secrets.html">the next page</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="running">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Running them <span class="tag">in practice</span></h2>
+          <p class="dek">
+            Day to day you don't run these at all &mdash; you merge a pull request and the right one
+            fires. Manual dispatch is for first-time setup, infrastructure changes, and redeploying
+            without a new commit.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-right.png" alt="Codey pointing to the right">
+          <figcaption>merge, or click</figcaption>
+        </figure>
+      </div>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:3rem;">#</th><th>Goal</th><th>How</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Ship an API change</td><td>Merge it to <span class="mono">main</span>. Tests run, then the image builds and deploys automatically.</td></tr>
+            <tr><td>2</td><td>Redeploy without changing code</td><td><b>Actions &rarr; Build and deploy metals-api to Azure &rarr; Run workflow</b>.</td></tr>
+            <tr><td>3</td><td>Create or update Azure resources</td><td><b>Actions &rarr; Terraform infrastructure &rarr; Run workflow</b>, operation <span class="mono">apply</span>.</td></tr>
+            <tr><td>4</td><td>Preview an infrastructure change</td><td>Same, operation <span class="mono">plan</span> &mdash; reads state and Azure, changes nothing.</td></tr>
+            <tr><td>5</td><td>Tear the environment down</td><td>Same, operation <span class="mono">destroy</span>. <b>Deletes the database and all its data.</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="errors">
+      <h2>Common errors <span class="tag">and how to fix them</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>How to fix it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">Tenant '***' not found</span> during <span class="mono">azure/login</span></td><td>A malformed or empty <span class="mono">AZURE_TENANT_ID</span> &mdash; usually a copy-paste slip when the secret was added.</td><td>Re-enter the three <span class="mono">AZURE_*</span> secrets on the <span class="mono">Development</span> environment. See <a href="03-identity-and-secrets.html">the next page</a>.</td></tr>
+            <tr><td><span class="mono">AuthorizationFailed</span> on a registry action</td><td>The deployment identity is missing a role, or one was granted moments ago and hasn't propagated.</td><td>Check the roles listed on <a href="03-identity-and-secrets.html#roles">the next page</a>; allow a few minutes after any role change.</td></tr>
+            <tr><td><span class="mono">Unable to find 'Dockerfile'</span> during <span class="mono">az acr build</span></td><td>The step ran from a directory where that relative path doesn't exist.</td><td>Ensure the UI step keeps its <span class="mono">working-directory: metals_ui</span>.</td></tr>
+            <tr><td>Workflow didn't run at all after a push</td><td>The commit didn't touch any path in that workflow's <span class="mono">paths:</span> filter.</td><td>Expected behavior. Use Run workflow to deploy anyway.</td></tr>
+            <tr><td>Deploy jobs show as <span class="mono">skipped</span> on a PR</td><td>The <span class="mono">if:</span> gate &mdash; PRs validate but never deploy.</td><td>Also expected. Merge to <span class="mono">main</span>, or dispatch manually.</td></tr>
+            <tr><td>Deploy succeeded but the site is unchanged</td><td>A new image was pushed under the same tag and nothing restarted.</td><td>Confirm the restart step ran; see <a href="index.html#restart">why the restart exists</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="01-github-actions.html"><span class="pn-label">&larr; Back</span>How GitHub Actions works</a>
+      <a class="next" href="03-identity-and-secrets.html"><span class="pn-label">Next &rarr;</span>Identity &amp; permissions</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>The workflows make sense &mdash; but how do they get into Azure without a password? That's next.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">.github/workflows/deploy-api.yml</span>, <span class="mono">deploy-ui.yml</span>, and <span class="mono">terraform.yml</span> in this repository.
+</footer>
+
+</body>
+</html>

@@ -17,9 +17,10 @@
         <p class="eyebrow">Terraform Tutorial &middot; File 7 of 9</p>
         <h1>github_oidc.tf</h1>
         <p class="lede">
-          Builds a secure digital identity that lets the GitHub Actions deployment workflow prove who
-          it is to Azure, and grants that identity permission to deploy code to this project's web
-          app &mdash; without ever storing a password or long-lived secret.
+          Builds a secure digital identity that lets the GitHub Actions deployment workflows prove
+          who they are to Azure, and grants that identity exactly the permissions container
+          deployment needs &mdash; configuring and restarting all three web apps, and building images in
+          the container registry &mdash; without ever storing a password or long-lived secret.
         </p>
       </div>
       <figure class="codey-figure">
@@ -27,9 +28,9 @@
       </figure>
     </div>
     <div class="factbar">
-      <span class="fact">Resources created &rarr; <b>3</b></span>
+      <span class="fact">Resources created &rarr; <b>6</b></span>
       <span class="fact">Auth method &rarr; <b>OIDC (OpenID Connect)</b></span>
-      <span class="fact">Permission scope &rarr; <b>this one web app only</b></span>
+      <span class="fact">Role assignments &rarr; <b>4</b>, each narrowly scoped</span>
     </div>
   </div>
 </header>
@@ -55,7 +56,7 @@
       <div class="purpose-band-row">
         <div class="purpose-band">
           <p class="purpose-label">Purpose of this file</p>
-          <p>Create a passwordless identity GitHub Actions can use to authenticate to Azure, and grant it just enough permission to deploy this one web app.</p>
+          <p>Create a passwordless identity GitHub Actions can use to authenticate to Azure, and grant it just enough permission to deploy the project's web apps and build its images.</p>
         </div>
         <figure class="codey-figure">
           <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
@@ -85,9 +86,33 @@ resource "azurerm_federated_identity_credential" "github" {
   subject                   = local.oidc_subject
 }
 
-resource "azurerm_role_assignment" "github_deployment" {
-  scope                = azurerm_linux_web_app.metals.id
+resource "azurerm_role_assignment" "github_deployment_api" {
+  scope                = azurerm_linux_web_app.api.id
   role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+resource "azurerm_role_assignment" "github_deployment_ui" {
+  scope                = azurerm_linux_web_app.ui.id
+  role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+resource "azurerm_role_assignment" "github_deployment_tutorials" {
+  scope                = azurerm_linux_web_app.tutorials.id
+  role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+# AcrPush only grants data-plane pull/push actions; az acr build/show also
+# need the control-plane "registries/read" action to look up the registry
+# itself, which only a role like Contributor provides.
+resource "azurerm_role_assignment" "github_acr_contributor" {
+  scope                = azurerm_container_registry.metals.id
+  role_definition_name = "Contributor"
   principal_id         = azurerm_user_assigned_identity.github.principal_id
   principal_type       = "ServicePrincipal"
 }</pre>
@@ -167,25 +192,47 @@ resource "azurerm_role_assignment" "github_deployment" {
     </section>
 
     <section class="block" id="role">
-      <h2>The role assignment <span class="tag">azurerm_role_assignment</span></h2>
-      <p class="dek">Being able to log in as this identity still wouldn't let it do anything &mdash; Azure permissions are granted separately, by role assignment.</p>
+      <h2>The role assignments <span class="tag">azurerm_role_assignment</span></h2>
+      <p class="dek">
+        Being able to log in as this identity still wouldn't let it do anything &mdash; Azure
+        permissions are granted separately, by role assignment. Deploying containers needs four:
+        one per web app, plus one on the registry.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:14rem;">Resource</th><th>Role</th><th>Scope</th><th>Why it's needed</th></tr></thead>
+          <tbody>
+            <tr><td><code>github_deployment_api</code></td><td>Website Contributor</td><td>the API web app</td><td>Set its container image and restart it.</td></tr>
+            <tr><td><code>github_deployment_ui</code></td><td>Website Contributor</td><td>the UI web app</td><td>The same, for the UI &mdash; a second assignment, because scope is per-resource.</td></tr>
+            <tr><td><code>github_deployment_tutorials</code></td><td>Website Contributor</td><td>the tutorials web app</td><td>The same, for the tutorial site.</td></tr>
+            <tr><td><code>github_acr_contributor</code></td><td>Contributor</td><td>the container registry</td><td>Run <span class="mono">az acr build</span>, which uploads source and schedules a build.</td></tr>
+          </tbody>
+        </table>
+      </div>
       <div class="qgrid">
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">scope = azurerm_linux_web_app.metals.id</span><span class="qnum">the most important line here</span></div>
+          <div class="qhead"><span class="qtitle">scope is the most important line</span><span class="qnum">least privilege</span></div>
           <p class="desc">
-            The <span class="mono">scope</span> is <i>what</i> the permission applies to. Here,
-            it's scoped to one specific resource &mdash; this one web app &mdash; not the resource
-            group, and not the whole subscription. This is the principle of <b>least
-            privilege</b>: if the GitHub Actions identity were ever compromised, the damage it
-            could do is limited to this single web app, not the database, not any other resource.
+            The <span class="mono">scope</span> is <i>what</i> the permission applies to. Each of
+            these is scoped to one specific resource &mdash; not the resource group, and not the
+            subscription. If the GitHub Actions identity were ever compromised, the damage is
+            limited to those three resources; the database, in particular, is untouched.
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">role_definition_name = "Website Contributor"</span><span class="qnum">what it's allowed to do</span></div>
+          <div class="qhead"><span class="qtitle">Why Contributor on the registry</span><span class="qnum">and not AcrPush</span></div>
           <p class="desc">
-            A built-in Azure role that permits managing and deploying to web apps, without
-            granting broader permissions like deleting the resource or changing its network
-            configuration. The permission matches the job: deploying application code.
+            <span class="mono">AcrPush</span> sounds like the right role and isn't.
+            <span class="mono">az acr build</span> doesn't push a locally-built image &mdash; it
+            uploads source and asks the registry to build it, which are management-plane actions
+            (<span class="mono">listBuildSourceUploadUrl</span>,
+            <span class="mono">scheduleRun</span>) that the data-plane push roles don't include.
+            <span class="mono">Contributor</span>, scoped to the single registry, is the smallest
+            built-in role that covers them.
+          </p>
+          <p class="note">
+            The full progression of failures this produces &mdash; and how to read them &mdash; is on
+            <a href="../deployment/03-identity-and-secrets.html#roles">the Identity &amp; permissions page</a>.
           </p>
         </div>
         <div class="qcard">
@@ -221,8 +268,8 @@ resource "azurerm_role_assignment" "github_deployment" {
       </div>
       <p class="bonus-banner">
         Curious what these same three resources look like as individual <span class="mono">az</span>
-        commands instead? See <a href="../manual/03-setup-github-oidc.html">az_setup_github_oidc</a>
-        in the <a href="../manual/index.html">Manual Deployment tutorial</a>.
+        commands instead? See <a href="../deployment/manual/03-setup-github-oidc.html">az_setup_github_oidc</a>
+        in the <a href="../deployment/manual/index.html">Manual Deployment tutorial</a>.
       </p>
     </section>
 

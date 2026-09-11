@@ -34,7 +34,7 @@
       <span class="fact">Files with resources &rarr; <b>8 .tf files</b></span>
       <span class="fact">One-time setup &rarr; <b>terraform/bootstrap/</b></span>
       <span class="fact">Runs from &rarr; <b>your terminal, or GitHub Actions</b></span>
-      <span class="fact">Manual alternative &rarr; <a href="../manual/index.html"><b>Manual Deployment tutorial</b></a></span>
+      <span class="fact">Manual alternative &rarr; <a href="../deployment/manual/index.html"><b>Manual Deployment tutorial</b></a></span>
     </div>
   </div>
 </header>
@@ -114,7 +114,7 @@
           <div class="qhead"><span class="qtitle">The shopping list analogy</span><span class="qnum">ELI5</span></div>
           <p class="desc">
             You write down exactly what you want &mdash; &ldquo;one resource group, one database, one
-            web app&rdquo; &mdash; in files. Terraform reads the list, checks what already exists in
+            registry, two web apps&rdquo; &mdash; in files. Terraform reads the list, checks what already exists in
             Azure, and then goes and creates (or fixes, or removes) whatever is different, so
             reality matches the list. You never have to remember the individual steps yourself;
             you just keep the list up to date.
@@ -149,7 +149,7 @@
             <tr><td class="path"><a href="03-variables.html">variables.tf</a></td><td>A fill-in-the-blank form. Lists every piece of information Terraform needs from a person (or from GitHub Actions) before it can run &mdash; like the database password or your Azure subscription. <a href="03-variables.html">(dig deeper)</a></td></tr>
             <tr><td class="path"><a href="04-main.html">main.tf</a></td><td>The foundation. Creates the resource group &mdash; the labeled folder inside Azure that every other resource in this project gets placed into &mdash; and a few shared names used everywhere else. <a href="04-main.html">(dig deeper)</a></td></tr>
             <tr><td class="path"><a href="05-database.html">database.tf</a></td><td>Builds the PostgreSQL database server and the empty database inside it, plus the security rules that decide who's allowed to connect. <a href="05-database.html">(dig deeper)</a></td></tr>
-            <tr><td class="path"><a href="06-app-service.html">app_service.tf</a></td><td>Builds the web app that runs the Flask API, and tells it how to connect to the database. <a href="06-app-service.html">(dig deeper)</a></td></tr>
+            <tr><td class="path"><a href="06-app-service.html">app_service.tf</a></td><td>Builds the container registry, the shared hosting plan, and the two container web apps (API and UI) &mdash; and tells each one how to reach the database, the registry, and each other. <a href="06-app-service.html">(dig deeper)</a></td></tr>
             <tr><td class="path"><a href="07-github-oidc.html">github_oidc.tf</a></td><td>Builds a secure digital ID badge that lets GitHub Actions prove who it is to Azure, so it can deploy the app without ever storing a password. <a href="07-github-oidc.html">(dig deeper)</a></td></tr>
             <tr><td class="path"><a href="08-outputs.html">outputs.tf</a></td><td>The receipt. After everything is built, this prints back the important details &mdash; like the app's web address &mdash; so people (and GitHub) know where to find things. <a href="08-outputs.html">(dig deeper)</a></td></tr>
             <tr><td class="path indent"><a href="09-bootstrap.html">bootstrap/main.tf</a></td><td>A separate, one-time setup. Before any of the files above can run, something has to create the safe storage location for Terraform's memory in the first place &mdash; that's this file's only job. <a href="09-bootstrap.html">(dig deeper)</a></td></tr>
@@ -194,7 +194,7 @@
             <li><b><a href="03-variables.html">variables.tf</a></b> &mdash; what information you need to supply.</li>
             <li><b><a href="04-main.html">main.tf</a></b> &mdash; the resource group everything else lives inside.</li>
             <li><b><a href="05-database.html">database.tf</a></b> &mdash; the PostgreSQL server and database.</li>
-            <li><b><a href="06-app-service.html">app_service.tf</a></b> &mdash; the web app running the API.</li>
+            <li><b><a href="06-app-service.html">app_service.tf</a></b> &mdash; the registry and the two container web apps.</li>
             <li><b><a href="07-github-oidc.html">github_oidc.tf</a></b> &mdash; the deployment identity for GitHub Actions.</li>
             <li><b><a href="08-outputs.html">outputs.tf</a></b> &mdash; what Terraform reports back when it's done.</li>
             <li><b><a href="09-bootstrap.html">bootstrap/main.tf</a></b> &mdash; the separate one-time setup that comes before all of the above.</li>
@@ -280,7 +280,7 @@
         <a class="module-card" href="03-variables.html"><span class="mnum">File 3 of 9</span><h3>variables.tf</h3><p>The inputs Terraform needs before it can run.</p></a>
         <a class="module-card" href="04-main.html"><span class="mnum">File 4 of 9</span><h3>main.tf</h3><p>The resource group and shared names everything else builds on.</p></a>
         <a class="module-card" href="05-database.html"><span class="mnum">File 5 of 9</span><h3>database.tf</h3><p>The PostgreSQL server, database, and firewall rules.</p></a>
-        <a class="module-card" href="06-app-service.html"><span class="mnum">File 6 of 9</span><h3>app_service.tf</h3><p>The web app that runs the Flask API.</p></a>
+        <a class="module-card" href="06-app-service.html"><span class="mnum">File 6 of 9</span><h3>app_service.tf</h3><p>The registry and the two container web apps.</p></a>
         <a class="module-card" href="07-github-oidc.html"><span class="mnum">File 7 of 9</span><h3>github_oidc.tf</h3><p>The secure identity GitHub Actions uses to deploy.</p></a>
         <a class="module-card" href="08-outputs.html"><span class="mnum">File 8 of 9</span><h3>outputs.tf</h3><p>What Terraform reports back once it's finished.</p></a>
         <a class="module-card" href="09-bootstrap.html"><span class="mnum">File 9 of 9</span><h3>bootstrap/main.tf</h3><p>The one-time setup that runs before everything else.</p></a>

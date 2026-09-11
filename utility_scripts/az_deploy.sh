@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the API and UI container images in Azure Container Registry and
 # deploys them to their Web Apps. Requires Azure CLI (az login) and the
-# resources created by az_create_resources.sh. Builds both images with
+# resources created by az_create_resources.sh. Builds all three images with
 # `az acr build` (no local Docker required), points each Web App at the new
 # tag, then restarts it so the container actually re-pulls the image. Does
 # not touch the database.
@@ -53,6 +53,7 @@ project_root="$(cd "$script_dir/.." && pwd)"
 resource_group="expeditors-${user_name}-metals-rg"
 app_name="expeditors-${user_name}-metals-api"
 ui_app_name="expeditors-${user_name}-metals-ui"
+tutorials_app_name="expeditors-${user_name}-metals-tutorials"
 if [[ -z "$registry_name" ]]; then
     registry_name="expeditors${user_name//-/}metalsacr"
 fi
@@ -62,10 +63,10 @@ az account show --query id --output tsv >/dev/null
 registry_login_server=$(az acr show --name "$registry_name" --resource-group "$resource_group" --query loginServer --output tsv)
 registry_login_server=${registry_login_server//$'\r'/}
 
-app_names=("$app_name" "$ui_app_name")
-app_images=('metals-api' 'metals-ui')
-app_contexts=("$project_root" "$project_root/metals_ui")
-app_dockerfiles=('metals_api/Dockerfile' 'Dockerfile')
+app_names=("$app_name" "$ui_app_name" "$tutorials_app_name")
+app_images=('metals-api' 'metals-ui' 'metals-tutorials')
+app_contexts=("$project_root" "$project_root/metals_ui" "$project_root/tutorials")
+app_dockerfiles=('metals_api/Dockerfile' 'Dockerfile' 'Dockerfile')
 
 if [[ "$skip_build" == false ]]; then
     for i in "${!app_names[@]}"; do
@@ -94,7 +95,7 @@ for i in "${!app_names[@]}"; do
     az webapp restart --name "$name" --resource-group "$resource_group" --output none
 done
 
-printf 'Waiting for both Web Apps to report healthy...\n'
+printf 'Waiting for every Web App to report healthy...\n'
 for name in "${app_names[@]}"; do
     host_name=$(az webapp show --name "$name" --resource-group "$resource_group" --query defaultHostName --output tsv)
     host_name=${host_name//$'\r'/}
@@ -115,10 +116,11 @@ for name in "${app_names[@]}"; do
 done
 
 if [[ "$follow_logs" == true ]]; then
-    printf 'Streaming logs for %s. Press Ctrl+C to stop, then rerun with --user-name %s to follow %s separately.\n' "$app_name" "$user_name" "$ui_app_name"
+    printf 'Streaming logs for %s. Press Ctrl+C to stop; use the commands below to follow the other apps.\n' "$app_name"
     az webapp log config --name "$app_name" --resource-group "$resource_group" --docker-container-logging filesystem --output none
     az webapp log tail --name "$app_name" --resource-group "$resource_group"
 else
     printf 'To stream logs: az webapp log tail --resource-group %s --name %s\n' "$resource_group" "$app_name"
     printf '           or: az webapp log tail --resource-group %s --name %s\n' "$resource_group" "$ui_app_name"
+    printf '           or: az webapp log tail --resource-group %s --name %s\n' "$resource_group" "$tutorials_app_name"
 fi

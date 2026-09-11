@@ -85,6 +85,9 @@ resource "azurerm_postgresql_flexible_server" "metals" {
   backup_retention_days         = 7
   geo_redundant_backup_enabled  = false
   public_network_access_enabled = true
+  # Azure assigned this at creation; it can only be changed by swapping with
+  # high_availability.standby_availability_zone, not cleared.
+  zone = "3"
 
   authentication {
     password_auth_enabled         = true
@@ -176,6 +179,21 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "local_client" {
             alternative of logging in with a Microsoft Entra ID identity, since this project
             doesn't use it for database access (Entra ID <i>is</i> used elsewhere &mdash; see the
             backend and <a href="07-github-oidc.html">github_oidc.tf</a> &mdash; just not here).
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">zone = "3"</span><span class="qnum">pinned, not chosen</span></div>
+          <p class="desc">
+            Azure picks an availability zone when the server is created. Terraform then sees that
+            assigned value as configuration it doesn't manage, and proposes clearing it on every
+            plan &mdash; which Azure rejects outright, since a zone can only be swapped with a
+            high-availability standby, never removed. Writing the actual value into the
+            configuration makes the plan match reality and the noise disappears.
+          </p>
+          <p class="note">
+            If you rebuild this environment from scratch, Azure may assign a different zone. Set this
+            to whatever the new server actually got &mdash; it's a record of a decision Azure made,
+            not one this project is making.
           </p>
         </div>
         <div class="qcard">

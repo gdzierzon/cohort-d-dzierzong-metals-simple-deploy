@@ -35,6 +35,7 @@
       <span class="fact">Routing &rarr; <b>hash-based (#/elements, #/admin/coins, &hellip;)</b></span>
       <span class="fact">Auth storage &rarr; <b>sessionStorage (JWT Bearer token)</b></span>
       <span class="fact">Roles &rarr; <b>Admin, Customer</b></span>
+      <span class="fact">Served by &rarr; <b>Nginx, in a container</b></span>
     </div>
   </div>
 </header>
@@ -75,7 +76,7 @@
             the API through <span class="mono">runtime-config.js</span>, and the order to start
             everything in.
           </p>
-          <div class="stack"><span class="chip">http.server</span><span class="chip">runtime-config.js</span><span class="chip">CORS</span></div>
+          <div class="stack"><span class="chip">Docker</span><span class="chip">Nginx</span><span class="chip">API_UPSTREAM</span></div>
         </a>
       </div>
     </section>
@@ -146,7 +147,7 @@
       <h2>Pick a section to start <span class="tag">go deeper</span></h2>
       <div class="module-grid">
         <a class="module-card" href="01-flow.html"><span class="mnum">Section 1 of 2</span><h3>How the UI Is Put Together</h3><p>Startup, routing, guards, and the admin CRUD screens.</p></a>
-        <a class="module-card" href="02-running-locally.html"><span class="mnum">Section 2 of 2</span><h3>Running It Locally</h3><p>python -m http.server, runtime-config.js, and start order.</p></a>
+        <a class="module-card" href="02-running-locally.html"><span class="mnum">Section 2 of 2</span><h3>Running It Locally</h3><p>docker compose, the Nginx proxy, and retargeting the API.</p></a>
       </div>
     </section>
 

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Docker</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Docker</p>
+        <h1>Packaging This Project into Containers</h1>
+        <p class="lede">
+          Both halves of this application &mdash; the Python API and the browser UI &mdash; ship as
+          Docker <b>images</b>: self-contained bundles holding the code, the runtime that executes
+          it, and every library it depends on. The same image you build on your laptop is the one
+          Azure runs in production, which removes an entire category of &ldquo;works on my
+          machine&rdquo; problems. This section starts with what an image actually is, then walks
+          through the two <span class="mono">Dockerfile</span>s in this repository line by line.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Images in this project &rarr; <b>3</b></span>
+      <span class="fact">API base &rarr; <b>python:3.11-slim</b></span>
+      <span class="fact">UI base &rarr; <b>nginx-unprivileged:stable-alpine</b></span>
+      <span class="fact">Local orchestration &rarr; <b>docker-compose.yml</b></span>
+      <span class="fact">Registry in Azure &rarr; <b>Azure Container Registry</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="../index.html">&larr; Tutorials home</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#why">Why containers at all</a></li>
+      <li><a href="#vocabulary">The three words worth learning first</a></li>
+      <li><a href="#in-this-project">What this project actually containerizes</a></li>
+      <li><a href="#pages">Pick a page to learn</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="why">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Why containers at all <span class="tag">start here</span></h2>
+          <p class="dek">
+            Before containers, deploying this API meant telling a server: install Python 3.11,
+            install these exact library versions, set these environment variables, run it with
+            this command. Every one of those steps could drift &mdash; a server on Python 3.9, a
+            library a minor version ahead, a forgotten variable. A container image freezes all of
+            it into a single artifact, so &ldquo;deploying&rdquo; becomes &ldquo;run this exact
+            image&rdquo; instead of &ldquo;reproduce this environment correctly.&rdquo;
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>build once, run anywhere</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Isn't that just a virtual machine?</span><span class="qnum">the usual question</span></div>
+          <p class="desc">
+            A virtual machine carries an entire guest operating system &mdash; its own kernel, its
+            own boot process, gigabytes of files &mdash; and that's why VMs take minutes to start.
+            A container shares the host's kernel and packages only the layer above it: your code,
+            your runtime, your libraries. That's why the API image here starts in about a second,
+            and why it's measured in hundreds of megabytes rather than tens of gigabytes.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What it buys this project specifically</span><span class="qnum">three concrete wins</span></div>
+          <ul class="steps">
+            <li><b>One command to run everything.</b> <span class="mono">docker compose up</span> starts the database, API, and UI together, wired to each other, with no local Python or PostgreSQL install required.</li>
+            <li><b>The UI gets a real web server.</b> Instead of a development-only static file server, the UI image runs Nginx &mdash; the same server that will serve it in Azure.</li>
+            <li><b>Deployment becomes a file copy.</b> Shipping a new version means pushing an image to a registry and telling Azure to pull it, covered in the <a href="../deployment/index.html">Deployment</a> section.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="vocabulary">
+      <h2>The three words worth learning first <span class="tag">vocabulary</span></h2>
+      <p class="dek">
+        Nearly every Docker error message and command uses these three terms, and mixing them up
+        is the single most common source of confusion when starting out.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:11rem;">Term</th><th>What it means, in plain terms</th></tr></thead>
+          <tbody>
+            <tr><td class="path">image</td><td>A read-only template &mdash; the packaged filesystem and the command to run. Built once from a <span class="mono">Dockerfile</span>, never modified afterward. Think of it as a class definition, or an ISO file.</td></tr>
+            <tr><td class="path">container</td><td>A running instance of an image. You can start many containers from one image; each gets its own writable layer, its own process, its own network address. Think of it as an object created from that class.</td></tr>
+            <tr><td class="path">registry</td><td>A server that stores and serves images, so other machines can pull them. Docker Hub is the public one; this project pushes its three images to a private <b>Azure Container Registry</b>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        The whole deployment story of this project is just those three nouns in order:
+        <b>build</b> an image, <b>push</b> it to a registry, then have Azure pull it and start a
+        <b>container</b> from it.
+      </p>
+    </section>
+
+    <section class="block" id="in-this-project">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>What this project actually containerizes <span class="tag">three images</span></h2>
+          <p class="dek">
+            Three <span class="mono">Dockerfile</span>s, each producing one image: the two halves of
+            the application, plus the tutorial site you're reading. The database is
+            <i>not</i> one of them &mdash; locally it runs from the official
+            <span class="mono">postgres:16</span> image straight off Docker Hub with no
+            customization, and in Azure it isn't a container at all but a managed PostgreSQL
+            Flexible Server.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-pointing-left.png" alt="Codey pointing to the left">
+          <figcaption>three Dockerfiles, one compose file</figcaption>
+        </figure>
+      </div>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:17rem;">File</th><th>What it builds</th></tr></thead>
+          <tbody>
+            <tr><td class="path">metals_api/Dockerfile</td><td>The <span class="mono">metals-api</span> image &mdash; Python 3.11 plus the Flask app, served by Gunicorn on port 5000. <a href="04-api-image.html">(dig deeper)</a></td></tr>
+            <tr><td class="path">metals_ui/Dockerfile</td><td>The <span class="mono">metals-ui</span> image &mdash; Nginx serving the static UI on port 8080 and proxying <span class="mono">/api/</span> through to the API. <a href="05-ui-image.html">(dig deeper)</a></td></tr>
+            <tr><td class="path">tutorials/Dockerfile</td><td>The <span class="mono">metals-tutorials</span> image &mdash; Nginx serving this tutorial site on port 8080. Independent of the application: no database, no API, no configuration.</td></tr>
+            <tr><td class="path">docker-compose.yml</td><td>Not an image &mdash; the recipe that runs all three of the above <i>plus</i> a PostgreSQL container together on your machine. <a href="06-compose.html">(dig deeper)</a></td></tr>
+            <tr><td class="path">.dockerignore</td><td>Two of them (repo root and <span class="mono">metals_ui/</span>) controlling which files are allowed into each build.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="pages">
+      <h2>Pick a page to learn <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-images-and-containers.html"><span class="mnum">Page 1 of 6</span><h3>Images &amp; containers</h3><p>Layers, the build cache, and how a base image is chosen.</p></a>
+        <a class="module-card" href="02-dockerfile.html"><span class="mnum">Page 2 of 6</span><h3>Inside a Dockerfile</h3><p>Every instruction this project uses, and what each one does.</p></a>
+        <a class="module-card" href="03-commands.html"><span class="mnum">Page 3 of 6</span><h3>The commands</h3><p>Building, running, inspecting, and cleaning up.</p></a>
+        <a class="module-card" href="04-api-image.html"><span class="mnum">Page 4 of 6</span><h3>The API image</h3><p>metals_api/Dockerfile, line by line.</p></a>
+        <a class="module-card" href="05-ui-image.html"><span class="mnum">Page 5 of 6</span><h3>The UI image</h3><p>Nginx, the config template, and the API proxy.</p></a>
+        <a class="module-card" href="06-compose.html"><span class="mnum">Page 6 of 6</span><h3>Running the whole stack</h3><p>docker-compose.yml and the three services it starts.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>New to containers? Start at page 1. Already comfortable and just want to see this project's files? Jump to <a href="04-api-image.html">the API image</a>.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">metals_api/Dockerfile</span>, <span class="mono">metals_ui/Dockerfile</span>, and <span class="mono">docker-compose.yml</span> in this repository.
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deployment</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; Deployment</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Metals Simple Deploy &middot; Deployment</p>
+        <h1>Getting This Project into Azure</h1>
+        <p class="lede">
+          Deploying a containerized application is four steps, and they're the same four no matter
+          who runs them: <b>build</b> an image, <b>push</b> it to a registry, <b>point</b> the
+          hosting service at the new tag, and <b>restart</b> so it pulls. This project can do those
+          four steps three different ways &mdash; by hand from your terminal, automatically from
+          GitHub Actions, or declaratively through Terraform. This section explains the steps
+          themselves, then the automation around them.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Registry &rarr; <b>Azure Container Registry</b></span>
+      <span class="fact">Hosting &rarr; <b>2 container Web Apps</b></span>
+      <span class="fact">Build tool &rarr; <b>az acr build</b></span>
+      <span class="fact">CI/CD &rarr; <b>GitHub Actions</b></span>
+      <span class="fact">Auth &rarr; <b>OIDC, no passwords</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="../index.html">&larr; Tutorials home</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#four-steps">The four steps, every time</a></li>
+      <li><a href="#restart">Why a restart is required</a></li>
+      <li><a href="#infra-vs-app">Infrastructure vs. application</a></li>
+      <li><a href="#paths">Three ways to do it</a></li>
+      <li><a href="#pages">Pick a page to learn</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="four-steps">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>The four steps, every time <span class="tag">start here</span></h2>
+          <p class="dek">
+            Before containers, deploying this API meant uploading a zip of Python source and letting
+            the server install dependencies and restart itself. Now the deployable artifact is a
+            finished image, which makes the process shorter and far more predictable &mdash; but
+            adds a registry in the middle.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>build, push, point, restart</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <ol class="steps">
+            <li><b>Build</b> the image from the <span class="mono">Dockerfile</span>. This project builds <i>in Azure</i> with <span class="mono">az acr build</span> rather than locally &mdash; the source is uploaded, built on a managed agent, and the result lands in the registry in one step. No local Docker required.</li>
+            <li><b>Push</b> it to the Azure Container Registry as <span class="mono">metals-api:&lt;tag&gt;</span> or <span class="mono">metals-ui:&lt;tag&gt;</span>. With <span class="mono">az acr build</span> this is included &mdash; build and push are the same command.</li>
+            <li><b>Point</b> the Web App at that image, with <span class="mono">az webapp config container set</span>. Only strictly necessary when the tag changes, but running it every time keeps the deployment idempotent.</li>
+            <li><b>Restart</b> the Web App so it actually pulls. This step is the one people forget &mdash; see below.</li>
+          </ol>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Where the images come from</span><span class="qnum">pull, not push</span></div>
+          <p class="desc">
+            Nothing pushes an image <i>to</i> the Web App. The Web App pulls it from the registry,
+            authenticating with its own system-assigned managed identity, which has been granted the
+            <span class="mono">AcrPull</span> role. There are no registry usernames or passwords
+            anywhere in this project &mdash; the registry's admin account is explicitly disabled.
+          </p>
+          <p class="note">
+            That identity and role assignment are created for you by both
+            <a href="manual/01-create-resources.html">the manual script</a> and
+            <a href="../terraform/06-app-service.html">Terraform</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="restart">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Why a restart is required <span class="tag">the :latest catch</span></h2>
+          <p class="dek">
+            This project tags its images <span class="mono">latest</span>. Pushing a new image under
+            a tag that the Web App is <i>already</i> configured to use changes nothing from Azure's
+            point of view &mdash; the configured value is identical, so there's nothing to react to,
+            and the old container keeps running the old image indefinitely.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-problem-solving-rubber-duck.png" alt="Codey thinking with a rubber duck">
+          <figcaption>same tag, new contents</figcaption>
+        </figure>
+      </div>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">So every deployment path restarts explicitly</span><span class="qnum">all three of them</span></div>
+          <p class="desc">
+            <span class="mono">az webapp restart</span> forces the platform to start a fresh
+            container, which re-pulls the tag and therefore picks up the new image. Both
+            <a href="manual/02-deploy.html">az_deploy</a> and the
+            <a href="02-workflows.html">GitHub Actions workflows</a> do this as a deliberate final
+            step, with a comment saying why.
+          </p>
+          <p class="note">
+            The alternative is to tag every build uniquely &mdash; with a commit SHA, for example
+            &mdash; so the configured value genuinely changes and no restart is needed. That's a
+            common production pattern; this project favors the simpler moving tag, and pays for it
+            with one extra command.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Then wait for healthy</span><span class="qnum">don't declare victory early</span></div>
+          <p class="desc">
+            A restart returns immediately, long before the new container is serving traffic. Every
+            deployment path here finishes by polling <span class="mono">/health</span> on both apps
+            until each answers <span class="mono">200</span>, so a failed rollout surfaces as a
+            failed deployment instead of a silent one.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="infra-vs-app">
+      <h2>Infrastructure vs. application <span class="tag">two different clocks</span></h2>
+      <p class="dek">
+        It's worth being precise about which kind of change you're making, because they move at
+        different speeds and carry very different risk.
+      </p>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th style="width:11rem;"></th><th>Infrastructure</th><th>Application</th></tr></thead>
+          <tbody>
+            <tr><td>What changes</td><td>The registry, Web Apps, database server, identities, roles.</td><td>The contents of the two container images.</td></tr>
+            <tr><td>How often</td><td>Rarely &mdash; once to create it, then occasionally.</td><td>Constantly, with every code change.</td></tr>
+            <tr><td>Done by</td><td><a href="manual/01-create-resources.html">az_create_resources</a> or <a href="../terraform/index.html">Terraform</a>.</td><td><a href="manual/02-deploy.html">az_deploy</a> or the <a href="02-workflows.html">deploy workflows</a>.</td></tr>
+            <tr><td>If it goes wrong</td><td>Potentially destructive &mdash; a deleted database loses data.</td><td>Recoverable &mdash; push a corrected image and restart.</td></tr>
+            <tr><td>Automation policy</td><td><b>Always manual.</b> Even with CI/CD set up, <span class="mono">apply</span> requires someone to click Run workflow.</td><td><b>Automatic on merge to <span class="mono">main</span></b>, after tests pass.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bonus-banner">
+        That last row is the project's central deployment decision, and it's covered in detail on
+        <a href="02-workflows.html">the workflows page</a>: shipping a tested container image is
+        routine enough to automate, while changing infrastructure is not.
+      </p>
+    </section>
+
+    <section class="block" id="paths">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Three ways to do it <span class="tag">pick a path</span></h2>
+          <p class="dek">
+            All three produce the same running application. They differ in how much is automated,
+            how much is previewed before it happens, and how much is remembered between runs.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>same destination, three roads</figcaption>
+        </figure>
+      </div>
+      <div class="card-grid">
+        <a class="info-card linkable" href="manual/index.html">
+          <p class="ieyebrow">Path 1</p>
+          <h3>By hand</h3>
+          <p>
+            Run the scripts in <span class="mono">utility_scripts/</span> from your own terminal
+            &mdash; a fixed list of <span class="mono">az</span> commands, in order, with nothing
+            remembered between runs. The clearest way to see exactly which Azure calls a deployment
+            actually makes.
+          </p>
+          <div class="stack"><span class="chip">Azure CLI</span><span class="chip">PowerShell</span><span class="chip">Bash</span></div>
+        </a>
+        <a class="info-card linkable" href="02-workflows.html">
+          <p class="ieyebrow">Path 2</p>
+          <h3>GitHub Actions</h3>
+          <p>
+            The same commands, run by a workflow instead of a person: tests on every push, then
+            build, push, and deploy automatically when a change reaches
+            <span class="mono">main</span>. Authenticates to Azure with OIDC, so no credentials are
+            stored anywhere.
+          </p>
+          <div class="stack"><span class="chip">GitHub Actions</span><span class="chip">YAML</span><span class="chip">OIDC</span></div>
+        </a>
+        <a class="info-card linkable" href="../terraform/index.html">
+          <p class="ieyebrow">Path 3</p>
+          <h3>Terraform</h3>
+          <p>
+            Declares the infrastructure as code, previews every change before making it, and
+            remembers what it built. This is how the Azure resources themselves are managed &mdash;
+            though it doesn't build images; that's still one of the two paths above.
+          </p>
+          <div class="stack"><span class="chip">Terraform</span><span class="chip">Azure</span><span class="chip">State</span></div>
+        </a>
+      </div>
+      <p class="bonus-banner">
+        These aren't mutually exclusive, and this project uses a mix: Terraform owns the
+        infrastructure, GitHub Actions owns routine image deployments, and the manual scripts stay
+        around for learning and for when something needs doing by hand.
+      </p>
+    </section>
+
+    <section class="block" id="pages">
+      <h2>Pick a page to learn <span class="tag">go deeper</span></h2>
+      <div class="module-grid">
+        <a class="module-card" href="01-github-actions.html"><span class="mnum">Page 1 of 3</span><h3>How GitHub Actions works</h3><p>Workflows, jobs, steps, triggers, and where secrets come from.</p></a>
+        <a class="module-card" href="02-workflows.html"><span class="mnum">Page 2 of 3</span><h3>This project's workflows</h3><p>The three YAML files and the rule that decides when each deploys.</p></a>
+        <a class="module-card" href="03-identity-and-secrets.html"><span class="mnum">Page 3 of 3</span><h3>Identity &amp; permissions</h3><p>Passwordless OIDC login, and the exact Azure roles required.</p></a>
+        <a class="module-card" href="manual/index.html"><span class="mnum">Path 1</span><h3>The manual scripts</h3><p>Creating and deploying everything by hand with the Azure CLI.</p></a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Haven't read the <a href="../docker/index.html">Docker tutorial</a> yet? Start there &mdash; everything on this page assumes you know what an image is.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">.github/workflows/</span> and <span class="mono">utility_scripts/</span> in this repository.
+</footer>
+
+</body>
+</html>
