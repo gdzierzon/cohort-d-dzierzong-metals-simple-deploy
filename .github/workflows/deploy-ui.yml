@@ -21,13 +21,13 @@ permissions:
   contents: read
 
 jobs:
-  # Matches terraform.yml: pushes/PRs only validate (build locally, no
-  # registry push); actual Azure changes require Run workflow. Split into
-  # two jobs (rather than one job with a conditional `environment:`) so this
-  # validation job never evaluates the Development environment's protection
-  # rules on an ordinary push/PR.
+  # Real Azure changes happen on a manual dispatch or a push to main (i.e. a
+  # merge); other pushes/PRs only get a local build-only sanity check below.
+  # Split into two jobs (rather than one job with a conditional
+  # `environment:`) so the validation job never evaluates the Development
+  # environment's protection rules on an ordinary push/PR.
   build:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -37,7 +37,7 @@ jobs:
         run: docker build --file Dockerfile --tag metals-ui:ci .
 
   build-and-push:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment: Development
     permissions:
@@ -64,7 +64,7 @@ jobs:
 
   deploy:
     needs: build-and-push
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: none
       id-token: write

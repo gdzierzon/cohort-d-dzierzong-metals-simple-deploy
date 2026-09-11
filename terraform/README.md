@@ -5,8 +5,8 @@ This branch has two independent workflows:
 | Workflow | Purpose | Trigger |
 | --- | --- | --- |
 | `terraform.yml` — **Terraform infrastructure** | Validate, plan, create/update, initialize an empty database, or destroy application infrastructure | Validation on Terraform pushes/PRs; Azure operations through **Run workflow** |
-| `deploy-api.yml` — **Build and deploy metals-api to Azure** | Test, then build/push/deploy the API container | `metals_api`/`sql`/requirements changes run tests only; build/push/deploy requires **Run workflow** |
-| `deploy-ui.yml` — **Build and deploy metals-ui to Azure** | Build/push/deploy the UI container | `metals_ui` changes run a local build-only check; build/push/deploy requires **Run workflow** |
+| `deploy-api.yml` — **Build and deploy metals-api to Azure** | Test, then build/push/deploy the API container | Tests run on every `metals_api`/`sql`/requirements change; build/push/deploy also runs automatically on a push to `main`, or on demand via **Run workflow** |
+| `deploy-ui.yml` — **Build and deploy metals-ui to Azure** | Build/push/deploy the UI container | A local build-only check runs on every `metals_ui` change; build/push/deploy also runs automatically on a push to `main`, or on demand via **Run workflow** |
 
 Infrastructure-only commits no longer trigger application deployment. Terraform state is stored in Azure Blob Storage with locking. A separate bootstrap resource group holds the state storage and infrastructure identity so application teardown does not delete them.
 
@@ -162,10 +162,10 @@ Ensure `RESOURCE_GROUP`, `REGISTRY_NAME`, and the `*_WEBAPP_NAME` values at the 
 
 The API and UI deploy independently, in separate workflows, so a change to one doesn't rebuild/redeploy the other:
 
-- **`deploy-api.yml`** triggers on `metals_api/**`, `sql/**`, or requirements-file changes. Pushes/PRs only run the `test` job (schema load + pytest against an ephemeral Postgres service); building, pushing (`az acr build`, no local Docker required — same as `az_deploy.ps1`/`.sh`), and deploying the API container requires **Run workflow**.
-- **`deploy-ui.yml`** triggers on `metals_ui/**` changes. Pushes/PRs only build the image locally as a sanity check (no push, no Azure credentials touched); building, pushing, and deploying the UI container requires **Run workflow**.
+- **`deploy-api.yml`** triggers on `metals_api/**`, `sql/**`, or requirements-file changes. Every push/PR runs the `test` job (schema load + pytest against an ephemeral Postgres service). Building, pushing (`az acr build`, no local Docker required — same as `az_deploy.ps1`/`.sh`), and deploying the API container additionally runs when the trigger is a push to `main` (i.e. a merge) or a manual **Run workflow** — a PR branch or feature-branch push stops after `test`.
+- **`deploy-ui.yml`** triggers on `metals_ui/**` changes. Every push/PR builds the image locally as a sanity check (no push, no Azure credentials touched). Building, pushing, and deploying the UI container additionally runs on a push to `main` or a manual **Run workflow**.
 
-Both match `terraform.yml`'s pattern of validating on every push but never touching Azure automatically. Running Terraform does not automatically trigger either workflow. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
+So a PR gets tested/validated automatically, and merging it to `main` auto-deploys — full CI/CD. Running Terraform does not automatically trigger either workflow, and infrastructure changes still always require a manual **Run workflow** on `terraform.yml`, regardless of branch — that risk profile is different enough from redeploying an already-tested container that it stays a deliberate action. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
 
 ## 6. Update or destroy infrastructure independently
 
