@@ -39,7 +39,7 @@ function createDetails(element) {
   visual.className = "details-visual";
   const image = document.createElement("img");
   image.src = `${elementImageDirectory}/${element.symbol}.png`;
-  image.alt = `${element.name} specimen on slate`;
+  image.alt = element.symbol === "Co" ? "Silvery cobalt metal beside a rich blue crystal on slate" : `${element.name} specimen on slate`;
   image.addEventListener("error", () => {
     image.src = fallbackElementImage;
     image.alt = "Generic atomic element illustration";

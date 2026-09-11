@@ -93,7 +93,7 @@ function createElementCard(element) {
   const image = document.createElement("img");
   image.className = "element-card__image";
   image.src = `${elementImageDirectory}/${element.symbol}.png`;
-  image.alt = `${element.name} specimen on slate`;
+  image.alt = element.symbol === "Co" ? "Silvery cobalt metal beside a rich blue crystal on slate" : `${element.name} specimen on slate`;
   image.loading = "lazy";
   image.addEventListener("error", () => {
     image.src = fallbackElementImage;
