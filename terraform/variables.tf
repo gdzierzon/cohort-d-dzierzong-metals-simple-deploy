@@ -31,6 +31,17 @@ variable "db_password" {
   }
 }
 
+variable "image_tag" {
+  description = "Tag for the metals-api/metals-ui images in the container registry. Build and push with az_deploy.ps1/.sh before applying a new tag."
+  type        = string
+  default     = "latest"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$", var.image_tag))
+    error_message = "Use a valid Docker image tag."
+  }
+}
+
 variable "client_ip" {
   description = "Your public IPv4 address, allowed to initialize the database."
   type        = string

@@ -5,7 +5,8 @@ This branch has two independent workflows:
 | Workflow | Purpose | Trigger |
 | --- | --- | --- |
 | `terraform.yml` — **Terraform infrastructure** | Validate, plan, create/update, initialize an empty database, or destroy application infrastructure | Validation on Terraform pushes/PRs; Azure operations through **Run workflow** |
-| `azure-webapps-python.yml` — **Build and deploy Python app to Azure Web App** | Build, test, and deploy application code | Application-related pushes or **Run workflow** |
+| `deploy-api.yml` — **Build and deploy metals-api to Azure** | Test, then build/push/deploy the API container | `metals_api`/`sql`/requirements changes run tests only; build/push/deploy requires **Run workflow** |
+| `deploy-ui.yml` — **Build and deploy metals-ui to Azure** | Build/push/deploy the UI container | `metals_ui` changes run a local build-only check; build/push/deploy requires **Run workflow** |
 
 Infrastructure-only commits no longer trigger application deployment. Terraform state is stored in Azure Blob Storage with locking. A separate bootstrap resource group holds the state storage and infrastructure identity so application teardown does not delete them.
 
@@ -125,7 +126,9 @@ Open **Actions → Terraform infrastructure → Run workflow**:
 
 Each apply run generates its own fresh plan and applies that plan in the same job. A prior plan-only run is a preview, not a saved approval artifact used by the later run. The operation defaults to plan; pushes and pull requests run offline checks only and never apply or destroy Azure resources.
 
-Apply creates the same application resources as the earlier Terraform demo: PostgreSQL 16/B1ms with 32 GiB storage and 7-day backups, the `metals` database and firewall rules, a Linux B1/Python 3.11 Web App, application settings, and the Development OIDC deployment identity. Basic publishing authentication remains disabled.
+Apply creates: PostgreSQL 16/B1ms with 32 GiB storage and 7-day backups, the `metals` database and firewall rules, a Basic Azure Container Registry, a shared Linux B1 App Service plan with separate API and UI container Web Apps (pulling `metals-api`/`metals-ui` via each app's own managed identity, not admin credentials), application settings, and the Development OIDC deployment identity (now scoped to both Web Apps plus `AcrPush` on the registry). Basic publishing authentication remains disabled.
+
+Apply does **not** build or push the container images. Push `metals-api:<image_tag>` and `metals-ui:<image_tag>` to the output `container_registry_login_server` first — either locally with `az_deploy.ps1`/`az_deploy.sh`, or through `deploy-api.yml`/`deploy-ui.yml` (see step 5) — using the same `image_tag` value (default `latest`) you pass to Terraform; an apply that changes `image_tag` also restarts the Web Apps against the new tag, an apply that doesn't still requires a manual restart for Azure to re-pull `:latest`.
 
 After apply, the workflow temporarily permits the runner's single IPv4 address, loads `sql/metals-db.sql` into an empty database, and removes the temporary firewall rule in a cleanup step. If all four demo tables already exist, it preserves them and succeeds. A partially existing schema fails instead of resetting data. This is demo initialization, not a database migration system.
 
@@ -155,9 +158,14 @@ bash terraform/scripts/show_application_deployment_secrets.sh
 
 Keep `TF_AZURE_*` secrets unchanged. The workflow prints only identifiers, not the database password. GitHub secret updates are performed manually; the infrastructure workflow is not given repository-secret write permissions.
 
-Ensure `AZURE_WEBAPP_NAME` in `.github/workflows/azure-webapps-python.yml` matches the Web App name shown in the summary, especially if you changed `TF_USER_NAME`.
+Ensure `RESOURCE_GROUP`, `REGISTRY_NAME`, and the `*_WEBAPP_NAME` values at the top of `.github/workflows/deploy-api.yml` and `deploy-ui.yml` match the names shown in the summary, especially if you changed `TF_USER_NAME`.
 
-Now push application code changes or select **Run workflow** on **Build and deploy Python app to Azure Web App**. Build and test run in parallel; deploy waits for both and authenticates using the Development identity. Running Terraform does not automatically trigger this workflow. Updates to the application workflow file itself are run manually so an infrastructure-setup commit cannot accidentally deploy before its Development identity exists. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
+The API and UI deploy independently, in separate workflows, so a change to one doesn't rebuild/redeploy the other:
+
+- **`deploy-api.yml`** triggers on `metals_api/**`, `sql/**`, or requirements-file changes. Pushes/PRs only run the `test` job (schema load + pytest against an ephemeral Postgres service); building, pushing (`az acr build`, no local Docker required — same as `az_deploy.ps1`/`.sh`), and deploying the API container requires **Run workflow**.
+- **`deploy-ui.yml`** triggers on `metals_ui/**` changes. Pushes/PRs only build the image locally as a sanity check (no push, no Azure credentials touched); building, pushing, and deploying the UI container requires **Run workflow**.
+
+Both match `terraform.yml`'s pattern of validating on every push but never touching Azure automatically. Running Terraform does not automatically trigger either workflow. If an earlier application run failed before its identity/secrets existed, rerun it after setup.
 
 ## 6. Update or destroy infrastructure independently
 

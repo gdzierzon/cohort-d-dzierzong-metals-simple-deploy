@@ -12,9 +12,25 @@ resource "azurerm_federated_identity_credential" "github" {
   subject                   = local.oidc_subject
 }
 
-resource "azurerm_role_assignment" "github_deployment" {
-  scope                = azurerm_linux_web_app.metals.id
+resource "azurerm_role_assignment" "github_deployment_api" {
+  scope                = azurerm_linux_web_app.api.id
   role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+resource "azurerm_role_assignment" "github_deployment_ui" {
+  scope                = azurerm_linux_web_app.ui.id
+  role_definition_name = "Website Contributor"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+# Lets the deployment workflow build/push images with az acr build, matching
+# az_deploy.ps1/.sh.
+resource "azurerm_role_assignment" "github_acr_push" {
+  scope                = azurerm_container_registry.metals.id
+  role_definition_name = "AcrPush"
   principal_id         = azurerm_user_assigned_identity.github.principal_id
   principal_type       = "ServicePrincipal"
 }

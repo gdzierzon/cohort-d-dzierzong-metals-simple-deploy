@@ -50,7 +50,7 @@ The image serves Flask through Gunicorn as a non-root user on port 5000. Secrets
 This branch teaches Azure infrastructure provisioning and application deployment using two independent GitHub Actions workflows.
 
 - [Terraform infrastructure](.github/workflows/terraform.yml): automatic validation for infrastructure changes, plus manually selected **plan**, **apply**, and **destroy** operations.
-- [Application build/test/deploy](.github/workflows/azure-webapps-python.yml): packages and tests Python code, then deploys to the existing Azure Web App.
+- [API build/test/deploy](.github/workflows/deploy-api.yml) and [UI build/deploy](.github/workflows/deploy-ui.yml): test and build each container independently, then deploy it to its Azure Web App.
 
 Follow the [step-by-step Terraform guide](terraform/README.md):
 

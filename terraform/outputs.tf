@@ -2,13 +2,26 @@ output "resource_group_name" {
   value = azurerm_resource_group.metals.name
 }
 
-output "webapp_name" {
+output "api_webapp_name" {
   description = "Must match AZURE_WEBAPP_NAME in the GitHub Actions workflow."
-  value       = azurerm_linux_web_app.metals.name
+  value       = azurerm_linux_web_app.api.name
 }
 
-output "webapp_url" {
-  value = "https://${azurerm_linux_web_app.metals.default_hostname}"
+output "api_webapp_url" {
+  value = "https://${azurerm_linux_web_app.api.default_hostname}"
+}
+
+output "ui_webapp_name" {
+  value = azurerm_linux_web_app.ui.name
+}
+
+output "ui_webapp_url" {
+  value = "https://${azurerm_linux_web_app.ui.default_hostname}"
+}
+
+output "container_registry_login_server" {
+  description = "Push metals-api/metals-ui here, e.g. with az_deploy.ps1/.sh, before apply pulls a new image_tag."
+  value       = azurerm_container_registry.metals.login_server
 }
 
 output "database" {
