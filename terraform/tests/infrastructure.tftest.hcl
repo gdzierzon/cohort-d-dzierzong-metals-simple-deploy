@@ -64,6 +64,10 @@ run "matches_powershell_resources" {
     error_message = "The GitHub identity must be able to push images to the registry."
   }
   assert {
+    condition     = azurerm_role_assignment.github_acr_reader.scope == azurerm_container_registry.metals.id && azurerm_role_assignment.github_acr_reader.role_definition_name == "Reader"
+    error_message = "The GitHub identity must be able to read the registry resource (az acr build/show), not just push/pull data."
+  }
+  assert {
     condition     = azurerm_linux_web_app.api.app_settings["DB_PASSWORD"] == "Test @Password+123"
     error_message = "The API app must receive the raw database password, not a connection string."
   }
