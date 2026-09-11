@@ -1,0 +1,12 @@
+# Only send API source and dependency manifests to the image builder.
+**
+!requirements.txt
+!requirements-container.txt
+!metals_api/
+!metals_api/**
+metals_api/Dockerfile
+metals_api/tests/
+**/__pycache__/
+**/*.py[cod]
+**/.env
+**/.env.*

@@ -25,6 +25,11 @@ def create_app() -> Flask:
     app.register_blueprint(coin_blueprint)
     app.register_blueprint(user_blueprint)
 
+    @app.get("/health")
+    def health():
+        """Report HTTP server liveness without requiring database access."""
+        return {"status": "ok"}, 200
+
     @app.after_request
     def allow_cross_origin_requests(response):
         """Allow browser requests from any origin."""

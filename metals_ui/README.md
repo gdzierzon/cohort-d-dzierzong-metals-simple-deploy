@@ -102,6 +102,46 @@ Coins should use an alloy selection control populated from the alloys endpoint i
 
 ## Development notes
 
+### Run with Docker
+
+From the repository root, start Docker Desktop in Linux container mode and run:
+
+```powershell
+docker compose up --build -d
+```
+
+Open `http://localhost:8888`. This starts the UI, API, and PostgreSQL services.
+The root `.env` must provide `JWT_SECRET_KEY`, as described in the root README.
+Set `UI_PORT` in that file if port 8888 is occupied.
+
+The UI image uses Nginx as a non-root user on container port 8080. It serves
+the HTML, CSS, JavaScript, and images; JavaScript executes in your browser.
+The container's runtime configuration uses `/api`, which Nginx forwards to
+`http://api:5000` over the Compose network. The browser needs only the UI URL.
+The original `runtime-config.js` remains available for development outside Docker.
+
+```powershell
+docker compose logs -f ui
+docker compose up --build -d ui
+```
+
+The second command rebuilds the UI after source changes. The UI health check
+checks Nginx itself, not the API or database.
+
+To build and run the UI separately against an API exposed on your Windows host:
+
+```powershell
+docker build -t metals-ui:1.0 ./metals_ui
+docker run --name metals-ui -d -p 8888:8080 -e API_UPSTREAM=http://host.docker.internal:5000 metals-ui:1.0
+```
+
+Stop the Compose UI first if it already uses port 8888. For deployment, set
+`API_UPSTREAM` to the API origin reachable from the UI container, including
+`http://` or `https://`, without a trailing slash or `/api` suffix. The proxy
+preserves the original `/api/...` path. Do not put secrets in browser configuration.
+
+### Run without Docker
+
 Serve this folder with any simple static web server during development. The
 default local UI address is `http://localhost:8888`, and the API base URL is
 configured independently in `runtime-config.js` (it defaults to

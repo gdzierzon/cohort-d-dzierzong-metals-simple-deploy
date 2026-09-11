@@ -8,6 +8,9 @@
             "request": "launch",
             "program": "${file}",
             "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+            },
             "console": "integratedTerminal"
         }
     ]
