@@ -39,3 +39,13 @@ resource "azurerm_role_assignment" "github_acr_contributor" {
   principal_id         = azurerm_user_assigned_identity.github.principal_id
   principal_type       = "ServicePrincipal"
 }
+
+# AcrPush only grants data-plane pull/push actions; az acr build/show also
+# need the control-plane "registries/read" action to look up the registry
+# itself, which only a role like Reader (or Contributor) provides.
+resource "azurerm_role_assignment" "github_acr_reader" {
+  scope                = azurerm_container_registry.metals.id
+  role_definition_name = "Reader"
+  principal_id         = azurerm_user_assigned_identity.github.principal_id
+  principal_type       = "ServicePrincipal"
+}
