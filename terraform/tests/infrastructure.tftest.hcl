@@ -22,6 +22,12 @@ mock_provider "azurerm" {
       principal_id = "00000000-0000-0000-0000-000000000002"
     }
   }
+  mock_resource "azurerm_container_registry" {
+    defaults = {
+      id           = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/test/providers/Microsoft.ContainerRegistry/registries/test-acr"
+      login_server = "testacr.azurecr.io"
+    }
+  }
 }
 
 variables {
@@ -46,12 +52,36 @@ run "matches_powershell_resources" {
     error_message = "OIDC must match the exact subject emitted by this repository."
   }
   assert {
-    condition     = azurerm_role_assignment.github_deployment.scope == azurerm_linux_web_app.metals.id && azurerm_role_assignment.github_deployment.role_definition_name == "Website Contributor"
-    error_message = "The GitHub identity must be scoped to deploying this Web App."
+    condition     = azurerm_role_assignment.github_deployment_api.scope == azurerm_linux_web_app.api.id && azurerm_role_assignment.github_deployment_api.role_definition_name == "Website Contributor"
+    error_message = "The GitHub identity must be scoped to deploying the API Web App."
   }
   assert {
-    condition     = strcontains(azurerm_linux_web_app.metals.app_settings["DB_URL"], "Test%20%40Password%2B123@")
-    error_message = "Database URL must percent-encode spaces, @, and + in the password."
+    condition     = azurerm_role_assignment.github_deployment_ui.scope == azurerm_linux_web_app.ui.id && azurerm_role_assignment.github_deployment_ui.role_definition_name == "Website Contributor"
+    error_message = "The GitHub identity must be scoped to deploying the UI Web App."
+  }
+  assert {
+    condition     = azurerm_role_assignment.github_acr_push.scope == azurerm_container_registry.metals.id && azurerm_role_assignment.github_acr_push.role_definition_name == "AcrPush"
+    error_message = "The GitHub identity must be able to push images to the registry."
+  }
+  assert {
+    condition     = azurerm_linux_web_app.api.app_settings["DB_PASSWORD"] == "Test @Password+123"
+    error_message = "The API app must receive the raw database password, not a connection string."
+  }
+  assert {
+    condition     = azurerm_linux_web_app.api.site_config[0].application_stack[0].docker_image_name == "metals-api:latest" && azurerm_linux_web_app.api.app_settings["WEBSITES_PORT"] == "5000"
+    error_message = "The API app must run the metals-api container on port 5000."
+  }
+  assert {
+    condition     = azurerm_linux_web_app.ui.site_config[0].application_stack[0].docker_image_name == "metals-ui:latest" && azurerm_linux_web_app.ui.app_settings["WEBSITES_PORT"] == "8080"
+    error_message = "The UI app must run the metals-ui container on port 8080."
+  }
+  assert {
+    condition     = azurerm_linux_web_app.ui.app_settings["API_UPSTREAM"] == "https://${azurerm_linux_web_app.api.default_hostname}"
+    error_message = "The UI app must proxy to the API app's actual hostname."
+  }
+  assert {
+    condition     = azurerm_role_assignment.api_acr_pull.scope == azurerm_container_registry.metals.id && azurerm_role_assignment.api_acr_pull.role_definition_name == "AcrPull" && azurerm_role_assignment.ui_acr_pull.scope == azurerm_container_registry.metals.id && azurerm_role_assignment.ui_acr_pull.role_definition_name == "AcrPull"
+    error_message = "Each Web App's own managed identity must be granted AcrPull on the registry."
   }
 }
 
@@ -62,7 +92,7 @@ run "different_demo_name" {
     github_environment = "Demo:Two"
   }
   assert {
-    condition     = azurerm_resource_group.metals.name == "expeditors-classroom-metals-rg" && azurerm_linux_web_app.metals.name == "expeditors-classroom-metals-api"
+    condition     = azurerm_resource_group.metals.name == "expeditors-classroom-metals-rg" && azurerm_linux_web_app.api.name == "expeditors-classroom-metals-api" && azurerm_linux_web_app.ui.name == "expeditors-classroom-metals-ui"
     error_message = "Changing user_name must keep resource names consistent."
   }
   assert {

@@ -154,8 +154,14 @@ jobs:
             echo '```json'
             terraform -chdir=terraform output -json github_secrets
             echo '```'
-            echo 'Web App name:'
-            terraform -chdir=terraform output -raw webapp_name
+            echo 'API Web App name:'
+            terraform -chdir=terraform output -raw api_webapp_name
+            echo
+            echo 'UI Web App name:'
+            terraform -chdir=terraform output -raw ui_webapp_name
+            echo
+            echo 'Container registry:'
+            terraform -chdir=terraform output -raw container_registry_login_server
             echo
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove the local plan file

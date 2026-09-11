@@ -12,6 +12,9 @@ resource "azurerm_postgresql_flexible_server" "metals" {
   backup_retention_days         = 7
   geo_redundant_backup_enabled  = false
   public_network_access_enabled = true
+  # Azure assigned this at creation; it can only be changed by swapping with
+  # high_availability.standby_availability_zone, not cleared.
+  zone = "3"
 
   authentication {
     password_auth_enabled         = true
