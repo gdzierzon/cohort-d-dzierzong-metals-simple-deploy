@@ -1,0 +1,144 @@
+name: Build and deploy metals-api to Azure
+
+env:
+  RESOURCE_GROUP: expeditors-dzierzon-metals-rg
+  REGISTRY_NAME: expeditorsdzierzonmetalsacr
+  API_WEBAPP_NAME: expeditors-dzierzon-metals-api
+  IMAGE_TAG: latest
+  PYTHON_VERSION: '3.11'
+
+on:
+  push:
+    paths:
+      - 'metals_api/**'
+      - 'sql/**'
+      - 'requirements.txt'
+      - 'requirements-container.txt'
+      - '.github/workflows/deploy-api.yml'
+  pull_request:
+    paths:
+      - 'metals_api/**'
+      - 'sql/**'
+      - 'requirements.txt'
+      - 'requirements-container.txt'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_metals
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test_user -d test_metals"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: test_metals
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      PGPASSWORD: test_password
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python version
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Load database schema
+        run: psql --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" --dbname="$DB_NAME" --file=sql/metals-db.sql
+
+      - name: Run unit tests
+        run: pytest metals_api/tests
+
+  build-and-push:
+    needs: test
+    # Matches terraform.yml: pushes/PRs only validate (the test job above);
+    # actual Azure changes require Run workflow.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: Development
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Log in to Azure using OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push metals-api
+        run: |
+          az acr build --registry "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" \
+            --image "metals-api:$IMAGE_TAG" --file metals_api/Dockerfile .
+
+  deploy:
+    needs: build-and-push
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: none
+      id-token: write
+    runs-on: ubuntu-latest
+    environment:
+      name: Development
+      url: https://${{ env.API_WEBAPP_NAME }}.azurewebsites.net
+
+    steps:
+      - name: Log in to Azure using OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Point the API Web App at the new image and restart
+        run: |
+          registry_login_server=$(az acr show --name "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer --output tsv)
+          az webapp config container set --name "$API_WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --container-image-name "${registry_login_server}/metals-api:${IMAGE_TAG}" \
+            --container-registry-url "https://${registry_login_server}" --output none
+          # config set alone does not force a re-pull when the tag is
+          # unchanged (e.g. repeated ":latest" deploys), so restart explicitly.
+          az webapp restart --name "$API_WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --output none
+
+      - name: Wait for the API Web App to report healthy
+        run: |
+          host_name=$(az webapp show --name "$API_WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --query defaultHostName --output tsv)
+          healthy=false
+          for _ in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://${host_name}/health" || true)
+            if [[ "$status" == '200' ]]; then healthy=true; break; fi
+            sleep 10
+          done
+          if [[ "$healthy" != true ]]; then
+            echo "::error::$API_WEBAPP_NAME did not report healthy at https://${host_name}/health within the timeout."
+            exit 1
+          fi
+          echo "$API_WEBAPP_NAME is healthy: https://${host_name}/health"
