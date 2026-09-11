@@ -96,9 +96,12 @@ resource "azurerm_role_assignment" "infrastructure" {
   principal_type       = "ServicePrincipal"
 }
 
-# Permit assigning/removing ONLY Website Contributor, AcrPush, and Reader to
-# service principals. The workflow cannot use this assignment to grant Owner
-# or Contributor.
+# Permit assigning/removing ONLY Website Contributor or Contributor to
+# service principals. The workflow cannot use this assignment to grant Owner.
+# Note: this condition restricts which ROLE can be granted, not at what
+# SCOPE — the Terraform identity holds RBAC Administrator at the whole
+# subscription, so it can grant Contributor to any principal anywhere in the
+# subscription, not just the container registry it's used for today.
 resource "azurerm_role_assignment" "deployment_roles" {
   scope                = local.subscription_scope
   role_definition_name = "Role Based Access Control Administrator"
@@ -110,7 +113,7 @@ resource "azurerm_role_assignment" "deployment_roles" {
       (!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}))
       OR
       (
-        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, 8311e382-0749-4cb8-b61a-304f252e45ec, acdd72a7-3385-48ef-bd42-f606fba81ae7}
+        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, b24988ac-6180-42a0-ab88-20f7382dd24c}
         AND @Request[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
       )
     )
@@ -119,7 +122,7 @@ resource "azurerm_role_assignment" "deployment_roles" {
       (!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}))
       OR
       (
-        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, 8311e382-0749-4cb8-b61a-304f252e45ec, acdd72a7-3385-48ef-bd42-f606fba81ae7}
+        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {de139f84-1756-47ae-9be6-808fbbe84772, b24988ac-6180-42a0-ab88-20f7382dd24c}
         AND @Resource[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}
       )
     )
