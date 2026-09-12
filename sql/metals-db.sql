@@ -38,7 +38,19 @@ CREATE TABLE elements (
 CREATE TABLE alloys (
     alloy_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
+    -- Free text, and deliberately specific: "reddish gold", "dark purple-brown".
+    -- Twenty-eight distinct values across the catalog, which reads well on a card
+    -- and groups terribly - hence color_family below.
     color VARCHAR(50),
+    -- The bucket that free text falls into, so the catalog can be filtered and
+    -- sorted by how an alloy actually looks. Five families, because "silver gray"
+    -- and "bright silver" are the same answer to "show me the silvery ones".
+    --
+    -- Nullable here only because it is DERIVED, the same way primary_metal is: the
+    -- seed maps every color string to a family, then sets NOT NULL. Unlike
+    -- primary_metal it is then editable - the mapping is a judgement call, not a
+    -- fact about mass fractions, so an Admin can move one.
+    color_family VARCHAR(10),
     -- Classified by base metal: the element with the largest mass fraction.
     -- That rule is objective, so every alloy lands in exactly one family and
     -- nobody has to argue about it. What an alloy is USED for is a separate
@@ -70,6 +82,14 @@ CREATE TABLE alloys (
         'TIN',
         'TITANIUM',
         'ZINC'
+    )),
+
+    CONSTRAINT chk_alloy_color_family CHECK (color_family IN (
+        'GRAY',
+        'SILVER',
+        'GOLD',
+        'BRONZE',
+        'RED'
     )),
 
     CONSTRAINT chk_alloy_family CHECK (alloy_family IN (
@@ -944,6 +964,78 @@ WHERE majority.alloy_id = a.alloy_id;
 -- Now that it is populated, make it mandatory. Anything added later has to pass
 -- the CHECK and cannot be left empty.
 ALTER TABLE alloys ALTER COLUMN primary_metal SET NOT NULL;
+
+-- Group the free-text colors. Listing all twenty-eight strings explicitly beats
+-- pattern matching on them: 'reddish gold' and 'pale gold' both contain "gold" but
+-- belong in different families, and 'white gold' is not gold-colored at all. An
+-- explicit map also means a color nobody has classified fails loudly below instead
+-- of quietly landing wherever a LIKE happened to match first.
+WITH color_family_map (color, family) AS (
+    VALUES
+        -- Grays: aluminums, steels and cast irons.
+        ('silver gray', 'GRAY'),
+        ('dark gray', 'GRAY'),
+        ('dull gray', 'GRAY'),
+
+        -- Silvers, including the white metals. Platinum and palladium read as
+        -- "silvery white", and white gold is named for the same look.
+        ('bright silver', 'SILVER'),
+        ('dull silver', 'SILVER'),
+        ('silvery', 'SILVER'),
+        ('silvery white', 'SILVER'),
+        ('silver', 'SILVER'),
+        ('dark silver', 'SILVER'),
+        ('bluish silver', 'SILVER'),
+        ('white gold', 'SILVER'),
+
+        -- Golds and yellows: the gold alloys and the yellow brasses together,
+        -- because "yellow brass" and "pale gold" are the same shelf to the eye.
+        ('gold', 'GOLD'),
+        ('rich gold', 'GOLD'),
+        ('pale gold', 'GOLD'),
+        ('yellow gold', 'GOLD'),
+        ('yellow-gold', 'GOLD'),
+        ('golden', 'GOLD'),
+        ('yellow', 'GOLD'),
+        ('reddish yellow', 'GOLD'),
+
+        -- Bronzes and browns.
+        ('bronze', 'BRONZE'),
+        ('dark bronze', 'BRONZE'),
+        ('golden bronze', 'BRONZE'),
+        ('yellow bronze', 'BRONZE'),
+        ('rust brown', 'BRONZE'),
+        ('dark purple-brown', 'BRONZE'),
+
+        -- Reds: the coppers and the copper-rich alloys that show it.
+        ('reddish', 'RED'),
+        ('reddish gold', 'RED'),
+        ('rose gold', 'RED')
+)
+UPDATE alloys a
+SET color_family = m.family
+FROM color_family_map m
+WHERE m.color = a.color;
+
+-- Every alloy must have landed somewhere. This catches both an unmapped color and
+-- a NULL one, either of which would otherwise fail the SET NOT NULL below with a
+-- message that does not say which alloy or which color is at fault.
+DO $$
+DECLARE
+    offenders text;
+BEGIN
+    SELECT string_agg(name || ' (' || coalesce(color, 'no color') || ')', ', ' ORDER BY name)
+    INTO offenders
+    FROM alloys
+    WHERE color_family IS NULL;
+
+    IF offenders IS NOT NULL THEN
+        RAISE EXCEPTION
+            'These alloys have a color with no color_family mapping: %', offenders;
+    END IF;
+END $$;
+
+ALTER TABLE alloys ALTER COLUMN color_family SET NOT NULL;
 
 -- The families were typed by hand, so confirm each one still agrees with the
 -- metal just computed. This is the assertion that keeps "COPPER family" and

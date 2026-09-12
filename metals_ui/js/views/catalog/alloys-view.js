@@ -1,14 +1,31 @@
 import { getAlloys } from "../../api/alloys-api.js";
-import { ALLOY_FAMILIES, ALLOY_USES, ALLOY_USE_GROUPS } from "../../constants/alloy-metadata.js";
+import {
+  ALLOY_COLOR_FAMILIES,
+  ALLOY_COLOR_FAMILY_CODES,
+  ALLOY_FAMILIES,
+  ALLOY_USES,
+  ALLOY_USE_GROUPS,
+} from "../../constants/alloy-metadata.js";
 import { loadPreferences, restoreCodes, savePreferences } from "../../preferences.js";
 
 const alloyImageDirectory = "./assets/images/alloys";
 const fallbackAlloyImage = "./assets/images/no-image.png";
 const PREFERENCES_NAME = "alloys-view";
 
+// Where each color family sits in the light-to-warm order the chips use. Sorting
+// on the code itself would be alphabetical - BRONZE, GOLD, GRAY, RED, SILVER -
+// which scatters the spectrum.
+const COLOR_FAMILY_RANK = new Map(
+  ALLOY_COLOR_FAMILY_CODES.map((code, index) => [code, index]),
+);
+
 const SORTERS = {
   name: (a, b) => a.name.localeCompare(b.name),
   family: (a, b) => a.alloy_family.localeCompare(b.alloy_family) || a.name.localeCompare(b.name),
+  color_family: (a, b) =>
+    (COLOR_FAMILY_RANK.get(a.color_family) ?? Number.MAX_SAFE_INTEGER) -
+      (COLOR_FAMILY_RANK.get(b.color_family) ?? Number.MAX_SAFE_INTEGER) ||
+    a.name.localeCompare(b.name),
   alloy_id: (a, b) => a.alloy_id - b.alloy_id,
 };
 
@@ -37,6 +54,7 @@ export function alloysView() {
             <select id="alloy-sort" name="sort">
               <option value="name">Sort by name</option>
               <option value="family">Sort by base metal</option>
+              <option value="color_family">Sort by color</option>
               <option value="alloy_id">Sort by catalog order</option>
             </select>
 
@@ -63,6 +81,20 @@ export function alloysView() {
               <label class="category-filter__option">
                 <input type="checkbox" name="family" value="${family}" checked />
                 <span class="family-chip" data-family="${family}">${formatLabel(family)}</span>
+              </label>`,
+            ).join("")}
+          </div>
+        </fieldset>
+
+        <fieldset id="alloy-color-families" class="category-filter">
+          <legend>Color</legend>
+          <div class="category-filter__group">
+            <button class="category-filter__group-toggle" type="button" data-group="all">All colors</button>
+            ${ALLOY_COLOR_FAMILIES.map(
+              (family) => `
+              <label class="category-filter__option">
+                <input type="checkbox" name="color_family" value="${family.code}" checked />
+                <span class="color-chip"><span class="color-chip__swatch" style="background:${family.swatch}"></span>${family.label}</span>
               </label>`,
             ).join("")}
           </div>
@@ -102,13 +134,18 @@ export async function bindAlloysView() {
   const direction = document.querySelector("#alloy-direction");
   const familyFilter = document.querySelector("#alloy-families");
   const useFilter = document.querySelector("#alloy-uses");
+  const colorFamilyFilter = document.querySelector("#alloy-color-families");
   const cardsButton = document.querySelector("#alloy-view-cards");
   const tableButton = document.querySelector("#alloy-view-table");
   const count = document.querySelector("#alloys-count");
 
-  if (!results || !filter || !search || !color || !sort || !direction || !familyFilter || !useFilter || !count) {
+  if (!results || !filter || !search || !color || !sort || !direction || !familyFilter || !useFilter || !colorFamilyFilter || !count) {
     return;
   }
+
+  // The three checkbox fieldsets behave identically for reset, "show everything"
+  // and restoring defaults, so they are handled as one list throughout.
+  const fieldsets = [familyFilter, colorFamilyFilter, useFilter];
 
   let descending = false;
   let layout = "cards";
@@ -128,6 +165,7 @@ export async function bindAlloysView() {
         descending,
         layout,
         families: [...checkedValues(familyFilter, "family")],
+        colorFamilies: [...checkedValues(colorFamilyFilter, "color_family")],
         uses: [...checkedValues(useFilter, "use")],
       });
     };
@@ -137,6 +175,7 @@ export async function bindAlloysView() {
       const selectedColor = color.value.toLowerCase();
       const allowedFamilies = checkedValues(familyFilter, "family");
       const allowedUses = checkedValues(useFilter, "use");
+      const allowedColorFamilies = checkedValues(colorFamilyFilter, "color_family");
 
       const filtered = alloys.filter((alloy) => {
         const searchText = `${alloy.name} ${alloy.description ?? ""}`.toLowerCase();
@@ -149,18 +188,26 @@ export async function bindAlloysView() {
         // thought to give it one.
         const filteringByUse = allowedUses.size !== ALLOY_USES.length;
         const matchesUse = !filteringByUse || (alloy.uses ?? []).some((code) => allowedUses.has(code));
-        return matchesSearch && matchesColor && matchesUse && allowedFamilies.has(alloy.alloy_family);
+        return (
+          matchesSearch &&
+          matchesColor &&
+          matchesUse &&
+          allowedFamilies.has(alloy.alloy_family) &&
+          allowedColorFamilies.has(alloy.color_family)
+        );
       });
 
       const compare = SORTERS[sort.value] ?? SORTERS.name;
       filtered.sort((a, b) => (descending ? compare(b, a) : compare(a, b)));
 
       render(results, filtered, layout);
-      count.replaceChildren(...describeCount(filtered.length, alloys.length, allowedFamilies, allowedUses));
+      count.replaceChildren(
+        ...describeCount(filtered.length, alloys.length, allowedFamilies, allowedUses, allowedColorFamilies),
+      );
       persist();
     };
 
-    restorePreferences({ search, color, sort, familyFilter, useFilter }, (restored) => {
+    restorePreferences({ search, color, sort, familyFilter, useFilter, colorFamilyFilter }, (restored) => {
       descending = restored.descending;
       layout = restored.layout;
     });
@@ -173,6 +220,7 @@ export async function bindAlloysView() {
     sort.addEventListener("change", applyFilters);
     familyFilter.addEventListener("change", applyFilters);
     useFilter.addEventListener("change", applyFilters);
+    colorFamilyFilter.addEventListener("change", applyFilters);
 
     direction.addEventListener("click", () => {
       descending = !descending;
@@ -198,6 +246,10 @@ export async function bindAlloysView() {
     };
 
     familyFilter.addEventListener("click", handleGroupClick(familyFilter, "family", () => ALLOY_FAMILIES));
+    colorFamilyFilter.addEventListener(
+      "click",
+      handleGroupClick(colorFamilyFilter, "color_family", () => ALLOY_COLOR_FAMILY_CODES),
+    );
     useFilter.addEventListener(
       "click",
       handleGroupClick(useFilter, "use", (groupId) =>
@@ -215,7 +267,7 @@ export async function bindAlloysView() {
 
     count.addEventListener("click", (event) => {
       if (!event.target.closest("#alloys-show-all")) return;
-      [familyFilter, useFilter].forEach((container) => {
+      fieldsets.forEach((container) => {
         container.querySelectorAll("input[type='checkbox']").forEach((input) => {
           input.checked = true;
         });
@@ -225,9 +277,9 @@ export async function bindAlloysView() {
 
     filter.addEventListener("reset", () =>
       window.setTimeout(() => {
-        // A form reset only clears the controls inside the form; the two
+        // A form reset only clears the controls inside the form; the three
         // fieldsets sit outside it, so they are restored by hand.
-        [familyFilter, useFilter].forEach((container) => {
+        fieldsets.forEach((container) => {
           container.querySelectorAll("input[type='checkbox']").forEach((input) => {
             input.checked = true;
           });
@@ -246,11 +298,14 @@ export async function bindAlloysView() {
   }
 }
 
-function restorePreferences({ search, color, sort, familyFilter, useFilter }, applyToggles) {
+function restorePreferences(
+  { search, color, sort, familyFilter, useFilter, colorFamilyFilter },
+  applyToggles,
+) {
   const saved = loadPreferences(PREFERENCES_NAME);
 
   if (typeof saved.search === "string") search.value = saved.search;
-  // The colour list is built from the data, so a remembered colour that is no
+  // The color list is built from the data, so a remembered color that is no
   // longer offered has to be ignored or the page would filter to nothing.
   if (typeof saved.color === "string" && [...color.options].some((option) => option.value === saved.color)) {
     color.value = saved.color;
@@ -264,6 +319,11 @@ function restorePreferences({ search, color, sort, familyFilter, useFilter }, ap
 
   applyCodes(familyFilter, "family", restoreCodes(saved.families, ALLOY_FAMILIES));
   applyCodes(useFilter, "use", restoreCodes(saved.uses, ALLOY_USES));
+  applyCodes(
+    colorFamilyFilter,
+    "color_family",
+    restoreCodes(saved.colorFamilies, ALLOY_COLOR_FAMILY_CODES),
+  );
 }
 
 function applyCodes(container, name, codes) {
@@ -285,21 +345,30 @@ function setLayoutButtons(cardsButton, tableButton, layout) {
   tableButton?.setAttribute("aria-pressed", String(layout === "table"));
 }
 
-function describeCount(shown, total, allowedFamilies, allowedUses) {
+function describeCount(shown, total, allowedFamilies, allowedUses, allowedColorFamilies) {
   const summary = document.createElement("span");
   summary.textContent = `Showing ${shown} of ${total} alloy${total === 1 ? "" : "s"}`;
 
   const hiddenFamilies = ALLOY_FAMILIES.length - allowedFamilies.size;
   const hiddenUses = ALLOY_USES.length - allowedUses.size;
-  if (!hiddenFamilies && !hiddenUses) return [summary];
+  const hiddenColors = ALLOY_COLOR_FAMILY_CODES.length - allowedColorFamilies.size;
+  if (!hiddenFamilies && !hiddenUses && !hiddenColors) return [summary];
 
   const parts = [];
   if (hiddenFamilies) parts.push(`${hiddenFamilies} of ${ALLOY_FAMILIES.length} metals`);
+  if (hiddenColors) parts.push(`${hiddenColors} of ${ALLOY_COLOR_FAMILY_CODES.length} colors`);
   if (hiddenUses) parts.push(`${hiddenUses} of ${ALLOY_USES.length} uses`);
+
+  // Three filters can be narrowed at once now, so "a and b and c" needs to become
+  // "a, b and c".
+  const listed =
+    parts.length > 1
+      ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+      : parts[0];
 
   const note = document.createElement("span");
   note.className = "catalog-toolbar__note";
-  note.textContent = ` · ${parts.join(" and ")} hidden`;
+  note.textContent = ` · ${listed} hidden`;
 
   const showAll = document.createElement("button");
   showAll.id = "alloys-show-all";
@@ -325,6 +394,21 @@ function render(container, alloys, layout) {
 
   container.className = "alloy-grid";
   container.replaceChildren(...alloys.map(createAlloyCard));
+}
+
+// A dot in the alloy's color family, so sorting by color reads as bands of like
+// colors rather than an unexplained reordering. The text beside it stays the
+// alloy's own specific color - the swatch groups, the words describe.
+function createColorSwatch(colorFamily) {
+  const match = ALLOY_COLOR_FAMILIES.find((family) => family.code === colorFamily);
+  const swatch = document.createElement("span");
+  swatch.className = "color-chip__swatch";
+  if (match) {
+    swatch.style.background = match.swatch;
+    // Not decoration: it is the only place the family name appears on a card.
+    swatch.title = `${match.label} family`;
+  }
+  return swatch;
 }
 
 function populateColorOptions(alloys, select) {
@@ -369,7 +453,11 @@ function createAlloyTable(alloys) {
     familyCell.append(chip);
 
     const colorCell = document.createElement("td");
-    colorCell.textContent = formatLabel(alloy.color) || "—";
+    colorCell.className = "alloy-table__color";
+    colorCell.append(
+      createColorSwatch(alloy.color_family),
+      document.createTextNode(formatLabel(alloy.color) || "—"),
+    );
 
     const useCell = document.createElement("td");
     useCell.className = "element-table__uses";
@@ -407,7 +495,10 @@ function createAlloyCard(alloy) {
 
   const color = document.createElement("p");
   color.className = "alloy-card__color";
-  color.textContent = formatLabel(alloy.color) || "Color not specified";
+  color.append(
+    createColorSwatch(alloy.color_family),
+    document.createTextNode(formatLabel(alloy.color) || "Color not specified"),
+  );
 
   const description = document.createElement("p");
   description.className = "alloy-card__description";

@@ -10,6 +10,7 @@ def get_alloys(
     color: str | None = None,
     families: list[str] | None = None,
     uses: list[str] | None = None,
+    color_families: list[str] | None = None,
 ) -> list[Alloy]:
     # selectinload fetches every alloy's uses in one extra query instead of one
     # query per alloy, which matters now that the response includes them.
@@ -21,6 +22,8 @@ def get_alloys(
         statement = statement.where(Alloy.color.ilike(f"%{color}%"))
     if families:
         statement = statement.where(Alloy.alloy_family.in_(families))
+    if color_families:
+        statement = statement.where(Alloy.color_family.in_(color_families))
     if uses:
         # An alloy matches if it carries ANY of the requested uses. A correlated
         # EXISTS keeps it to one row per alloy - joining the junction directly

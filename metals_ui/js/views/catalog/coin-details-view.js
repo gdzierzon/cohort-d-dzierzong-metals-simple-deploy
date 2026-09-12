@@ -1,6 +1,8 @@
 import { getAlloy } from "../../api/alloys-api.js";
 import { getMintProduct } from "../../api/coins-api.js";
 import { mintProductImageFilename, slugify } from "../../constants/mint-product-images.js";
+import { labelCurrentVisit } from "../../navigation-history.js";
+import { detailsNavMarkup } from "./details-nav.js";
 
 const coinImageDirectory = "./assets/images/coins";
 const alloyImageDirectory = "./assets/images/alloys";
@@ -11,10 +13,11 @@ const NO_CURRENCY_CODE = "XXX";
 
 export function coinDetailsView({ coinId } = {}) {
   const id = Number(coinId);
+  const nav = detailsNavMarkup("/coins", "coins");
   if (!Number.isInteger(id) || id <= 0) {
-    return `<main id="app-content" class="page details-page"><a class="details-back" href="#/coins">‹ Back to coins</a><p class="catalog-status">That coin could not be found.</p></main>`;
+    return `<main id="app-content" class="page details-page">${nav}<p class="catalog-status">That coin could not be found.</p></main>`;
   }
-  return `<main id="app-content" class="page details-page coin-details-page"><a class="details-back" href="#/coins">‹ Back to coins</a><section id="coin-details" data-coin-id="${id}" aria-live="polite"><p class="placeholder">Loading coin details…</p></section></main>`;
+  return `<main id="app-content" class="page details-page coin-details-page">${nav}<section id="coin-details" data-coin-id="${id}" aria-live="polite"><p class="placeholder">Loading coin details…</p></section></main>`;
 }
 
 export async function bindCoinDetailsView() {
@@ -23,6 +26,8 @@ export async function bindCoinDetailsView() {
   try {
     const coin = await getMintProduct(Number(container.dataset.coinId));
     const alloy = await getAlloy(coin.alloy_id);
+    // So the next page can offer "Back to Morgan Silver Dollar" by name.
+    labelCurrentVisit(coin.name);
     container.replaceChildren(createDetails(coin, alloy));
   } catch (error) {
     container.replaceChildren(createStatus(error.message || "We could not load this coin."));

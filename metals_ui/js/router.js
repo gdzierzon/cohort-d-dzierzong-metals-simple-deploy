@@ -1,3 +1,5 @@
+import { recordVisit } from "./navigation-history.js";
+
 const routes = new Map();
 
 export function registerRoute(path, view, guard = null) {
@@ -17,6 +19,11 @@ export function startRouter(render) {
       navigate("/login");
       return;
     }
+
+    // After the guard, so a route the visitor was bounced off never becomes the
+    // page a "Back to ..." link offers. Before the view renders, because the view
+    // reads the trail to build that link.
+    recordVisit(path);
 
     render(route.view(route.params));
   };

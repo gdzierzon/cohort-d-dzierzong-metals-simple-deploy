@@ -80,6 +80,7 @@ def alloy_response_dto():
         alloy_id=2,
         name="Bronze",
         color="bronze",
+        color_family="BRONZE",
         alloy_family="COPPER",
         primary_metal="COPPER",
         description="Copper alloy",

@@ -76,9 +76,22 @@ def test_alloy_dtos_validate_names_and_updates():
     assert create_errors == [
         "name must be a non-empty string.",
         "alloy_family is required.",
+        "color_family is required.",
     ]
     assert update_errors == [
         "At least one field must be provided."
+    ]
+
+
+def test_alloy_update_rejects_an_unknown_color_family():
+    # Arrange - mirrors chk_alloy_color_family, so a bad value is a readable 400
+    # rather than a constraint error from the database.
+    # Act
+    errors = UpdateAlloyDTO.validate({"color_family": "TEAL"})
+
+    # Assert
+    assert errors == [
+        "color_family must be one of: BRONZE, GOLD, GRAY, RED, SILVER."
     ]
 
 

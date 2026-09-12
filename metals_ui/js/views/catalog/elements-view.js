@@ -254,7 +254,7 @@ function restorePreferences({ search, color, sort, categories }, applyToggles) {
   const saved = loadPreferences(PREFERENCES_NAME);
 
   if (typeof saved.search === "string") search.value = saved.search;
-  // The colour list is built from the data, so a remembered colour that is no
+  // The color list is built from the data, so a remembered color that is no
   // longer offered has to be ignored or the page would filter to nothing.
   if (typeof saved.color === "string" && [...color.options].some((option) => option.value === saved.color)) {
     color.value = saved.color;

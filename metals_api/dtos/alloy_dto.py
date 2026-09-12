@@ -18,6 +18,16 @@ ALLOY_FAMILIES = (
     "ZINC",
 )
 
+# Mirrors chk_alloy_color_family. Ordered light to warm rather than alphabetically,
+# because that is the order the catalog shows the filter chips in.
+ALLOY_COLOR_FAMILIES = (
+    "SILVER",
+    "GRAY",
+    "GOLD",
+    "BRONZE",
+    "RED",
+)
+
 # Mirrors chk_alloy_use_code.
 ALLOY_USE_CODES = (
     "AEROSPACE",
@@ -66,6 +76,16 @@ def _family_errors(value: object) -> list[str]:
     return []
 
 
+def _color_family_errors(value: object) -> list[str]:
+    if not isinstance(value, str) or not value.strip():
+        return ["color_family must be a non-empty string."]
+    if value not in ALLOY_COLOR_FAMILIES:
+        return [
+            "color_family must be one of: " + ", ".join(sorted(ALLOY_COLOR_FAMILIES)) + "."
+        ]
+    return []
+
+
 def _uses_errors(value: object) -> list[str]:
     if not isinstance(value, list):
         return ["uses must be a list of use codes."]
@@ -92,6 +112,7 @@ def _uses_errors(value: object) -> list[str]:
 class CreateAlloyDTO(DataTransferObject):
     name: str
     alloy_family: str
+    color_family: str
     color: str | None = None
     description: str | None = None
     uses: tuple[str, ...] = ()
@@ -102,7 +123,7 @@ class CreateAlloyDTO(DataTransferObject):
             return ["Request body must be a JSON object."]
 
         errors = []
-        allowed_fields = {"name", "color", "alloy_family", "description", "uses"}
+        allowed_fields = {"name", "color", "color_family", "alloy_family", "description", "uses"}
 
         for field_name in sorted(set(data) - allowed_fields):
             errors.append(f"{field_name} is not a recognized field.")
@@ -117,6 +138,15 @@ class CreateAlloyDTO(DataTransferObject):
             errors.append("alloy_family is required.")
         else:
             errors.extend(_family_errors(data["alloy_family"]))
+
+        # Also NOT NULL. The seed derives it from the color text, but there is no
+        # such derivation on this path - a new alloy's color could be anything, and
+        # guessing a family from it is exactly what the explicit map in the seed
+        # exists to avoid. So the caller says which bucket it belongs in.
+        if "color_family" not in data:
+            errors.append("color_family is required.")
+        else:
+            errors.extend(_color_family_errors(data["color_family"]))
 
         if "color" in data and data["color"] is not None:
             errors.extend(_color_errors(data["color"]))
@@ -134,6 +164,7 @@ class CreateAlloyDTO(DataTransferObject):
         return cls(
             name=data["name"],
             alloy_family=data["alloy_family"],
+            color_family=data["color_family"],
             color=data.get("color"),
             description=data.get("description"),
             uses=tuple(data.get("uses") or ()),
@@ -144,6 +175,7 @@ class CreateAlloyDTO(DataTransferObject):
 class UpdateAlloyDTO(DataTransferObject):
     name: str | None = None
     color: str | None = None
+    color_family: str | None = None
     alloy_family: str | None = None
     description: str | None = None
     # None means "leave the uses alone"; an empty tuple means "remove them all".
@@ -155,7 +187,7 @@ class UpdateAlloyDTO(DataTransferObject):
             return ["Request body must be a JSON object."]
 
         errors = []
-        allowed_fields = {"name", "color", "alloy_family", "description", "uses"}
+        allowed_fields = {"name", "color", "color_family", "alloy_family", "description", "uses"}
 
         if not data:
             errors.append("At least one field must be provided.")
@@ -168,6 +200,9 @@ class UpdateAlloyDTO(DataTransferObject):
 
         if "alloy_family" in data:
             errors.extend(_family_errors(data["alloy_family"]))
+
+        if "color_family" in data:
+            errors.extend(_color_family_errors(data["color_family"]))
 
         if "color" in data and data["color"] is not None:
             errors.extend(_color_errors(data["color"]))
@@ -186,6 +221,7 @@ class UpdateAlloyDTO(DataTransferObject):
         return cls(
             name=data.get("name"),
             color=data.get("color"),
+            color_family=data.get("color_family"),
             alloy_family=data.get("alloy_family"),
             description=data.get("description"),
             uses=None if uses is None else tuple(uses),
@@ -197,6 +233,8 @@ class AlloyResponseDTO(DataTransferObject):
     alloy_id: int
     name: str
     color: str | None
+    # Which of the five color buckets that free text falls into.
+    color_family: str
     alloy_family: str
     # Derived from the composition by the seed, never typed in.
     primary_metal: str
@@ -209,6 +247,7 @@ class AlloyResponseDTO(DataTransferObject):
             alloy_id=alloy.alloy_id,
             name=alloy.name,
             color=alloy.color,
+            color_family=alloy.color_family,
             alloy_family=alloy.alloy_family,
             primary_metal=alloy.primary_metal,
             description=alloy.description,

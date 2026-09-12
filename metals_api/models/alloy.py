@@ -25,6 +25,13 @@ class Alloy(Base):
         unique=True,
     )
     color: Mapped[str | None] = mapped_column(String(50))
+    # Which of five buckets that free-text color falls into, so the catalog can be
+    # grouped by how an alloy looks. Seeded by mapping the color string, then
+    # editable - unlike primary_metal, the grouping is a judgement call.
+    color_family: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+    )
     # The base metal by mass fraction. Not nullable: the database enforces both
     # presence and the allowed values, so a bad family fails at the insert.
     alloy_family: Mapped[str] = mapped_column(

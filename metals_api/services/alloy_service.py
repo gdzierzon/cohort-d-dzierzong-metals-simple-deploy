@@ -10,9 +10,12 @@ def list_alloys(
     color: str | None = None,
     families: list[str] | None = None,
     uses: list[str] | None = None,
+    color_families: list[str] | None = None,
 ) -> list[AlloyResponseDTO]:
     with SessionFactory() as session:
-        alloys = alloy_repository.get_alloys(session, name, color, families, uses)
+        alloys = alloy_repository.get_alloys(
+            session, name, color, families, uses, color_families
+        )
         return [
             AlloyResponseDTO.from_model(alloy)
             for alloy in alloys

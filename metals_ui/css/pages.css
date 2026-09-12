@@ -523,8 +523,51 @@
   color: var(--color-muted);
 }
 
+/* Color family: a filter chip carrying a real swatch of the color it groups. The
+   same swatch appears on the cards and in the table, which is what makes sorting
+   by color read as bands rather than as an unexplained reordering. */
+.color-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.color-chip__swatch {
+  display: inline-block;
+  flex: none;
+  width: 0.62rem;
+  height: 0.62rem;
+  /* A ring, so a pale swatch stays visible against the dark surface. */
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: var(--color-muted);
+  vertical-align: middle;
+}
+
+.category-filter__option input:not(:checked) + .color-chip {
+  background: transparent;
+  color: var(--color-muted);
+}
+/* Unticked, the swatch flattens so the ticked ones carry the color. */
+.category-filter__option input:not(:checked) + .color-chip .color-chip__swatch {
+  opacity: 0.35;
+}
+
+/* On a card or in a table the swatch sits inline with the color text. */
+.alloy-card__color .color-chip__swatch,
+.alloy-table__color .color-chip__swatch {
+  margin-right: 0.45rem;
+}
+
 /* The metal a piece is mostly made of. Tinted toward the real metal where there
-   is an obvious colour for it, so a gold coin reads gold at a glance. */
+   is an obvious color for it, so a gold coin reads gold at a glance. */
 .metal-chip {
   display: inline-block;
   border: 1px solid var(--color-border-subtle);
@@ -564,8 +607,8 @@
 
 .coin-card__chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
 
-/* Uses are plain and uniform - the family chip is the one that carries colour,
-   and a card with four coloured use chips next to it turns into confetti. */
+/* Uses are plain and uniform - the family chip is the one that carries color,
+   and a card with four colored use chips next to it turns into confetti. */
 .alloy-card__uses { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 1rem; }
 
 .use-chip {
@@ -598,6 +641,9 @@
 .alloy-details-hero__description { max-width: 34rem; margin-top: 1.5rem; color: #d6d1c7; font-size: 1.05rem; line-height: 1.65; }
 .alloy-composition { margin-top: clamp(2.5rem, 6vw, 5rem); }
 .alloy-coins { margin-top: clamp(2.5rem, 6vw, 5rem); }
+/* Alloys an element appears in. Same spacing and card grid as the alloy page's
+   composition section, read from the other side of the junction table. */
+.element-alloys { margin-top: clamp(2.5rem, 6vw, 5rem); }
 .alloy-composition__heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1.5rem; }
 .alloy-composition__heading h2 { margin-top: 0.35rem; font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3.3rem); font-weight: 400; letter-spacing: -0.045em; }
 .alloy-composition__heading > p { color: var(--color-muted); white-space: nowrap; }
@@ -693,7 +739,16 @@
 }
 
 .details-page { padding-top: clamp(1.5rem, 4vw, 3.5rem); }
+/* Up to two links: where the visitor came from, and the full catalog. Wraps on a
+   narrow screen rather than letting a long coin name push "All alloys" off. */
+.details-nav { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem 1.4rem; margin-bottom: 1.25rem; }
+/* The margin lives on .details-nav now, but .details-back is still used on its own
+   in views that have no nav, so it keeps its own spacing when unwrapped. */
 .details-back { display: inline-block; margin-bottom: 1.25rem; color: var(--color-gold-bright); text-decoration: none; }
+.details-nav .details-back { margin-bottom: 0; }
+.details-all { color: var(--color-muted); font-size: 0.85rem; letter-spacing: 0.04em; text-decoration: none; text-transform: uppercase; }
+.details-nav .details-back:hover, .details-all:hover { text-decoration: underline; }
+.details-all:hover { color: var(--color-gold-bright); }
 .details-layout { display: grid; grid-template-columns: minmax(16rem, 0.8fr) minmax(20rem, 1.2fr); overflow: hidden; border: 1px solid var(--color-border-subtle); border-radius: 1rem; background: var(--color-surface); box-shadow: var(--shadow-sm); }
 .details-visual { min-height: 34rem; background: #242a2a; }
 .details-visual img { width: 100%; height: 100%; object-fit: cover; }

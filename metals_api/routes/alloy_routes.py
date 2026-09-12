@@ -25,6 +25,7 @@ def get_all_alloys():
         color=request.args.get("color"),
         families=request.args.getlist("family") or None,
         uses=request.args.getlist("use") or None,
+        color_families=request.args.getlist("color_family") or None,
     )
     return jsonify([dto.to_dictionary() for dto in alloys]), 200
 

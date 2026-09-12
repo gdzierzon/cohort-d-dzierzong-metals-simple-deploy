@@ -40,7 +40,7 @@
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#why">Why you cannot just re-run the seed</a></li>
-      <li><a href="#three">The four migrations</a></li>
+      <li><a href="#three">The five migrations</a></li>
       <li><a href="#idempotent">Writing one you can run twice</a></li>
       <li><a href="#rename">Restructuring without losing data</a></li>
       <li><a href="#bugs">Two bugs the rehearsals caught</a></li>
@@ -106,9 +106,9 @@ DROP TABLE IF EXISTS elements;</pre>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">The golden rule</span><span class="qnum">order matters</span></div>
           <p class="desc">
-            Apply <span class="mono">001</span>, then <span class="mono">002</span>, then
-            <span class="mono">003</span>, then <span class="mono">004</span>. Each one assumes the
-            previous has already run. They are not interchangeable and they are not optional.
+            Apply <span class="mono">001</span> through <span class="mono">005</span>, in order.
+            Each one assumes the previous has already run. They are not interchangeable and they
+            are not optional.
           </p>
         </div>
       </div>
@@ -117,7 +117,7 @@ DROP TABLE IF EXISTS elements;</pre>
     <section class="block" id="three">
       <div class="section-intro codey-left">
         <div class="intro-text">
-          <h2>The four migrations <span class="tag">what each one does</span></h2>
+          <h2>The five migrations <span class="tag">what each one does</span></h2>
           <p class="dek">
             Each corresponds to a real change made to this project after it had already been
             deployed. The first three changed the shape of the database; the fourth only adds rows,
@@ -169,6 +169,15 @@ DROP TABLE IF EXISTS elements;</pre>
                 rows that 003 forgot to give its coinage alloys. Changes no table's shape at all.
               </td>
             </tr>
+            <tr>
+              <td class="path">005_alloy_color_families.sql</td>
+              <td>
+                Adds <span class="mono">alloys.color_family</span>, filled by mapping each alloy's
+                existing color text into one of five buckets, so the catalog can be filtered and
+                sorted by how an alloy looks. The one migration here that deliberately
+                <b>does not</b> recompute on a re-run &mdash; see below.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -206,6 +215,22 @@ COMMIT;</pre>
           <p class="desc">
             All of it lands, or none of it does. A migration that fails halfway through and leaves
             the database in an invented third shape is far worse than one that fails cleanly.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Repeatable is not the same as identical</span><span class="qnum">005</span></div>
+          <pre class="code">UPDATE alloys a
+SET color_family = m.family
+FROM color_family_map m
+WHERE m.color = a.color
+  AND a.color_family IS NULL;</pre>
+          <p class="desc">
+            That last line is the whole point. <span class="mono">primary_metal</span> is recomputed
+            on every run because it is a <i>fact</i> &mdash; the majority element cannot be a matter
+            of opinion. <span class="mono">color_family</span> is a <b>judgement call</b> an Admin is
+            allowed to overrule, so 005 fills only the blanks. Without
+            <span class="mono">IS NULL</span> the migration would be perfectly idempotent in shape
+            and still quietly undo somebody's work every time it ran.
           </p>
         </div>
         <div class="qcard">

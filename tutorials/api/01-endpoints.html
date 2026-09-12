@@ -196,9 +196,9 @@
         <table class="tree">
           <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td class="path">GET /api/alloys</td><td>any logged-in user</td><td>List alloys. Optional <code>?name=</code>, <code>?color=</code>, <code>?family=</code> and <code>?use=</code> filters.</td></tr>
+            <tr><td class="path">GET /api/alloys</td><td>any logged-in user</td><td>List alloys. Optional <code>?name=</code>, <code>?color=</code>, <code>?family=</code>, <code>?color_family=</code> and <code>?use=</code> filters.</td></tr>
             <tr><td class="path">GET /api/alloys/&lt;alloy_id&gt;</td><td>any logged-in user</td><td>Get one alloy, or <span class="mono">404</span>.</td></tr>
-            <tr><td class="path">POST /api/alloys</td><td>Admin</td><td>Create an alloy. Requires <span class="mono">name</span> and <span class="mono">alloy_family</span>; <span class="mono">color</span>, <span class="mono">description</span> and <span class="mono">uses</span> are optional.</td></tr>
+            <tr><td class="path">POST /api/alloys</td><td>Admin</td><td>Create an alloy. Requires <span class="mono">name</span>, <span class="mono">alloy_family</span> and <span class="mono">color_family</span>; <span class="mono">color</span>, <span class="mono">description</span> and <span class="mono">uses</span> are optional.</td></tr>
             <tr><td class="path">PUT /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Update one or more fields.</td></tr>
             <tr><td class="path">DELETE /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Delete an alloy, or <span class="mono">404</span>.</td></tr>
           </tbody>
@@ -208,6 +208,7 @@
 {
   "name": "Fine Gold 24K",
   "color": "gold",
+  "color_family": "GOLD",
   "alloy_family": "PRECIOUS",
   "uses": ["BULLION", "COINAGE"],
   "description": "High-purity investment gold."
@@ -216,7 +217,8 @@
         <div class="qcard">
           <div class="qhead"><span class="qtitle">Repeatable filters</span><span class="qnum">either/or</span></div>
           <pre class="code">GET /api/alloys?family=FERROUS&amp;family=NICKEL
-GET /api/alloys?use=MARINE&amp;use=AEROSPACE</pre>
+GET /api/alloys?use=MARINE&amp;use=AEROSPACE
+GET /api/alloys?color_family=GOLD&amp;color_family=RED</pre>
           <p class="desc">
             Repeating a key means &ldquo;any of these.&rdquo; On the Flask side that is
             <span class="mono">request.args.getlist("family")</span>, which is how the catalog page

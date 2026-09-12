@@ -2,6 +2,8 @@ import { getAlloyElements } from "../../api/alloy-elements-api.js";
 import { getAlloy } from "../../api/alloys-api.js";
 import { getElements } from "../../api/elements-api.js";
 import { getMintProductsByAlloy } from "../../api/coins-api.js";
+import { labelCurrentVisit } from "../../navigation-history.js";
+import { detailsNavMarkup } from "./details-nav.js";
 
 const alloyImageDirectory = "./assets/images/alloys";
 const elementImageDirectory = "./assets/images/elements";
@@ -13,13 +15,14 @@ const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits:
 
 export function alloyDetailsView({ alloyId } = {}) {
   const id = Number(alloyId);
+  const nav = detailsNavMarkup("/alloys", "alloys");
   if (!Number.isInteger(id) || id <= 0) {
-    return `<main id="app-content" class="page details-page"><a class="details-back" href="#/alloys">‹ Back to alloys</a><p class="catalog-status">That alloy could not be found.</p></main>`;
+    return `<main id="app-content" class="page details-page">${nav}<p class="catalog-status">That alloy could not be found.</p></main>`;
   }
 
   return `
     <main id="app-content" class="page details-page alloy-details-page">
-      <a class="details-back" href="#/alloys">‹ Back to alloys</a>
+      ${nav}
       <section id="alloy-details" data-alloy-id="${id}" aria-live="polite"><p class="placeholder">Loading alloy details…</p></section>
     </main>
   `;
@@ -37,6 +40,7 @@ export async function bindAlloyDetailsView() {
       getElements(),
       getMintProductsByAlloy(alloyId),
     ]);
+    labelCurrentVisit(alloy.name);
     container.replaceChildren(createAlloyDetails(alloy, composition, elements, coins));
   } catch (error) {
     container.replaceChildren(createStatus(error.message || "We could not load this alloy."));
@@ -112,7 +116,10 @@ function createCoinCard(coin) {
   image.alt = `${coin.name} proof obverse and reverse`;
   image.loading = "lazy";
   addImageFallback(image, fallbackCoinImage, "No image available");
-  card.querySelector(".coin-card__country").textContent = coin.country || "Country not specified";
+  // "country" became "issuer" when coins grew into mint_products: a private mint
+  // can strike a bar, and it is not a country. The old name read undefined here, so
+  // every card said "Country not specified".
+  card.querySelector(".coin-card__country").textContent = coin.issuer || "Issuer not specified";
   card.querySelector("h3").textContent = coin.name;
   card.querySelector(".coin-card__mint").textContent = coin.mint || "Mint not specified";
   return card;

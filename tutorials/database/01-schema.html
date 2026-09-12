@@ -90,10 +90,11 @@
           <div class="qhead"><span class="qtitle">alloys</span><span class="qnum">alloy_id PK</span></div>
           <p class="desc">
             Named mixtures such as &ldquo;Sterling Silver&rdquo; or &ldquo;304 Stainless
-            Steel&rdquo; &mdash; 75 of them. A generated <span class="mono">SERIAL</span> id, since
-            alloy names aren't a natural key the way atomic numbers are. Two classification columns,
-            <span class="mono">alloy_family</span> and <span class="mono">primary_metal</span>, are
-            the subject of <a href="#classifying">the next section</a>.
+            Steel&rdquo; &mdash; 78 of them. A generated <span class="mono">SERIAL</span> id, since
+            alloy names aren't a natural key the way atomic numbers are. Three classification
+            columns &mdash; <span class="mono">alloy_family</span>,
+            <span class="mono">primary_metal</span> and <span class="mono">color_family</span>
+            &mdash; are the subject of <a href="#classifying">the next section</a>.
           </p>
         </div>
         <div class="qcard">
@@ -145,17 +146,18 @@
     <section class="block" id="classifying">
       <div class="section-intro codey-left">
         <div class="intro-text">
-          <h2>Two ways to classify an alloy <span class="tag">and why both exist</span></h2>
+          <h2>Three ways to classify an alloy <span class="tag">and why all three exist</span></h2>
           <p class="dek">
-            <span class="mono">alloys</span> carries two classification columns that look
-            redundant and aren't. The difference between them is worth understanding, because it
-            is the difference between <i>what something is</i> and <i>what it is mostly made
-            of</i>.
+            <span class="mono">alloys</span> carries three classification columns that look
+            redundant and aren't. Two of them separate <i>what something is</i> from <i>what it is
+            mostly made of</i>; the third answers a question neither can &mdash; <i>what does it look
+            like</i>. A reader hunting for a warm-toned alloy does not care that Nordic Gold is
+            filed under <span class="mono">COPPER</span>.
           </p>
         </div>
         <figure class="codey-figure">
           <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
-          <figcaption>two axes, not one</figcaption>
+          <figcaption>three axes, not one</figcaption>
         </figure>
       </div>
 
@@ -163,6 +165,7 @@
     alloy_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     color VARCHAR(50),
+    color_family VARCHAR(10),
     alloy_family VARCHAR(40) NOT NULL,
     primary_metal VARCHAR(20),
     description TEXT,
@@ -170,6 +173,10 @@
     CONSTRAINT chk_alloy_primary_metal CHECK (primary_metal IN (
         'ALUMINUM', 'COPPER', 'GOLD', 'IRON', 'MAGNESIUM', 'NICKEL',
         'PALLADIUM', 'PLATINUM', 'SILVER', 'TIN', 'TITANIUM', 'ZINC'
+    )),
+
+    CONSTRAINT chk_alloy_color_family CHECK (color_family IN (
+        'GRAY', 'SILVER', 'GOLD', 'BRONZE', 'RED'
     )),
 
     CONSTRAINT chk_alloy_family CHECK (alloy_family IN (
@@ -185,6 +192,20 @@
             The broad group an alloy belongs to: <span class="mono">PRECIOUS</span>,
             <span class="mono">COPPER</span>, <span class="mono">FERROUS</span> and six more. This
             is what the alloys page filters on, because nine checkboxes fit on a screen.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">color_family</span><span class="qnum">5 values</span></div>
+          <p class="desc">
+            <span class="mono">color</span> is free text and deliberately specific &mdash;
+            &ldquo;reddish gold&rdquo;, &ldquo;dark purple-brown&rdquo;, twenty-eight distinct
+            strings. That reads well on a card and groups terribly, so this column buckets them into
+            <span class="mono">SILVER</span>, <span class="mono">GRAY</span>,
+            <span class="mono">GOLD</span>, <span class="mono">BRONZE</span> and
+            <span class="mono">RED</span>. Like <span class="mono">primary_metal</span> it is seeded
+            by derivation rather than typed 78 times &mdash; but unlike it, an Admin can then
+            <i>change</i> it, because which bucket &ldquo;golden bronze&rdquo; belongs in is a
+            judgement call, not a fact about mass fractions.
           </p>
         </div>
         <div class="qcard">
