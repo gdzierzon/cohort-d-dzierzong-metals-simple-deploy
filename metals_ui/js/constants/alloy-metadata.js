@@ -16,25 +16,32 @@ export const ALLOY_FAMILIES = [
   "MAGNESIUM",
 ];
 
-export const ALLOY_USES = [
-  "AEROSPACE",
-  "BEARING",
-  "BULLION",
-  "COINAGE",
-  "COOKWARE",
-  "DECORATIVE",
-  "ELECTRICAL",
-  "FASTENERS",
-  "HIGH_TEMPERATURE",
-  "INSTRUMENTATION",
-  "JEWELRY",
-  "MARINE",
-  "MEDICAL",
-  "MUSICAL",
-  "SOLDERING",
-  "STRUCTURAL",
-  "TOOLING",
+// Seventeen separate checkboxes would swamp the toolbar, so the uses are
+// grouped the way the elements page groups its categories: a clickable group
+// name that toggles the whole set, with the individual codes under it.
+export const ALLOY_USE_GROUPS = [
+  {
+    id: "industrial",
+    label: "Structural & industrial",
+    codes: ["STRUCTURAL", "FASTENERS", "BEARING", "TOOLING", "HIGH_TEMPERATURE"],
+  },
+  {
+    id: "precision",
+    label: "Electrical & precision",
+    codes: ["ELECTRICAL", "SOLDERING", "INSTRUMENTATION", "MEDICAL"],
+  },
+  { id: "transport", label: "Transport", codes: ["AEROSPACE", "MARINE"] },
+  {
+    id: "craft",
+    label: "Craft & household",
+    codes: ["JEWELRY", "DECORATIVE", "COOKWARE", "MUSICAL"],
+  },
+  { id: "money", label: "Money", codes: ["BULLION", "COINAGE"] },
 ];
+
+// Flat list for the admin form and for validation, derived so it can never
+// disagree with the groups above.
+export const ALLOY_USES = ALLOY_USE_GROUPS.flatMap((group) => group.codes).sort();
 
 export function formatAlloyLabel(value) {
   return value

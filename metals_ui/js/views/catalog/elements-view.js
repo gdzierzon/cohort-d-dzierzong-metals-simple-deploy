@@ -1,5 +1,7 @@
 import { getElements } from "../../api/elements-api.js";
+import { loadPreferences, restoreCodes, savePreferences } from "../../preferences.js";
 
+const PREFERENCES_NAME = "elements-view";
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 // Gas densities are far below two decimal places - hydrogen is 0.000090 g/cm³,
 // which the formatter above rounds to a flat "0". Switch to significant digits
@@ -31,6 +33,12 @@ const CATEGORY_GROUPS = [
 ];
 
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap((group) => group.categories);
+
+// What "Clear" goes back to. The fieldset lives outside the <form>, so a native
+// form reset never reaches these checkboxes - they are restored by hand.
+const DEFAULT_CATEGORIES = new Set(
+  CATEGORY_GROUPS.filter((group) => group.defaultOn).flatMap((group) => group.categories),
+);
 
 // Symbol first: it is how the periodic table is read, and it keeps the default
 // order stable and short. Only these three are sortable - the remaining columns
@@ -134,6 +142,17 @@ export async function bindElementsView() {
         [...categories.querySelectorAll('input[name="category"]:checked')].map((input) => input.value),
       );
 
+    const persist = () => {
+      savePreferences(PREFERENCES_NAME, {
+        search: search.value,
+        color: color.value,
+        sort: sort.value,
+        descending,
+        layout,
+        categories: [...selectedCategories()],
+      });
+    };
+
     const applyFilters = () => {
       const searchTerm = search.value.trim().toLowerCase();
       const selectedColor = color.value.toLowerCase();
@@ -153,7 +172,15 @@ export async function bindElementsView() {
 
       render(results, filtered, layout);
       count.replaceChildren(...describeCount(filtered.length, elements.length, allowed));
+      persist();
     };
+
+    restorePreferences({ search, color, sort, categories }, (restored) => {
+      descending = restored.descending;
+      layout = restored.layout;
+    });
+    setDirectionLabel(direction, descending);
+    setLayoutButtons(cardsButton, tableButton, layout);
 
     // Filtering is live, so there is nothing to submit - and a submit would
     // reload the page out from under the hash router.
@@ -166,8 +193,7 @@ export async function bindElementsView() {
 
     direction.addEventListener("click", () => {
       descending = !descending;
-      direction.setAttribute("aria-pressed", String(descending));
-      direction.textContent = descending ? "Z → A" : "A → Z";
+      setDirectionLabel(direction, descending);
       applyFilters();
     });
 
@@ -189,8 +215,7 @@ export async function bindElementsView() {
 
     const setLayout = (next) => {
       layout = next;
-      cardsButton.setAttribute("aria-pressed", String(next === "cards"));
-      tableButton.setAttribute("aria-pressed", String(next === "table"));
+      setLayoutButtons(cardsButton, tableButton, next);
       applyFilters();
     };
     cardsButton?.addEventListener("click", () => setLayout("cards"));
@@ -206,11 +231,15 @@ export async function bindElementsView() {
 
     filter.addEventListener("reset", () =>
       window.setTimeout(() => {
-        // A form reset restores the checkboxes' default state, which is the
-        // metals-only selection declared in the markup.
+        // The category fieldset sits outside the form, so a reset does not
+        // touch it. Put it back to the metals-only default by hand.
+        categories.querySelectorAll('input[name="category"]').forEach((input) => {
+          input.checked = DEFAULT_CATEGORIES.has(input.value);
+        });
         descending = false;
-        direction.setAttribute("aria-pressed", "false");
-        direction.textContent = "A → Z";
+        layout = "cards";
+        setDirectionLabel(direction, false);
+        setLayoutButtons(cardsButton, tableButton, "cards");
         applyFilters();
       }, 0),
     );
@@ -219,6 +248,41 @@ export async function bindElementsView() {
   } catch (error) {
     results.replaceChildren(createStatus(error.message || "We could not load the element catalog."));
   }
+}
+
+function restorePreferences({ search, color, sort, categories }, applyToggles) {
+  const saved = loadPreferences(PREFERENCES_NAME);
+
+  if (typeof saved.search === "string") search.value = saved.search;
+  // The colour list is built from the data, so a remembered colour that is no
+  // longer offered has to be ignored or the page would filter to nothing.
+  if (typeof saved.color === "string" && [...color.options].some((option) => option.value === saved.color)) {
+    color.value = saved.color;
+  }
+  if (typeof saved.sort === "string" && saved.sort in SORTERS) sort.value = saved.sort;
+
+  applyToggles({
+    descending: saved.descending === true,
+    layout: saved.layout === "table" ? "table" : "cards",
+  });
+
+  const restored = restoreCodes(saved.categories, ALL_CATEGORIES);
+  if (restored !== null) {
+    const wanted = new Set(restored);
+    categories.querySelectorAll('input[name="category"]').forEach((input) => {
+      input.checked = wanted.has(input.value);
+    });
+  }
+}
+
+function setDirectionLabel(button, descending) {
+  button.setAttribute("aria-pressed", String(descending));
+  button.textContent = descending ? "Z → A" : "A → Z";
+}
+
+function setLayoutButtons(cardsButton, tableButton, layout) {
+  cardsButton?.setAttribute("aria-pressed", String(layout === "cards"));
+  tableButton?.setAttribute("aria-pressed", String(layout === "table"));
 }
 
 // The metals-only default hides 27 of 118 elements on first load. Saying so

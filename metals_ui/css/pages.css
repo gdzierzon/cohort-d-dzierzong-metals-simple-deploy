@@ -446,6 +446,13 @@
   letter-spacing: 0.06em;
 }
 
+/* Alloy names and use lists are prose, not symbols, so they get to wrap
+   instead of forcing the table ever wider. */
+   Qualified with th/td so they outrank ".element-table th, .element-table td",
+   which sets nowrap and is otherwise the more specific selector. */
+.element-table th.element-table__name { min-width: 14rem; white-space: normal; }
+.element-table td.element-table__uses { min-width: 16rem; white-space: normal; }
+
 .element-table tbody tr { border-top: 1px solid var(--color-border-subtle); }
 .element-table tbody tr:hover { background: var(--color-surface); }
 .element-table tbody th { color: var(--color-gold-bright); font-family: var(--font-display); font-size: 1.1rem; }
