@@ -84,11 +84,13 @@
           <p class="ieyebrow">Part 2</p>
           <h3>The Database</h3>
           <p>
-            A PostgreSQL database that stores the application's data persistently. The API connects
-            to it to read and write records, so the data survives even if the API itself restarts
-            or redeploys.
+            A PostgreSQL database that stores the application's data persistently &mdash; ten tables
+            holding 118 elements, 78 alloys and 48 coins, rounds, bars and goldbacks. The API connects to it
+            to read and write records, so the data survives even if the API itself restarts or
+            redeploys. Changing its shape once it is live is what
+            <a href="database/03-migrations.html">migrations</a> are for.
           </p>
-          <div class="stack"><span class="chip">PostgreSQL</span><span class="chip">Docker Compose</span><span class="chip">Azure Flexible Server</span></div>
+          <div class="stack"><span class="chip">PostgreSQL</span><span class="chip">Docker Compose</span><span class="chip">Migrations</span><span class="chip">Azure Flexible Server</span></div>
           <p style="margin-top:0.9rem;"><a href="database/index.html"><b>Start the Database tutorial &rarr;</b></a></p>
         </div>
         <div class="info-card">

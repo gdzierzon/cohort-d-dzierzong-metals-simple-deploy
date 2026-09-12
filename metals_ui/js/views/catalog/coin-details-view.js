@@ -5,6 +5,8 @@ const coinImageDirectory = "./assets/images/coins";
 const alloyImageDirectory = "./assets/images/alloys";
 const fallbackCoinImage = `${coinImageDirectory}/american-gold-eagle-1-oz.png`;
 const fallbackAlloyImage = `${alloyImageDirectory}/aluminum-alloy.png`;
+// ISO 4217 reserves 'XXX' for "no currency involved".
+const NO_CURRENCY_CODE = "XXX";
 
 export function coinDetailsView({ coinId } = {}) {
   const id = Number(coinId);
@@ -123,9 +125,16 @@ function createStatus(message) { const status = document.createElement("p"); sta
 function formatNumber(value) { return new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(Number(value)); }
 function formatFaceValue(coin) {
   if (!coin.is_coin) return "Not legal tender";
-  // A Krugerrand carries no denomination; its value is the gold price.
-  if (coin.face_value == null) return `No denomination (${coin.face_value_currency_code})`;
-  return `${coin.face_value_currency_code || ""} ${formatNumber(coin.face_value)}`.trim();
+  const code = coin.face_value_currency_code;
+
+  if (coin.face_value == null) {
+    // A Krugerrand has a currency but carries no denomination; its value is the
+    // gold price. 'XXX' is the reverse - a denomination in a unit that never had
+    // an ISO 4217 code, like a ducat or a real.
+    if (code === NO_CURRENCY_CODE) return "Pre-ISO denomination";
+    return code ? `No denomination (${code})` : "No denomination";
+  }
+  return `${code || ""} ${formatNumber(coin.face_value)}`.trim();
 }
 function formatYear(year) { return year < 0 ? `${Math.abs(year)} BC` : String(year); }
 function slugify(value) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }

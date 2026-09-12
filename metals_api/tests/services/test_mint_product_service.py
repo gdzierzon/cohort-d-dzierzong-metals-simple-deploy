@@ -171,3 +171,50 @@ def test_turning_a_coin_into_a_bar_drops_the_subtype_row_first(monkeypatch, mock
 
     # Assert
     assert calls == ["set_coin_facts", "update"]
+
+
+def test_create_writes_the_product_and_its_coin_in_one_transaction(
+    monkeypatch, mocked_session_factory
+):
+    """A refused coins row must not leave the product behind.
+
+    Committing the product first and the coins row second produced a real orphan:
+    a COIN with no coins row, reporting is_coin false, which the supertype/subtype
+    design exists to make impossible. Both writes now flush and the service commits
+    once, so the database rejecting the coins row takes the product with it.
+    """
+    # Arrange
+    session, session_factory, _ = mocked_session_factory
+    new_product = _product()
+    monkeypatch.setattr(mint_product_service, "SessionFactory", session_factory)
+    monkeypatch.setattr(
+        mint_product_service.mint_product_repository,
+        "get_mint_product_by_name",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        mint_product_service.mint_product_repository,
+        "get_mint_product_by_id",
+        MagicMock(return_value=new_product),
+    )
+    add = MagicMock(return_value=new_product)
+    set_coin_facts = MagicMock()
+    monkeypatch.setattr(mint_product_service.mint_product_repository, "add_mint_product", add)
+    monkeypatch.setattr(
+        mint_product_service.mint_product_repository, "set_coin_facts", set_coin_facts
+    )
+
+    # Act
+    mint_product_service.create_mint_product(
+        CreateMintProductDTO(
+            name="Test Coin",
+            product_type="COIN",
+            alloy_id=2,
+            face_value_currency_code="USD",
+        )
+    )
+
+    # Assert - neither write commits on its own; the service commits once for both.
+    assert add.call_args.kwargs["commit"] is False
+    assert set_coin_facts.call_args.kwargs["commit"] is False
+    session.commit.assert_called_once_with()

@@ -73,14 +73,34 @@ def get_mint_product_by_name(session: Session, name: str) -> MintProduct | None:
     return session.scalar(statement)
 
 
-def add_mint_product(session: Session, product: MintProduct) -> MintProduct:
+def _persist(session: Session, commit: bool) -> None:
+    """Commit, or only flush when the caller is composing a larger transaction.
+
+    A product and its coins row have to land together. Committing the product
+    first and the coins row second means a refused coins row leaves a COIN with
+    no coins row behind - exactly the state the supertype/subtype design exists
+    to make impossible - and the database does refuse some of them, which is the
+    entire point of the constraints on it. Callers writing both pass
+    commit=False and commit once themselves.
+    """
+    if commit:
+        session.commit()
+    else:
+        session.flush()
+
+
+def add_mint_product(
+    session: Session, product: MintProduct, commit: bool = True
+) -> MintProduct:
     session.add(product)
-    session.commit()
+    _persist(session, commit)
     session.refresh(product)
     return product
 
 
-def update_mint_product(session: Session, mint_product_id: int, changes: dict) -> MintProduct | None:
+def update_mint_product(
+    session: Session, mint_product_id: int, changes: dict, commit: bool = True
+) -> MintProduct | None:
     product = session.get(MintProduct, mint_product_id)
     if product is None:
         return None
@@ -89,19 +109,21 @@ def update_mint_product(session: Session, mint_product_id: int, changes: dict) -
         if field != "mint_product_id":
             setattr(product, field, value)
 
-    session.commit()
+    _persist(session, commit)
     session.refresh(product)
     return product
 
 
-def set_coin_facts(session: Session, product: MintProduct, facts: dict | None) -> None:
+def set_coin_facts(
+    session: Session, product: MintProduct, facts: dict | None, commit: bool = True
+) -> None:
     """Attach, update, or remove the legal-tender subtype row.
 
     Passing None removes it, which is what turns a coin into a plain product.
     """
     if facts is None:
         product.coin = None
-        session.commit()
+        _persist(session, commit)
         session.refresh(product)
         return
 
@@ -111,7 +133,7 @@ def set_coin_facts(session: Session, product: MintProduct, facts: dict | None) -
         for field, value in facts.items():
             setattr(product.coin, field, value)
 
-    session.commit()
+    _persist(session, commit)
     session.refresh(product)
 
 

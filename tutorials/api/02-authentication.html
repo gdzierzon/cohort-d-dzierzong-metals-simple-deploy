@@ -349,7 +349,7 @@
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
-            current_roles = set(g.current_user.get("roles", []))
+            current_roles = _get_current_roles()
             if not current_roles.intersection(required_roles):
                 return jsonify({"error": "You do not have permission..."}), 403
             return view(*args, **kwargs)

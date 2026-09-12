@@ -17,13 +17,15 @@
         <p class="eyebrow">Metals API &middot; Section 1 of 3</p>
         <h1>The API Endpoints</h1>
         <p class="lede">
-          Five resources, all under <span class="mono">/api</span>, all speaking JSON. Four of them
-          &mdash; elements, alloys, alloy elements, and coins &mdash; follow the exact same shape:
-          list, get one, create, update, delete. The fifth, <span class="mono">/api/auth</span>, is
-          how you get a token in the first place, covered in depth in
-          <a href="02-authentication.html">Section 2</a>. One route sits outside that pattern
-          entirely: <span class="mono">/health</span>, with no <span class="mono">/api</span> prefix
-          and no authentication.
+          Seven resources, all under <span class="mono">/api</span>, all speaking JSON. Four of them
+          &mdash; elements, alloys, alloy elements, and mint products &mdash; follow the exact same
+          shape: list, get one, create, update, delete. <span class="mono">/api/coins</span> is a
+          read-only <i>view</i> of the mint products that happen to be money,
+          <span class="mono">/api/users</span> is Admin-only account administration, and
+          <span class="mono">/api/auth</span> is how you get a token in the first place, covered in
+          depth in <a href="02-authentication.html">Section 2</a>. One route sits outside the
+          pattern entirely: <span class="mono">/health</span>, with no
+          <span class="mono">/api</span> prefix and no authentication.
         </p>
       </div>
       <figure class="codey-figure">
@@ -33,7 +35,7 @@
     <div class="factbar">
       <span class="fact">Base URL (local) &rarr; <b>http://localhost:5000</b></span>
       <span class="fact">Content type &rarr; <b>application/json</b></span>
-      <span class="fact">Resources &rarr; <b>auth, elements, alloys, alloy-elements, coins</b></span>
+      <span class="fact">Resources &rarr; <b>auth, elements, alloys, alloy-elements, mint-products, coins, users</b></span>
     </div>
   </div>
 </header>
@@ -48,7 +50,9 @@
       <li><a href="#elements">/api/elements</a></li>
       <li><a href="#alloys">/api/alloys</a></li>
       <li><a href="#alloy-elements">/api/alloy-elements</a></li>
+      <li><a href="#mint-products">/api/mint-products</a></li>
       <li><a href="#coins">/api/coins</a></li>
+      <li><a href="#users">/api/users</a></li>
       <li><a href="#errors">How errors are reported</a></li>
     </ol>
   </nav>
@@ -63,7 +67,7 @@
         </div>
         <figure class="codey-figure">
           <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
-          <figcaption>one shape, five resources</figcaption>
+          <figcaption>one shape, six resources</figcaption>
         </figure>
       </div>
       <h2>Resources at a glance <span class="tag">the map</span></h2>
@@ -75,7 +79,9 @@
             <tr><td>Elements</td><td><code>/api/elements</code></td><td>any logged-in user</td><td>Admin only</td></tr>
             <tr><td>Alloys</td><td><code>/api/alloys</code></td><td>any logged-in user</td><td>Admin only</td></tr>
             <tr><td>Alloy Elements</td><td><code>/api/alloy-elements</code></td><td>any logged-in user</td><td>Admin only</td></tr>
-            <tr><td>Coins</td><td><code>/api/coins</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+            <tr><td>Mint Products</td><td><code>/api/mint-products</code></td><td>any logged-in user</td><td>Admin only</td></tr>
+            <tr><td>Coins</td><td><code>/api/coins</code></td><td>any logged-in user</td><td>read-only &mdash; write via mint-products</td></tr>
+            <tr><td>Users</td><td><code>/api/users</code></td><td>Admin only</td><td>Admin only</td></tr>
           </tbody>
         </table>
       </div>
@@ -190,16 +196,53 @@
         <table class="tree">
           <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td class="path">GET /api/alloys</td><td>any logged-in user</td><td>List alloys. Optional <code>?name=</code> and <code>?color=</code> query filters.</td></tr>
+            <tr><td class="path">GET /api/alloys</td><td>any logged-in user</td><td>List alloys. Optional <code>?name=</code>, <code>?color=</code>, <code>?family=</code> and <code>?use=</code> filters.</td></tr>
             <tr><td class="path">GET /api/alloys/&lt;alloy_id&gt;</td><td>any logged-in user</td><td>Get one alloy, or <span class="mono">404</span>.</td></tr>
-            <tr><td class="path">POST /api/alloys</td><td>Admin</td><td>Create an alloy. Requires <span class="mono">name</span>; <span class="mono">color</span> and <span class="mono">description</span> are optional.</td></tr>
+            <tr><td class="path">POST /api/alloys</td><td>Admin</td><td>Create an alloy. Requires <span class="mono">name</span> and <span class="mono">alloy_family</span>; <span class="mono">color</span>, <span class="mono">description</span> and <span class="mono">uses</span> are optional.</td></tr>
             <tr><td class="path">PUT /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Update one or more fields.</td></tr>
             <tr><td class="path">DELETE /api/alloys/&lt;alloy_id&gt;</td><td>Admin</td><td>Delete an alloy, or <span class="mono">404</span>.</td></tr>
           </tbody>
         </table>
       </div>
       <pre class="code">// POST /api/alloys
-{ "name": "Fine Gold 24K", "color": "gold", "description": "High-purity investment gold." }</pre>
+{
+  "name": "Fine Gold 24K",
+  "color": "gold",
+  "alloy_family": "PRECIOUS",
+  "uses": ["BULLION", "COINAGE"],
+  "description": "High-purity investment gold."
+}</pre>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Repeatable filters</span><span class="qnum">either/or</span></div>
+          <pre class="code">GET /api/alloys?family=FERROUS&amp;family=NICKEL
+GET /api/alloys?use=MARINE&amp;use=AEROSPACE</pre>
+          <p class="desc">
+            Repeating a key means &ldquo;any of these.&rdquo; On the Flask side that is
+            <span class="mono">request.args.getlist("family")</span>, which is how the catalog page
+            can tick several boxes at once.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">uses is a list, and writable</span><span class="qnum">the junction table</span></div>
+          <p class="desc">
+            The response carries <span class="mono">uses</span> as a sorted array, even though the
+            values live in <span class="mono">alloy_uses</span>. On a
+            <span class="mono">PUT</span>, sending <span class="mono">uses</span> <i>replaces</i> the
+            set; sending <span class="mono">[]</span> clears it; leaving the key out entirely leaves
+            it alone.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">primary_metal is read-only</span><span class="qnum">derived</span></div>
+          <p class="desc">
+            Every alloy response includes <span class="mono">primary_metal</span> &mdash; the metal
+            it is mostly made of &mdash; but you cannot set it. It is computed from the composition
+            by the seed, so accepting it on a write would just invite it to disagree with the
+            recipe. See <a href="../database/01-schema.html#classifying">the schema page</a>.
+          </p>
+        </div>
+      </div>
     </section>
 
     <section class="block" id="alloy-elements">
@@ -225,32 +268,167 @@
 { "alloy_id": 6, "atomic_number": 47, "percent_of_alloy": 92.5 }</pre>
     </section>
 
-    <section class="block" id="coins">
-      <h2><code>/api/coins</code> <span class="tag">metals_api/routes/coin_routes.py</span></h2>
-      <p class="dek">Real-world coins, each minted from exactly one alloy.</p>
+    <section class="block" id="mint-products">
+      <h2><code>/api/mint-products</code> <span class="tag">metals_api/routes/mint_product_routes.py</span></h2>
+      <p class="dek">
+        Everything struck from metal: coins, privately minted rounds, bars, ingots, medals, tokens,
+        and goldbacks. This is where <i>all</i> writes happen, including writes to coins.
+      </p>
       <div class="tree-wrap">
         <table class="tree">
-          <thead><tr><th style="width:15rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <thead><tr><th style="width:19rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td class="path">GET /api/coins</td><td>any logged-in user</td><td>List, filterable by <code>?name=</code>, <code>?country=</code>, and/or <code>?alloy_id=</code>.</td></tr>
-            <tr><td class="path">GET /api/coins/&lt;coin_id&gt;</td><td>any logged-in user</td><td>Get one coin, or <span class="mono">404</span>.</td></tr>
-            <tr><td class="path">POST /api/coins</td><td>Admin</td><td>Create a coin. Requires <span class="mono">name</span> and <span class="mono">alloy_id</span> (must reference an existing alloy).</td></tr>
-            <tr><td class="path">PUT /api/coins/&lt;coin_id&gt;</td><td>Admin</td><td>Update one or more fields.</td></tr>
-            <tr><td class="path">DELETE /api/coins/&lt;coin_id&gt;</td><td>Admin</td><td>Delete a coin, or <span class="mono">404</span>.</td></tr>
+            <tr><td class="path">GET /api/mint-products</td><td>any logged-in user</td><td>List, filterable by <code>?name=</code>, <code>?issuer=</code>, <code>?type=</code>, <code>?metal=</code>, <code>?family=</code> and <code>?alloy_id=</code>.</td></tr>
+            <tr><td class="path">GET /api/mint-products/&lt;mint_product_id&gt;</td><td>any logged-in user</td><td>Get one product, or <span class="mono">404</span>.</td></tr>
+            <tr><td class="path">POST /api/mint-products</td><td>Admin</td><td>Create a product. Requires <span class="mono">name</span>, <span class="mono">product_type</span> and <span class="mono">alloy_id</span>.</td></tr>
+            <tr><td class="path">PUT /api/mint-products/&lt;mint_product_id&gt;</td><td>Admin</td><td>Update one or more fields, including the legal-tender ones.</td></tr>
+            <tr><td class="path">DELETE /api/mint-products/&lt;mint_product_id&gt;</td><td>Admin</td><td>Delete it, cascading to its coin row and components.</td></tr>
           </tbody>
         </table>
       </div>
-      <pre class="code">// POST /api/coins
+      <pre class="code">// POST /api/mint-products  -- a coin
 {
   "name": "American Gold Eagle (1 oz)",
-  "country": "United States",
+  "product_type": "COIN",
+  "issuer": "United States",
   "mint": "United States Mint",
   "year_introduced": 1986,
   "alloy_id": 2,
   "gross_weight_g": 33.9305,
+  "fine_metal_weight_g": 31.1035,
   "face_value": 50.00,
   "face_value_currency_code": "USD"
+}
+
+// POST /api/mint-products  -- a bar: no legal-tender fields at all
+{
+  "name": "10 oz Silver Bar",
+  "product_type": "BAR",
+  "mint": "Private mint",
+  "alloy_id": 73,
+  "gross_weight_g": 311.0350,
+  "fine_metal_weight_g": 311.0350
 }</pre>
+      <p class="warn">
+        <b>Don't memorise those ids.</b> <span class="mono">alloy_id</span> is a
+        <span class="mono">SERIAL</span>, so the number a given alloy gets depends on the order rows
+        were inserted. &ldquo;Fine Silver 999&rdquo; is <span class="mono">73</span> in a freshly
+        seeded database and <span class="mono">167</span> in one built up through
+        <a href="../database/03-migrations.html">the migrations</a> &mdash; same alloy, same name,
+        different id. Look the id up by name; never hardcode it.
+      </p>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">A flat request, a split table</span><span class="qnum">on purpose</span></div>
+          <p class="desc">
+            <span class="mono">face_value</span> and
+            <span class="mono">face_value_currency_code</span> live in a
+            <a href="../database/01-schema.html#mint-products">separate <span class="mono">coins</span>
+            table</a>, but the API accepts and returns them inline. Storage stays normalised; the
+            request shape stays convenient. The service layer splits them out and manages the
+            subtype row for you.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The rule the API enforces</span><span class="qnum">mirrors the database</span></div>
+          <pre class="code">// POST a BAR with a face value
+{ "errors": ["a BAR cannot have face_value
+  - only a COIN is legal tender."] }
+
+// POST a COIN without a currency
+{ "errors": ["face_value_currency_code is
+  required when product_type is COIN."] }</pre>
+          <p class="desc">
+            The database would refuse both anyway. Validating in the DTO turns a constraint
+            violation into a readable <span class="mono">400</span>.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">is_coin, not a column</span><span class="qnum">derived</span></div>
+          <p class="desc">
+            Every response carries <span class="mono">is_coin</span>, which is simply whether a
+            <span class="mono">coins</span> row exists. Nothing stores it. Change a product's
+            <span class="mono">product_type</span> from <span class="mono">COIN</span> to
+            <span class="mono">BAR</span> and the service drops the subtype row, so
+            <span class="mono">is_coin</span> becomes <span class="mono">false</span> and the face
+            value disappears with it.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">components</span><span class="qnum">layers, read-only</span></div>
+          <pre class="code">// a clad Washington Quarter
+"components": [
+  { "alloy_name": "Cupronickel 75/25",
+    "component_role": "CLADDING",
+    "percent_of_weight": "33.333" },
+  { "alloy_name": "Commercial Pure Copper",
+    "component_role": "CORE",
+    "percent_of_weight": "66.667" }
+]</pre>
+          <p class="desc">
+            Empty for a solid piece. <span class="mono">?alloy_id=</span> matches a product's
+            predominant alloy <i>or</i> any of its layers, so asking what uses cupronickel returns
+            the clad quarter even though the quarter's predominant alloy is the copper core.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="coins">
+      <h2><code>/api/coins</code> <span class="tag">metals_api/routes/mint_product_routes.py</span></h2>
+      <p class="dek">
+        The legal-tender slice of the same catalog &mdash; a read-only view, not a separate
+        resource. Both endpoints are served from one route module and return the identical JSON
+        shape.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:19rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/coins</td><td>any logged-in user</td><td>List only products whose <span class="mono">product_type</span> is <span class="mono">COIN</span>. Same filters as mint-products, minus <code>?type=</code>.</td></tr>
+            <tr><td class="path">GET /api/coins/&lt;mint_product_id&gt;</td><td>any logged-in user</td><td>Get one coin. A bar's id returns <span class="mono">404</span> here, and <span class="mono">200</span> under <span class="mono">/api/mint-products</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        <b>Why keep it.</b> &ldquo;Show me the coins&rdquo; is a question worth a URL, and anything
+        already pointed at <span class="mono">/api/coins</span> keeps working. There is no
+        <span class="mono">POST</span>, <span class="mono">PUT</span> or
+        <span class="mono">DELETE</span> &mdash; a coin is a <i>kind of</i> mint product, so it is
+        created and edited as one.
+      </p>
+      <pre class="code">GET /api/coins?metal=GOLD          // gold coins only
+GET /api/mint-products?metal=GOLD  // also the gold bars and goldbacks</pre>
+    </section>
+
+    <section class="block" id="users">
+      <h2><code>/api/users</code> <span class="tag">metals_api/routes/user_routes.py</span></h2>
+      <p class="dek">
+        Administration rather than catalog: who has an account, and who is allowed to be an Admin.
+        Every route here is Admin-only &mdash; there is no read access for ordinary users at all.
+      </p>
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:19rem;">Method &amp; path</th><th>Who can call it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="path">GET /api/users</td><td>Admin</td><td>List every account with the roles it holds.</td></tr>
+            <tr><td class="path">PUT /api/users/&lt;user_id&gt;/admin</td><td>Admin</td><td>Grant or revoke the Admin role. Body: <span class="mono">{ "is_admin": true }</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        <b>One guard rail worth noticing.</b> An Admin cannot revoke their <i>own</i> Admin role
+        &mdash; the route compares <span class="mono">user_id</span> against the
+        <span class="mono">sub</span> claim in the caller's own token and returns
+        <span class="mono">400</span>. Without that, the last administrator could lock everybody out
+        of administration with one request, and no endpoint would exist to undo it.
+      </p>
+      <p class="desc">
+        There is deliberately no <span class="mono">POST</span> here: accounts are created by
+        <span class="mono">/api/auth/register</span>, which is public. And no
+        <span class="mono">DELETE</span> &mdash; nothing in this API removes an account.
+      </p>
     </section>
 
     <section class="block" id="errors">

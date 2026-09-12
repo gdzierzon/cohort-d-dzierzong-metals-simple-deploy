@@ -5,6 +5,8 @@ import { loadPreferences, restoreCodes, savePreferences } from "../../preference
 const coinImageDirectory = "./assets/images/coins";
 const fallbackCoinImage = `${coinImageDirectory}/american-gold-eagle-1-oz.png`;
 const PREFERENCES_NAME = "coins-view";
+// ISO 4217 reserves 'XXX' for "no currency involved".
+const NO_CURRENCY_CODE = "XXX";
 
 // The route stays #/coins, but the catalog is no longer only coins: bars, rounds,
 // goldbacks, medals and tokens live in the same table now.
@@ -464,9 +466,16 @@ function describeConstruction(components) {
 
 function formatFaceValue(product) {
   if (!product.is_coin) return "Not legal tender";
-  // A Krugerrand is legal tender with no denomination struck on it.
-  if (product.face_value == null) return `No denomination (${product.face_value_currency_code})`;
-  return `${formatNumber(product.face_value)} ${product.face_value_currency_code}`;
+  const code = product.face_value_currency_code;
+
+  if (product.face_value == null) {
+    // Two different reasons for a missing amount, and they deserve different
+    // wording. A Krugerrand has a currency but no denomination struck on it. A
+    // ducat or a real is the reverse: it carries a denomination in a unit that
+    // never had an ISO 4217 code, which is what 'XXX' records.
+    return code === NO_CURRENCY_CODE ? "Pre-ISO denomination" : `No denomination (${code})`;
+  }
+  return `${formatNumber(product.face_value)} ${code}`;
 }
 
 function formatGrams(value) {

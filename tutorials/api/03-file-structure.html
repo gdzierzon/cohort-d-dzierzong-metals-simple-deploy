@@ -67,11 +67,11 @@
         <table class="tree">
           <thead><tr><th style="width:16rem;">File / folder</th><th>What it's for, in plain terms</th></tr></thead>
           <tbody>
-            <tr><td class="path">app.py</td><td>Creates the Flask app, reads <span class="mono">JWT_SECRET_KEY</span> / <span class="mono">JWT_EXPIRATION_MINUTES</span> from the environment, registers every blueprint (auth, elements, alloys, alloy elements, coins), and defines the one route that isn't in a blueprint: <span class="mono">/health</span>. The module-level <span class="mono">app</span> object it creates is what Gunicorn serves in the container.</td></tr>
+            <tr><td class="path">app.py</td><td>Creates the Flask app, reads <span class="mono">JWT_SECRET_KEY</span> / <span class="mono">JWT_EXPIRATION_MINUTES</span> from the environment, registers every blueprint (auth, elements, alloys, alloy elements, mint products, coins, users), and defines the one route that isn't in a blueprint: <span class="mono">/health</span>. The module-level <span class="mono">app</span> object it creates is what Gunicorn serves in the container.</td></tr>
             <tr><td class="path">Dockerfile</td><td>Builds the <span class="mono">metals-api</span> container image &mdash; Python 3.11, the dependencies, this folder, and Gunicorn on port 5000. Its build context is the repository root, not this folder. <a href="../docker/04-api-image.html">(dig deeper)</a></td></tr>
             <tr><td class="path">auth.py</td><td>The two decorators covered in <a href="02-authentication.html#how-this-api-uses-it">Section 2</a>: <span class="mono">require_auth</span> and <span class="mono">require_roles</span>. Shared by every route file below.</td></tr>
             <tr><td class="path indent">database/connection.py</td><td>Builds the SQLAlchemy <span class="mono">engine</span> and <span class="mono">SessionFactory</span> from the <span class="mono">DB_*</span> variables in <span class="mono">.env</span>.</td></tr>
-            <tr><td class="path indent">models/</td><td>One SQLAlchemy class per table (<span class="mono">Element</span>, <span class="mono">Alloy</span>, <span class="mono">AlloyElement</span>, <span class="mono">Coin</span>, <span class="mono">User</span>, <span class="mono">Role</span>), plus <span class="mono">user_role.py</span> for the users&harr;roles join table and <span class="mono">base.py</span> for the shared declarative base.</td></tr>
+            <tr><td class="path indent">models/</td><td>One SQLAlchemy class per table (<span class="mono">Element</span>, <span class="mono">Alloy</span>, <span class="mono">AlloyElement</span>, <span class="mono">AlloyUse</span>, <span class="mono">MintProduct</span>, <span class="mono">Coin</span>, <span class="mono">MintProductComponent</span>, <span class="mono">User</span>, <span class="mono">Role</span>), plus <span class="mono">user_role.py</span> for the users&harr;roles join table and <span class="mono">base.py</span> for the shared declarative base.</td></tr>
             <tr><td class="path indent">dtos/</td><td>Plain dataclasses shaping request and response JSON &mdash; a <span class="mono">Create*DTO</span>, <span class="mono">Update*DTO</span>, and <span class="mono">*ResponseDTO</span> per resource, each with its own <span class="mono">validate()</span>. <span class="mono">base.py</span> holds the shared <span class="mono">to_dictionary</span> / <span class="mono">from_dictionary</span> conversion logic.</td></tr>
             <tr><td class="path indent">repositories/</td><td>Plain functions that run the actual SQLAlchemy queries &mdash; get, add, update, delete &mdash; one file per table. <span class="mono">user_repository.py</span> is what <span class="mono">auth_service.py</span> uses to look up accounts and roles.</td></tr>
             <tr><td class="path indent">services/</td><td>Business logic: opens a session, calls the repository, enforces rules (like &ldquo;no duplicate element name&rdquo;), and converts between models and DTOs. <span class="mono">auth_service.py</span> additionally hashes/verifies passwords with Argon2id and issues JWTs. <span class="mono">exceptions.py</span> defines <span class="mono">BusinessValidationError</span>, the one exception every service raises for a rule violation.</td></tr>
@@ -85,7 +85,18 @@
         <span class="mono">repositories/</span>, and <span class="mono">models/</span> follows the
         same naming pattern: <span class="mono">&lt;resource&gt;_routes.py</span>,
         <span class="mono">&lt;resource&gt;_service.py</span>, and so on. Once you understand one
-        resource end to end, all five (including <span class="mono">auth</span>) read the same way.
+        resource end to end, the rest read the same way.
+      </p>
+      <p class="note">
+        <b>One deliberate exception.</b> There is no <span class="mono">coin_routes.py</span>,
+        <span class="mono">coin_service.py</span> or <span class="mono">coin_repository.py</span>.
+        A coin is not a separate resource &mdash; it is a <i>kind of</i> mint product, so
+        <span class="mono">mint_product_routes.py</span> defines both blueprints and
+        <span class="mono">mint_product_service.py</span> handles both. The
+        <span class="mono">Coin</span> model still exists, because
+        <a href="../database/01-schema.html#mint-products">the subtype table does</a>. When your
+        file layout mirrors your tables, a change in the schema shows up as files appearing and
+        disappearing &mdash; which is a feature, not a mess.
       </p>
       <p class="bonus-banner">
         Two more files live at the <b>repository root</b> rather than in this folder, because the

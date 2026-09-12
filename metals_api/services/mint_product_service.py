@@ -75,10 +75,16 @@ def create_mint_product(dto: CreateMintProductDTO) -> MintProductResponseDTO:
         coin_facts = _split_coin_facts(fields)
 
         product = MintProduct(**fields)
-        product = mint_product_repository.add_mint_product(session, product)
+        # One transaction for both rows. If the coins row is refused - a face value
+        # against 'XXX', a currency code that will not fit - the product must not
+        # survive on its own, or the catalog ends up holding a COIN that is not a
+        # coin, with is_coin false and no way to notice from the product row.
+        product = mint_product_repository.add_mint_product(session, product, commit=False)
 
         if product.product_type == "COIN":
-            mint_product_repository.set_coin_facts(session, product, coin_facts)
+            mint_product_repository.set_coin_facts(session, product, coin_facts, commit=False)
+
+        session.commit()
 
         # Re-read so the response carries the alloy and the coin row.
         product = mint_product_repository.get_mint_product_by_id(
@@ -117,15 +123,22 @@ def change_mint_product(
         # ON UPDATE CASCADE - so changing the product to a BAR first would
         # cascade 'BAR' into the coins row and trip its CHECK. The subtype row
         # has to go before the type changes, not after.
+        # All three steps are one transaction, for the same reason as create: a
+        # refused coins row must not leave a half-applied product behind, and
+        # promoting a ROUND to a COIN is exactly the case where that could happen.
         if resulting_type != "COIN" and current.coin is not None:
-            mint_product_repository.set_coin_facts(session, current, None)
+            mint_product_repository.set_coin_facts(session, current, None, commit=False)
 
-        product = mint_product_repository.update_mint_product(session, mint_product_id, changes)
+        product = mint_product_repository.update_mint_product(
+            session, mint_product_id, changes, commit=False
+        )
         if product is None:
             return None
 
         if resulting_type == "COIN" and coin_facts:
-            mint_product_repository.set_coin_facts(session, product, coin_facts)
+            mint_product_repository.set_coin_facts(session, product, coin_facts, commit=False)
+
+        session.commit()
 
         product = mint_product_repository.get_mint_product_by_id(session, mint_product_id)
         return MintProductResponseDTO.from_model(product)

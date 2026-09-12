@@ -180,10 +180,24 @@ CREATE TABLE coins (
     -- denomination printed on it - its value is the gold price. That is a fact
     -- about the coin, not missing data.
     face_value NUMERIC(12,2),
-    face_value_currency_code CHAR(3) NOT NULL,
+    -- VARCHAR, not CHAR(3). Most codes here are three-letter ISO 4217 ones, but a
+    -- historic abbreviation can be shorter - 'Kr' for the Austro-Hungarian krone,
+    -- which ended in 1924 and so never received an ISO code. CHAR(3) would blank-pad
+    -- that to 'Kr ': it compares equal to 'Kr' in SQL, and length() even reports 2,
+    -- but the padding is real and shows up the moment the value leaves the database
+    -- - to_json gives "Kr ", so the API would ship a trailing space and a strict
+    -- equality check in the browser would fail on it.
+    face_value_currency_code VARCHAR(3) NOT NULL,
     is_legal_tender BOOLEAN NOT NULL DEFAULT TRUE,
 
     CONSTRAINT chk_coins_product_type CHECK (product_type = 'COIN'),
+
+    -- 'XXX' is ISO 4217 for "no currency involved", so a face_value beside it
+    -- would be a quantity of nothing - "1 XXX" reads as broken data, because it
+    -- is. A ducat or a real has a denomination that simply has no ISO code, and
+    -- the honest way to say that is a NULL amount.
+    CONSTRAINT chk_coins_no_value_without_currency
+        CHECK (face_value_currency_code <> 'XXX' OR face_value IS NULL),
 
     -- Points at the UNIQUE above, so a coins row can only ever attach to a
     -- product whose type is COIN. Changing that product to a BAR while this row
@@ -552,7 +566,13 @@ VALUES
     ('Coinage Aluminum', 'silver gray', 'ALUMINUM', 'Near-pure aluminum for very low denomination circulating coins.'),
     ('Fine Silver 999', 'bright silver', 'PRECIOUS', 'Investment-grade silver for rounds and bars.'),
     ('Fine Platinum 9995', 'silvery white', 'PRECIOUS', 'Investment-grade platinum for bars and coins.'),
-    ('Fine Palladium 9995', 'silvery white', 'PRECIOUS', 'Investment-grade palladium for bars and coins.')
+    ('Fine Palladium 9995', 'silvery white', 'PRECIOUS', 'Investment-grade palladium for bars and coins.'),
+    -- Three more coinage standards, each added because a real piece needed it and
+    -- nothing above was close enough. Rounding a coin to the nearest alloy already
+    -- in the table would quietly misstate how much metal is in it.
+    ('Fine Silver 9999', 'bright silver', 'PRECIOUS', 'Four-nines silver, the Perth Mint standard for its bullion coins.'),
+    ('Coin Gold 900', 'rich gold', 'PRECIOUS', 'The 90 percent standard behind most pre-1933 European and US gold coins.'),
+    ('Ducat Gold 986', 'rich gold', 'PRECIOUS', 'The 98.6 percent ducat standard, still struck for Austrian restrikes.')
 ON CONFLICT (name) DO UPDATE SET
     color = EXCLUDED.color,
     alloy_family = EXCLUDED.alloy_family,
@@ -855,7 +875,20 @@ WITH alloy_component_data (alloy_name, element_symbol, pct) AS (
         ('Fine Platinum 9995', 'Pt', 99.950),
         ('Fine Platinum 9995', 'Ir', 0.050),
         ('Fine Palladium 9995', 'Pd', 99.950),
-        ('Fine Palladium 9995', 'Ru', 0.050)
+        ('Fine Palladium 9995', 'Ru', 0.050),
+
+        ('Fine Silver 9999', 'Ag', 99.990),
+        ('Fine Silver 9999', 'Cu', 0.010),
+
+        -- Both of these are gold with the balance in copper, which is what makes
+        -- them hard enough to circulate. Coin Gold 900 is the same 90/10 split as
+        -- Coin Silver, one row above - the standard is about durability, not which
+        -- precious metal is being hardened.
+        ('Coin Gold 900', 'Au', 90.000),
+        ('Coin Gold 900', 'Cu', 10.000),
+
+        ('Ducat Gold 986', 'Au', 98.600),
+        ('Ducat Gold 986', 'Cu', 1.400)
 )
 INSERT INTO alloy_elements (alloy_id, atomic_number, percent_of_alloy)
 SELECT
@@ -1072,7 +1105,36 @@ WITH alloy_use_data (alloy_name, use_code) AS (
         ('AZ91D Magnesium', 'STRUCTURAL'),
         ('AZ91D Magnesium', 'AEROSPACE'),
         ('AZ31B Magnesium', 'STRUCTURAL'),
-        ('AZ31B Magnesium', 'AEROSPACE')
+        ('AZ31B Magnesium', 'AEROSPACE'),
+
+        -- The coinage and bullion alloys. COINAGE is for metal meant to circulate
+        -- as money; BULLION is for metal held for what it weighs. A few alloys are
+        -- both, which is exactly the case a junction table exists to express - a
+        -- Gold Eagle is legal tender that nobody spends.
+        ('Commercial Pure Copper', 'COINAGE'),
+        ('Commercial Pure Copper', 'BULLION'),
+        ('Commercial Pure Copper', 'ELECTRICAL'),
+        ('Cupronickel 75/25', 'COINAGE'),
+        ('Cupronickel 75/25', 'MARINE'),
+        ('Nickel Brass', 'COINAGE'),
+        ('Nordic Gold', 'COINAGE'),
+        ('Manganese Brass', 'COINAGE'),
+        ('Coinage Zinc Core', 'COINAGE'),
+        ('Coinage Steel Core', 'COINAGE'),
+        ('Coinage Aluminum', 'COINAGE'),
+        ('Fine Silver 999', 'BULLION'),
+        ('Fine Silver 999', 'COINAGE'),
+        ('Fine Platinum 9995', 'BULLION'),
+        ('Fine Platinum 9995', 'COINAGE'),
+        ('Fine Palladium 9995', 'BULLION'),
+        ('Fine Palladium 9995', 'COINAGE'),
+        ('Fine Silver 9999', 'BULLION'),
+        ('Fine Silver 9999', 'COINAGE'),
+        -- Coin Gold 900 and Ducat Gold 986 only ever existed to be struck into
+        -- money, so neither carries JEWELRY the way 22K does.
+        ('Coin Gold 900', 'COINAGE'),
+        ('Ducat Gold 986', 'COINAGE'),
+        ('Ducat Gold 986', 'BULLION')
 )
 INSERT INTO alloy_uses (alloy_id, use_code)
 SELECT
@@ -1122,6 +1184,21 @@ FROM (
         ('Gold Maple Leaf (1 oz)', 'COIN', 'Canada', 'Royal Canadian Mint', 1979, 31.1035, 31.1035, 'Fine Gold 24K'),
         ('Silver Maple Leaf (1 oz)', 'COIN', 'Canada', 'Royal Canadian Mint', 1988, 31.1035, 31.1035, 'Fine Silver 999'),
 
+        -- Modern world bullion coins. year_introduced is the year this particular
+        -- dated issue was struck, not when the series began - for an annual issue
+        -- like the Lunar or the Philharmonic, the 2026 coin is its own product with
+        -- its own design, so that is the year recorded.
+        ('2027 Gold Lunar Goat (1 oz)', 'COIN', 'Australia', 'The Perth Mint', 2027, 31.1035, 31.1035, 'Fine Gold 24K'),
+        ('2026 Silver Kookaburra (1 oz)', 'COIN', 'Australia', 'The Perth Mint', 2026, 31.1035, 31.1035, 'Fine Silver 9999'),
+        ('2025 Silver Lunar Snake, Dragon Privy (1 oz)', 'COIN', 'Australia', 'The Perth Mint', 2025, 31.1035, 31.1035, 'Fine Silver 9999'),
+        ('2026 Silver Vienna Philharmonic (1 oz)', 'COIN', 'Austria', 'Austrian Mint', 2026, 31.1035, 31.1035, 'Fine Silver 999'),
+
+        -- Historic European gold, still sold as bullion. Neither is pure: both are
+        -- hardened with copper so they could survive circulation, which is why the
+        -- gross weight is noticeably higher than the gold in it.
+        ('Austrian 1 Ducat (1915 Restrike)', 'COIN', 'Austria', 'Austrian Mint', 1915, 3.4909, 3.4420, 'Ducat Gold 986'),
+        ('20 Franc Swiss Vreneli', 'COIN', 'Switzerland', 'Swissmint', 1897, 6.4516, 5.8065, 'Coin Gold 900'),
+
         -- Historic US silver.
         ('Morgan Silver Dollar', 'COIN', 'United States', 'United States Mint', 1878, 26.7300, 24.0570, 'Coin Silver'),
         ('Peace Silver Dollar', 'COIN', 'United States', 'United States Mint', 1921, 26.7300, 24.0570, 'Coin Silver'),
@@ -1150,6 +1227,12 @@ FROM (
         -- Privately minted rounds. Coin-shaped, but not money.
         ('1 oz Silver Round', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Silver 999'),
         ('1 oz Copper Round', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Commercial Pure Copper'),
+        -- Named rounds. Same metal as the coins above and often the same weight,
+        -- but no issuer and no coins row, because nobody declared them money.
+        ('Tara Tree of Life Silver Round (1 oz)', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Silver 999'),
+        ('Tara Tree of Life Gold Round (1 oz)', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Gold 24K'),
+        ('Year of the Snake Silver Round (1 oz)', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Silver 999'),
+        ('Aztec Calendar Copper Round (5 oz)', 'ROUND', NULL, 'Private mint', NULL, 155.5175, 155.5175, 'Commercial Pure Copper'),
 
         -- Bars.
         ('1 oz Gold Bar', 'BAR', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Gold 24K'),
@@ -1161,6 +1244,12 @@ FROM (
 
         -- Not currency, not bullion.
         ('Bronze Commemorative Medal', 'MEDAL', NULL, 'Private mint', NULL, 45.0000, NULL, 'Tin Bronze'),
+        -- A state mint striking investment-grade silver that is still not money.
+        -- KOMSCO is South Korea's official mint, but Korean law does not authorise
+        -- these as legal tender, so KOMSCO issues them as medals - which is why
+        -- this is a MEDAL with a fine weight and no coins row. product_type here
+        -- records legal status, not shape: this is as round as the rounds above.
+        ('2022 South Korean Silver Phoenix (1 oz)', 'MEDAL', NULL, 'KOMSCO', 2022, 31.1035, 31.1035, 'Fine Silver 999'),
         ('Brass Arcade Token', 'TOKEN', NULL, 'Private mint', NULL, 4.5000, NULL, 'Yellow Brass'),
 
         -- Goldbacks: polymer notes carrying a measured gold leaf. Gross weight is
@@ -1192,10 +1281,20 @@ ON CONFLICT (name) DO UPDATE SET
 -- The coin subtype. Only the legal tender pieces get a row here; rounds, bars,
 -- medals, tokens and goldbacks deliberately have none.
 --
--- face_value_currency_code uses 'XXX', the ISO 4217 code for "no currency", for
--- pieces that predate the standard. is_legal_tender records whether the piece
--- would still be accepted as money today - historic US coins technically would,
--- a Roman denarius would not.
+-- face_value_currency_code is an ISO 4217 code wherever one exists. Where the
+-- currency predates the standard there are two cases, and they are different:
+--
+--   * the unit is known and has a usual abbreviation - 'Kr' for the
+--     Austro-Hungarian krone - so that is recorded, and a face value with it.
+--   * the unit is not identifiable as a currency at all, which is what 'XXX',
+--     the ISO code for "no currency", records. A Roman denarius and a Spanish
+--     8 reales are counted in units that were never currencies in the modern
+--     sense, so face_value stays NULL for them, and
+--     chk_coins_no_value_without_currency above enforces that pairing: a number
+--     is only meaningful once there is a currency to count it in.
+--
+-- is_legal_tender records whether the piece would still be accepted as money
+-- today - historic US coins technically would, a Roman denarius would not.
 INSERT INTO coins (mint_product_id, face_value, face_value_currency_code, is_legal_tender)
 SELECT
     p.mint_product_id,
@@ -1212,6 +1311,21 @@ FROM (
         ('Gold Britannia (1 oz)', 100.00, 'GBP', TRUE),
         ('Gold Maple Leaf (1 oz)', 50.00, 'CAD', TRUE),
         ('Silver Maple Leaf (1 oz)', 5.00, 'CAD', TRUE),
+        ('2027 Gold Lunar Goat (1 oz)', 100.00, 'AUD', TRUE),
+        ('2026 Silver Kookaburra (1 oz)', 1.00, 'AUD', TRUE),
+        ('2025 Silver Lunar Snake, Dragon Privy (1 oz)', 1.00, 'AUD', TRUE),
+        ('2026 Silver Vienna Philharmonic (1 oz)', 1.50, 'EUR', TRUE),
+        -- Swiss gold francs were never demonetised, so a Vreneli struck in 1897 is
+        -- still worth 20 francs at a Swiss counter - roughly one five-hundredth of
+        -- the gold in it.
+        ('20 Franc Swiss Vreneli', 20.00, 'CHF', TRUE),
+        -- Denominated in the Austro-Hungarian krone, the currency in circulation in
+        -- 1915, the year these restrikes are dated. The krone was replaced by the
+        -- schilling in 1925 and never received an ISO 4217 code, so it is recorded
+        -- by its historic abbreviation 'Kr' - which is why the column above is
+        -- VARCHAR(3) rather than CHAR(3). is_legal_tender is FALSE because the krone
+        -- has not been money for a century.
+        ('Austrian 1 Ducat (1915 Restrike)', 1.00, 'Kr', FALSE),
         ('Morgan Silver Dollar', 1.00, 'USD', TRUE),
         ('Peace Silver Dollar', 1.00, 'USD', TRUE),
         ('Franklin Half Dollar', 0.50, 'USD', TRUE),

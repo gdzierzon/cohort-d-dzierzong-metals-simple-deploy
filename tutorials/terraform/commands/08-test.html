@@ -75,6 +75,8 @@ mock_provider "azurerm" {
       fqdn = "test-pg.postgres.database.azure.com"
     }
   }
+  # ... plus mocks for azurerm_service_plan, azurerm_linux_web_app
+  # and azurerm_user_assigned_identity
   mock_resource "azurerm_container_registry" {
     defaults = {
       id           = "/subscriptions/.../registries/test-acr"

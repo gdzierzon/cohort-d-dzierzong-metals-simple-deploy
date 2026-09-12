@@ -20,10 +20,10 @@
           Every table this application uses is defined in one file &mdash;
           <span class="mono">sql/metals-db.sql</span> &mdash; and a local copy of the database can be
           stood up with one file at the project root, <span class="mono">docker-compose.yml</span>.
-          This page covers what's actually inside that schema, including the new
-          <span class="mono">users</span>, <span class="mono">roles</span>, and
-          <span class="mono">user_roles</span> tables added for authentication, and how to run (and,
-          if needed, reset) the database on your own machine.
+          This page covers what's actually inside that schema &mdash; the metals catalog, the
+          coins-and-bullion tables, and the authentication tables &mdash; how to run (and, if
+          needed, reset) the database on your own machine, and how to change a database that is
+          already deployed without destroying what is in it.
         </p>
       </div>
       <figure class="codey-figure">
@@ -34,7 +34,8 @@
       <span class="fact">Engine &rarr; <b>PostgreSQL 16</b></span>
       <span class="fact">Schema &amp; seed data &rarr; <b>sql/metals-db.sql</b></span>
       <span class="fact">Local runtime &rarr; <b>docker-compose.yml</b></span>
-      <span class="fact">Tables &rarr; <b>7</b></span>
+      <span class="fact">Tables &rarr; <b>10</b></span>
+      <span class="fact">Migrations &rarr; <b>sql/migrations/</b></span>
       <span class="fact">Dev seed accounts &rarr; <b>admin</b> &amp; <b>customer</b></span>
     </div>
   </div>
@@ -62,7 +63,7 @@
             <span class="mono">sql/metals-db.sql</span> does two jobs in one script: it drops and
             recreates every table this project needs (in dependency order, so foreign keys don't
             fail), and then it inserts starting data &mdash; including the roles, the two development
-            login accounts, and the metals/alloys/coins catalog data the API serves.
+            login accounts, and the elements, alloys and mint-products catalog data the API serves.
           </p>
         </div>
         <figure class="codey-figure">
@@ -88,26 +89,30 @@
     <section class="block" id="tables">
       <h2>The tables, table by table <span class="tag">structure</span></h2>
       <p class="dek">
-        Seven tables in total, split into two groups: the metals catalog data the API was originally
-        built around, and the authentication tables added on top of it.
+        Ten tables in total, in three groups: the raw materials, the things made from them, and the
+        accounts allowed to look.
       </p>
       <div class="tree-wrap">
         <table class="tree">
-          <thead><tr><th style="width:11rem;">Table</th><th>What it's for, in plain terms</th></tr></thead>
+          <thead><tr><th style="width:13rem;">Table</th><th>What it's for, in plain terms</th></tr></thead>
           <tbody>
-            <tr><td class="path">elements</td><td>One row per chemical element (atomic number as the primary key) &mdash; melting/boiling points, color, density, category, and whether it's toxic or magnetic.</td></tr>
-            <tr><td class="path">alloys</td><td>Named mixtures, like &ldquo;Sterling Silver&rdquo; or &ldquo;18K Yellow Gold.&rdquo;</td></tr>
+            <tr><td class="path">elements</td><td>One row per chemical element &mdash; all 118, with atomic number as the primary key &mdash; melting/boiling points, color, density, category, and whether it's toxic or magnetic.</td></tr>
+            <tr><td class="path">alloys</td><td>Named mixtures, like &ldquo;Sterling Silver&rdquo; or &ldquo;304 Stainless Steel.&rdquo; 75 of them, each classified by family and by the metal it's mostly made of.</td></tr>
             <tr><td class="path">alloy_elements</td><td>A join table: which elements make up which alloy, and what percentage of the alloy each one is.</td></tr>
-            <tr><td class="path">coins</td><td>Real-world coins, each made from one alloy, with weight and face-value details.</td></tr>
-            <tr><td class="path"><b>users</b></td><td>Login accounts &mdash; a username and a password <i>hash</i> (never the real password). <a href="01-schema.html">(dig deeper)</a></td></tr>
-            <tr><td class="path"><b>roles</b></td><td>The two permission levels this API knows about: <span class="mono">Admin</span> and <span class="mono">Customer</span>. <a href="01-schema.html">(dig deeper)</a></td></tr>
-            <tr><td class="path"><b>user_roles</b></td><td>A join table connecting users to the role(s) they hold. <a href="01-schema.html">(dig deeper)</a></td></tr>
+            <tr><td class="path">alloy_uses</td><td>A join table: what each alloy is used for. Many-to-many, because 6061 aluminium is structural <i>and</i> marine <i>and</i> tooling.</td></tr>
+            <tr><td class="path"><b>mint_products</b></td><td>Anything struck from metal &mdash; coins, rounds, bars, ingots, medals, tokens and goldbacks. The shared facts: name, issuer, mint, weight, alloy. <a href="01-schema.html#mint-products">(dig deeper)</a></td></tr>
+            <tr><td class="path"><b>coins</b></td><td>The legal-tender <i>subtype</i> of a mint product: face value, currency, and whether it's still money. A row existing here is what makes something a coin. <a href="01-schema.html#mint-products">(dig deeper)</a></td></tr>
+            <tr><td class="path"><b>mint_product_components</b></td><td>How a layered piece is built &mdash; the zinc core and copper plating of a cent, the ring and centre of a 2 euro. <a href="01-schema.html#components">(dig deeper)</a></td></tr>
+            <tr><td class="path">users</td><td>Login accounts &mdash; a username and a password <i>hash</i> (never the real password). <a href="01-schema.html#auth-tables">(dig deeper)</a></td></tr>
+            <tr><td class="path">roles</td><td>The two permission levels this API knows about: <span class="mono">Admin</span> and <span class="mono">Customer</span>. <a href="01-schema.html#auth-tables">(dig deeper)</a></td></tr>
+            <tr><td class="path">user_roles</td><td>A join table connecting users to the role(s) they hold. <a href="01-schema.html#auth-tables">(dig deeper)</a></td></tr>
           </tbody>
         </table>
       </div>
       <p class="bonus-banner">
-        <b>Bold rows</b> are the three tables added for authentication. Everything else was already
-        part of the metals catalog.
+        <b>Bold rows</b> replaced what used to be a single flat <span class="mono">coins</span>
+        table. Splitting it is what let bars, rounds and goldbacks into the catalog without filling
+        every coin row with empty columns.
       </p>
     </section>
 
@@ -118,9 +123,11 @@
           <p class="dek">
             After creating the tables, the same script inserts starting rows: the
             <span class="mono">Admin</span> and <span class="mono">Customer</span> roles, two
-            ready-to-use login accounts, and a large catalog of real elements, alloys, and coins.
-            Every insert uses <span class="mono">ON CONFLICT ... DO NOTHING</span>, so re-running
-            the script against a database that already has this data is harmless.
+            ready-to-use login accounts, and a catalog of 118 elements, 78 alloys and 48 mint
+            products. Every insert uses <span class="mono">ON CONFLICT</span> &mdash; either
+            <span class="mono">DO NOTHING</span> to skip a row that already exists, or
+            <span class="mono">DO UPDATE</span> so a corrected recipe actually lands &mdash; which is
+            what makes the script safe to re-run.
           </p>
         </div>
         <figure class="codey-figure">
@@ -133,13 +140,20 @@
         <a href="02-docker-compose.html#accounts">the Docker Compose page</a> &mdash; you'll need them
         to log in once the <a href="../api/index.html">Metals API</a> requires authentication.
       </p>
+      <p class="warn">
+        <b>This script is not how you change a deployed database.</b> It opens by dropping every
+        table, which would take every registered account with it. Adding a column or splitting a
+        table on a database that is already in use is what
+        <a href="03-migrations.html">migrations</a> are for.
+      </p>
     </section>
 
     <section class="block" id="pages">
       <h2>Pick a page to learn <span class="tag">go deeper</span></h2>
       <div class="module-grid">
-        <a class="module-card" href="01-schema.html"><span class="mnum">Page 1 of 2</span><h3>The schema, in detail</h3><p>Every table, its columns, its relationships, and the key terms behind them.</p></a>
-        <a class="module-card" href="02-docker-compose.html"><span class="mnum">Page 2 of 2</span><h3>Running it locally</h3><p>docker-compose.yml, resetting an out-of-date database, and the seed login accounts.</p></a>
+        <a class="module-card" href="01-schema.html"><span class="mnum">Page 1 of 3</span><h3>The schema, in detail</h3><p>All ten tables, the supertype/subtype pattern behind coins and bullion, and the guard rails that catch a silent seeding failure.</p></a>
+        <a class="module-card" href="02-docker-compose.html"><span class="mnum">Page 2 of 3</span><h3>Running it locally</h3><p>docker-compose.yml, resetting an out-of-date database, and the seed login accounts.</p></a>
+        <a class="module-card" href="03-migrations.html"><span class="mnum">Page 3 of 3</span><h3>Changing a live database</h3><p>Migrations: how to add a column or split a table without deleting the accounts already in it &mdash; and how to rehearse it first.</p></a>
       </div>
     </section>
 

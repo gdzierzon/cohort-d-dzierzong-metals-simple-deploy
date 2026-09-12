@@ -3,7 +3,13 @@
 -- Adds alloys.alloy_family and the alloy_uses junction table, backfills the 29
 -- existing alloys, and seeds 35 new ones with their compositions and uses.
 -- Nothing is dropped. Users, roles, coins and elements are not touched.
--- Safe to run more than once.
+-- Safe to run more than once, but only before 003 has run. 003 adds
+-- alloys.primary_metal as NOT NULL, and the alloys INSERT below cannot supply a
+-- column that does not exist yet in this migration's timeline - so replaying 002
+-- on a database that is already at 003 fails on that NOT NULL, rolls back, and
+-- changes nothing. That is the normal rule for migrations, not a defect here: they
+-- are applied once, in order, and real tooling keeps a version table precisely so
+-- an earlier one is never re-run after a later one.
 --
 -- Run 001_full_periodic_table.sql FIRST. The new compositions reference Fe, C,
 -- V, Nb, Be, S and Ru, none of which existed in the original element seed.

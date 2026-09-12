@@ -14,12 +14,12 @@
   <div class="masthead-inner">
     <div class="masthead-top">
       <div class="masthead-text">
-        <p class="eyebrow">Database &middot; Page 1 of 2</p>
+        <p class="eyebrow">Database &middot; Page 1 of 3</p>
         <h1>The Schema, Table by Table</h1>
         <p class="lede">
-          Seven <span class="mono">CREATE TABLE</span> statements, two families of data: the metals
-          catalog (elements, alloys, coins) and, new in this branch, the authentication tables
-          (users, roles, and the join table connecting them).
+          Ten <span class="mono">CREATE TABLE</span> statements in three families: the metals
+          catalog (elements and alloys), the things made from metal (coins, bars, rounds and
+          goldbacks), and the authentication tables.
         </p>
       </div>
       <figure class="codey-figure">
@@ -28,8 +28,8 @@
     </div>
     <div class="factbar">
       <span class="fact">File &rarr; <b>sql/metals-db.sql</b></span>
-      <span class="fact">New tables &rarr; <b>users, roles, user_roles</b></span>
-      <span class="fact">Password storage &rarr; <b>Argon2id hash, never plaintext</b></span>
+      <span class="fact">Tables &rarr; <b>10</b></span>
+      <span class="fact">Rows seeded &rarr; <b>118 elements, 78 alloys, 48 mint products</b></span>
     </div>
   </div>
 </header>
@@ -40,8 +40,11 @@
     <div class="toc-label">On this page</div>
     <ol>
       <li><a href="#catalog">The metals catalog tables</a></li>
+      <li><a href="#classifying">Two ways to classify an alloy</a></li>
+      <li><a href="#mint-products">Coins and bullion: supertype and subtype</a></li>
+      <li><a href="#components">How a layered coin is stored</a></li>
       <li><a href="#auth-tables">The authentication tables</a></li>
-      <li><a href="#seed-data">Seeding roles and accounts</a></li>
+      <li><a href="#seed-data">Seeding, deriving, and guard rails</a></li>
       <li><a href="#terms">Key terms</a></li>
     </ol>
   </nav>
@@ -52,32 +55,46 @@
       <div class="purpose-band-row">
         <div class="purpose-band">
           <p class="purpose-label">Purpose of this page</p>
-          <p>Explain what every table in <span class="mono">sql/metals-db.sql</span> stores, how the tables relate to each other, and what the new authentication tables add.</p>
+          <p>Explain what every table in <span class="mono">sql/metals-db.sql</span> stores, how the tables relate to each other, and why two of them exist only to describe how something is built.</p>
         </div>
         <figure class="codey-figure">
           <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
-          <figcaption>seven tables, two families</figcaption>
+          <figcaption>ten tables, three families</figcaption>
         </figure>
       </div>
 
-      <h2>The metals catalog tables <span class="tag">already existed</span></h2>
+      <h2>The metals catalog tables <span class="tag">elements and alloys</span></h2>
       <p class="dek">
-        These four tables are what the API was originally built to serve. They aren't new, but
-        understanding them helps make sense of how the new authentication tables were bolted on
-        beside them, not into them.
+        Four tables describe raw materials: the chemical elements, the named mixtures made from
+        them, the recipe connecting the two, and what each mixture is good for.
       </p>
       <div class="qgrid">
         <div class="qcard">
           <div class="qhead"><span class="qtitle">elements</span><span class="qnum">atomic_number PK</span></div>
           <p class="desc">
-            One row per chemical element. Unusually, the primary key isn't a generated
-            <span class="mono">SERIAL</span> id &mdash; it's <span class="mono">atomic_number</span>
-            itself, since that number is already a natural, permanent identifier for an element.
+            One row per chemical element &mdash; all 118 of them. Unusually, the primary key isn't a
+            generated <span class="mono">SERIAL</span> id; it's
+            <span class="mono">atomic_number</span> itself, since that number is already a natural,
+            permanent identifier for an element.
+          </p>
+          <p class="note">
+            <b>A column that had to grow.</b> <span class="mono">density</span> started as
+            <span class="mono">NUMERIC(8,2)</span>, which was fine while the catalog held only
+            metals. Hydrogen is 0.000090&nbsp;g/cm&sup3;, and Postgres rounds to the declared scale
+            <i>without complaining</i> &mdash; so every gas arrived as
+            <span class="mono">0.00</span>. It is now
+            <span class="mono">NUMERIC(10,6)</span>.
           </p>
         </div>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">alloys</span><span class="qnum">alloy_id PK</span></div>
-          <p class="desc">Named mixtures such as &ldquo;Sterling Silver.&rdquo; A generated <span class="mono">SERIAL</span> id, since alloy names aren't a natural key the way atomic numbers are.</p>
+          <p class="desc">
+            Named mixtures such as &ldquo;Sterling Silver&rdquo; or &ldquo;304 Stainless
+            Steel&rdquo; &mdash; 75 of them. A generated <span class="mono">SERIAL</span> id, since
+            alloy names aren't a natural key the way atomic numbers are. Two classification columns,
+            <span class="mono">alloy_family</span> and <span class="mono">primary_metal</span>, are
+            the subject of <a href="#classifying">the next section</a>.
+          </p>
         </div>
         <div class="qcard">
           <div class="qhead"><span class="qtitle">alloy_elements</span><span class="qnum">join table</span></div>
@@ -90,20 +107,417 @@
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">coins</span><span class="qnum">coin_id PK</span></div>
-          <p class="desc">Real-world coins. Each coin belongs to exactly one alloy (<span class="mono">alloy_id</span> is a required foreign key), so this is a plain one-to-many relationship, not a join table.</p>
+          <div class="qhead"><span class="qtitle">alloy_uses</span><span class="qnum">join table</span></div>
+          <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE alloy_uses (
+    alloy_id SMALLINT NOT NULL,
+    use_code VARCHAR(40) NOT NULL,
+
+    CONSTRAINT pk_alloy_uses
+        PRIMARY KEY (alloy_id, use_code),
+
+    CONSTRAINT fk_alloy_uses_alloy
+        FOREIGN KEY (alloy_id)
+        REFERENCES alloys (alloy_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_alloy_use_code CHECK (use_code IN (
+        'AEROSPACE', 'BEARING', 'BULLION', 'COINAGE',
+        'COOKWARE', 'DECORATIVE', 'ELECTRICAL',
+        'FASTENERS', 'HIGH_TEMPERATURE',
+        'INSTRUMENTATION', 'JEWELRY', 'MARINE',
+        'MEDICAL', 'MUSICAL', 'SOLDERING',
+        'STRUCTURAL', 'TOOLING'
+    ))
+);</pre>
+          <p class="desc">
+            What each alloy is <i>for</i>. This is a table and not a column because the answer is
+            genuinely plural: aluminium 6061 is structural <b>and</b> marine <b>and</b> tooling.
+            Forcing one label would make any filter built on it lie.
+          </p>
+          <p class="note">
+            Same shape as <span class="mono">user_roles</span> further down &mdash; a composite
+            primary key over two columns, which by itself stops the same use being attached twice.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="classifying">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Two ways to classify an alloy <span class="tag">and why both exist</span></h2>
+          <p class="dek">
+            <span class="mono">alloys</span> carries two classification columns that look
+            redundant and aren't. The difference between them is worth understanding, because it
+            is the difference between <i>what something is</i> and <i>what it is mostly made
+            of</i>.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>two axes, not one</figcaption>
+        </figure>
+      </div>
+
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE alloys (
+    alloy_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    color VARCHAR(50),
+    alloy_family VARCHAR(40) NOT NULL,
+    primary_metal VARCHAR(20),
+    description TEXT,
+
+    CONSTRAINT chk_alloy_primary_metal CHECK (primary_metal IN (
+        'ALUMINUM', 'COPPER', 'GOLD', 'IRON', 'MAGNESIUM', 'NICKEL',
+        'PALLADIUM', 'PLATINUM', 'SILVER', 'TIN', 'TITANIUM', 'ZINC'
+    )),
+
+    CONSTRAINT chk_alloy_family CHECK (alloy_family IN (
+        'PRECIOUS', 'COPPER', 'ALUMINUM', 'FERROUS', 'NICKEL',
+        'TITANIUM', 'TIN', 'ZINC', 'MAGNESIUM'
+    ))
+);</pre>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">alloy_family</span><span class="qnum">9 values</span></div>
+          <p class="desc">
+            The broad group an alloy belongs to: <span class="mono">PRECIOUS</span>,
+            <span class="mono">COPPER</span>, <span class="mono">FERROUS</span> and six more. This
+            is what the alloys page filters on, because nine checkboxes fit on a screen.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">primary_metal</span><span class="qnum">12 values</span></div>
+          <p class="desc">
+            The single metal the alloy is mostly made of. Finer than the family, and that
+            granularity is the point: <span class="mono">PRECIOUS</span> collapses gold, silver,
+            platinum and palladium into one bucket, which is useless if you want to see only the
+            gold coins.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why not a column on coins?</span><span class="qnum">the design choice</span></div>
+          <p class="desc">
+            A coin's metal is a fact about its <i>alloy</i>, not about the coin. Storing it on the
+            coin too would put the same fact in three places, and change an alloy's recipe and the
+            coin's copy would quietly become wrong. Coins read their metal through the foreign key.
+          </p>
+        </div>
+      </div>
+
+      <p class="warn">
+        <b>Watch the names.</b> Both columns follow the composition, not the label on the tin.
+        <b>Nickel Silver</b> is <span class="mono">COPPER</span>&nbsp;/&nbsp;<span class="mono">COPPER</span>
+        and contains no silver at all. <b>Invar 36</b> is <span class="mono">FERROUS</span>&nbsp;/&nbsp;<span class="mono">IRON</span>
+        despite being known as a nickel alloy. A <b>US nickel</b> is three-quarters copper, so it
+        files under <span class="mono">COPPER</span>. Every <b>brass</b> is copper-majority too &mdash;
+        which is why &ldquo;brass&rdquo; is an alloy name and never a metal.
+      </p>
+    </section>
+
+    <section class="block" id="mint-products">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Coins and bullion <span class="tag">supertype and subtype</span></h2>
+          <p class="dek">
+            A coin, a silver bar, a privately minted round and a goldback share almost everything:
+            a name, a mint, a weight, an alloy. Only one of them is money. That asymmetry is what
+            shapes these two tables.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one table for the shared facts</figcaption>
+        </figure>
+      </div>
+
+      <p>
+        The obvious design is one wide table with a <span class="mono">product_type</span> column
+        and a lot of columns that are empty for most rows. The design used here splits it: one
+        table for everything they have in common, and a second, narrow table holding only the facts
+        that apply to legal tender. That pattern has a name &mdash;
+        <b>supertype and subtype</b>, or <i>class table inheritance</i>.
+      </p>
+
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE mint_products (
+    mint_product_id SERIAL PRIMARY KEY,
+    name VARCHAR(120) NOT NULL UNIQUE,
+    product_type VARCHAR(20) NOT NULL,
+    issuer VARCHAR(80),
+    mint VARCHAR(120),
+    year_introduced SMALLINT,
+    gross_weight_g NUMERIC(10,4),
+    fine_metal_weight_g NUMERIC(10,4),
+    alloy_id INTEGER NOT NULL,
+
+    CONSTRAINT fk_mint_products_alloy
+        FOREIGN KEY (alloy_id) REFERENCES alloys (alloy_id) ON DELETE RESTRICT,
+
+    CONSTRAINT chk_mint_products_type CHECK (product_type IN (
+        'COIN', 'ROUND', 'BAR', 'INGOT', 'MEDAL', 'TOKEN', 'NOTE'
+    )),
+
+    CONSTRAINT chk_mint_products_year
+        CHECK (year_introduced IS NULL OR year_introduced BETWEEN -3000 AND 3000),
+
+    CONSTRAINT chk_mint_products_weights
+        CHECK (fine_metal_weight_g IS NULL
+               OR gross_weight_g IS NULL
+               OR fine_metal_weight_g &lt;= gross_weight_g),
+
+    CONSTRAINT uq_mint_products_type UNIQUE (mint_product_id, product_type)
+);</pre>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">issuer, not country</span><span class="qnum">renamed</span></div>
+          <p class="desc">
+            A sovereign state issues a coin; a private mint issues a bar.
+            <span class="mono">country</span> stopped being an accurate name the moment bars were
+            allowed in.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">year_introduced</span><span class="qnum">now allows BC</span></div>
+          <p class="desc">
+            The original constraint was <span class="mono">BETWEEN 500 AND 3000</span>, which
+            silently ruled out every ancient coin. The Roman denarius is
+            <span class="mono">-211</span>. <span class="mono">SMALLINT</span> holds negative years
+            without complaint; only the <span class="mono">CHECK</span> had to widen.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">fine_metal_weight_g</span><span class="qnum">recorded, not computed</span></div>
+          <p class="desc">
+            Usually this is just gross weight &times; purity &mdash; but not for a goldback, where
+            most of the weight is polymer and the gold is a thin leaf. Deriving it would give the
+            wrong answer for three rows, so it is stored.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">uq_mint_products_type</span><span class="qnum">looks pointless</span></div>
+          <p class="desc">
+            <span class="mono">mint_product_id</span> is already the primary key, so a
+            <span class="mono">UNIQUE</span> on it plus another column adds no new guarantee. It
+            exists purely so the subtype below can point a <i>composite</i> foreign key at it.
+            Keep reading.
+          </p>
+        </div>
+      </div>
+
+      <h2>The coins table <span class="tag">the subtype</span></h2>
+      <p class="dek">
+        Narrow on purpose. Everything here is true only of money, and the
+        <i>existence of a row</i> is what says a mint product is money &mdash; which is why there
+        is no <span class="mono">is_coin</span> flag anywhere in the schema.
+      </p>
+
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE coins (
+    mint_product_id INTEGER PRIMARY KEY,
+    product_type VARCHAR(20) NOT NULL DEFAULT 'COIN',
+    face_value NUMERIC(12,2),
+    face_value_currency_code VARCHAR(3) NOT NULL,
+    is_legal_tender BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT chk_coins_product_type CHECK (product_type = 'COIN'),
+
+    CONSTRAINT chk_coins_no_value_without_currency
+        CHECK (face_value_currency_code &lt;&gt; 'XXX' OR face_value IS NULL),
+
+    CONSTRAINT fk_coins_mint_product
+        FOREIGN KEY (mint_product_id, product_type)
+        REFERENCES mint_products (mint_product_id, product_type)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);</pre>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Primary key <i>and</i> foreign key</span><span class="qnum">this is the 1:1</span></div>
+          <p class="desc">
+            <span class="mono">mint_product_id</span> is both at once. Being a foreign key means it
+            must point at a real product; being the primary key means it can only appear
+            <b>once</b>. Put together, that is exactly &ldquo;at most one coins row per mint
+            product&rdquo; &mdash; a one-to-one relationship, enforced with no extra machinery.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The composite foreign key</span><span class="qnum">the clever bit</span></div>
+          <p class="desc">
+            <span class="mono">coins</span> repeats <span class="mono">product_type</span>, pins it
+            to <span class="mono">'COIN'</span> with a <span class="mono">CHECK</span>, and then
+            points <span class="mono">(mint_product_id, product_type)</span> at that redundant
+            <span class="mono">UNIQUE</span> above. The effect: a coins row can only ever attach to
+            a product whose type really is <span class="mono">COIN</span>. No trigger, no
+            application code &mdash; the database itself refuses.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">face_value is nullable</span><span class="qnum">for one real reason</span></div>
+          <p class="desc">
+            A <b>Krugerrand</b> is legal tender with <i>no denomination struck on it</i> &mdash; its
+            value is the gold price. That is a fact about the coin, not missing data. The currency
+            code stays <span class="mono">NOT NULL</span>, because it is still South African money.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">&hellip;and sometimes it <i>must</i> be</span><span class="qnum">the 'XXX' rule</span></div>
+          <p class="desc">
+            <span class="mono">'XXX'</span> is the ISO&nbsp;4217 code for <i>no currency involved</i>,
+            used here for the <b>Roman denarius</b> and the <b>8 Reales</b> &mdash; counted in units
+            that were never currencies in the modern sense. An amount beside
+            <span class="mono">'XXX'</span> would be a quantity of nothing, so
+            <span class="mono">1 XXX</span> reads as broken data because it is, and
+            <span class="mono">chk_coins_no_value_without_currency</span> refuses it outright. That
+            matters because the admin screens can write this table &mdash; a comment asking nicely
+            would not have stopped anyone.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Try to break it</span><span class="qnum">two refusals</span></div>
+          <pre class="code">-- attach a coin row to a bar
+INSERT INTO coins (mint_product_id, ...)
+SELECT mint_product_id, 'USD'
+FROM mint_products
+WHERE name = '1 kg Silver Bar';
+-- ERROR: violates foreign key
+--   constraint "fk_coins_mint_product"
+
+-- turn a coin into a bar while its
+-- coins row still exists
+UPDATE mint_products
+SET product_type = 'BAR'
+WHERE name = 'Morgan Silver Dollar';
+-- ERROR: violates check constraint
+--   "chk_coins_product_type"</pre>
+          <p class="desc">
+            The second one is worth tracing. <span class="mono">ON UPDATE CASCADE</span> pushes the
+            new type into the coins row to keep the pair in step &mdash; and the coins row's own
+            <span class="mono">CHECK</span> then rejects it. The update is blocked from the far side.
+          </p>
+        </div>
+      </div>
+
+      <p class="note">
+        <b>What it buys you.</b> No nullable columns pretending to be meaningful, and no way to
+        end up with a bar that has a face value. The cost is one extra join whenever you want a
+        coin's denomination &mdash; which the API does with a single
+        <span class="mono">joinedload</span>.
+      </p>
+
+      <h2>What each form means <span class="tag">seven product types</span></h2>
+      <div class="cheat-wrap">
+        <table class="cheat">
+          <thead><tr><th>product_type</th><th>Is it money?</th><th>Example in the seed</th></tr></thead>
+          <tbody>
+            <tr><td class="path">COIN</td><td>Yes &mdash; has a coins row</td><td>Morgan Silver Dollar, 2 Euro, Roman Denarius</td></tr>
+            <tr><td class="path">ROUND</td><td>No &mdash; coin-shaped, privately minted</td><td>1 oz Silver Round</td></tr>
+            <tr><td class="path">BAR</td><td>No</td><td>10 oz Silver Bar, 1 oz Platinum Bar</td></tr>
+            <tr><td class="path">INGOT</td><td>No</td><td>Copper Ingot (5 lb)</td></tr>
+            <tr><td class="path">MEDAL</td><td>No</td><td>Bronze Commemorative Medal</td></tr>
+            <tr><td class="path">TOKEN</td><td>No</td><td>Brass Arcade Token</td></tr>
+            <tr><td class="path">NOTE</td><td>No</td><td>Utah Goldback 1 &mdash; polymer carrying a measured gold leaf</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        A <span class="mono">NOTE</span> here is a <b>goldback</b>, not a banknote. Every row in
+        this table needs an <span class="mono">alloy_id</span>, so anything without metal in it has
+        no place in the catalog &mdash; a paper note would leave every analytical column empty.
+      </p>
+    </section>
+
+    <section class="block" id="components">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>How a layered coin is stored <span class="tag">mint_product_components</span></h2>
+          <p class="dek">
+            Modern circulating coins are rarely one metal all the way through. A US cent is zinc
+            with a copper skin; a quarter is copper sandwiched in cupronickel; a 2 euro is a ring of
+            one alloy around a centre of another. One <span class="mono">alloy_id</span> cannot say
+            that.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>what is actually inside</figcaption>
+        </figure>
+      </div>
+
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>CREATE TABLE mint_product_components (
+    mint_product_id INTEGER NOT NULL,
+    alloy_id INTEGER NOT NULL,
+    component_role VARCHAR(20) NOT NULL,
+    percent_of_weight NUMERIC(6,3),
+
+    CONSTRAINT pk_mint_product_components
+        PRIMARY KEY (mint_product_id, alloy_id, component_role),
+
+    CONSTRAINT chk_mint_product_component_role CHECK (component_role IN (
+        'CORE', 'CLADDING', 'PLATING', 'RING', 'CENTER', 'LEAF'
+    )),
+
+    CONSTRAINT chk_mint_product_component_percent
+        CHECK (percent_of_weight IS NULL
+               OR (percent_of_weight &gt; 0 AND percent_of_weight &lt;= 100))
+);</pre>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Solid pieces have no rows here</span><span class="qnum">absence means something</span></div>
+          <p class="desc">
+            A silver bar is silver all the way through, so its
+            <span class="mono">alloy_id</span> says everything there is to say. Only 8 of the 37
+            products have component rows at all. The UI reads that absence as &ldquo;solid&rdquo;
+            and reads the roles present as Clad, Plated or Bimetallic.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The predominant alloy can surprise you</span><span class="qnum">a teaching case</span></div>
+          <p class="desc">
+            <span class="mono">alloy_id</span> is the alloy that dominates <i>by weight</i>. For a
+            clad US quarter that is <b>Commercial Pure Copper</b> &mdash; the core you cannot see.
+            The cupronickel you <i>can</i> see is only a third of the weight. Without the component
+            rows, the catalog would describe a quarter as a copper coin and stop there.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Percentages are derived, not guessed</span><span class="qnum">arithmetic</span></div>
+          <pre class="code">-- A clad quarter is 8.33% nickel overall.
+-- Its cladding is 25% nickel.
+-- So cladding = 8.33 / 25 = one third.
+
+('Washington Quarter (Clad)',
+ 'Cupronickel 75/25', 'CLADDING', 33.333),
+('Washington Quarter (Clad)',
+ 'Commercial Pure Copper', 'CORE', 66.667),</pre>
+          <p class="desc">
+            The same arithmetic gives the cent 98.286 / 1.714 and the Sacagawea dollar an even
+            50/50 split.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">percent_of_weight is nullable</span><span class="qnum">an honest gap</span></div>
+          <p class="desc">
+            Nobody publishes the ring-to-centre weight split of a 2 euro, and there is no
+            composition to reverse it out of. Those rows record the roles and leave the percentage
+            <span class="mono">NULL</span>. A made-up number would be worse than an admitted gap,
+            and the guard rail further down only checks the products where every layer was stated.
+          </p>
         </div>
       </div>
     </section>
 
     <section class="block" id="auth-tables">
-      <div class="section-intro codey-left">
+      <div class="section-intro">
         <div class="intro-text">
-          <h2>The authentication tables <span class="tag">new in this branch</span></h2>
+          <h2>The authentication tables <span class="tag">who can do what</span></h2>
           <p class="dek">
-            Three tables, following the exact same join-table pattern as
-            <span class="mono">alloy_elements</span> above &mdash; a user can hold more than one role,
-            and a role can belong to more than one user, so the relationship needs its own table.
+            Three tables, following the same join-table pattern as
+            <span class="mono">alloy_elements</span> and <span class="mono">alloy_uses</span> above
+            &mdash; a user can hold more than one role, and a role can belong to more than one user,
+            so the relationship needs its own table.
           </p>
         </div>
         <figure class="codey-figure">
@@ -127,6 +541,11 @@
             through Argon2id before it's ever written here, and the real password is never stored
             or logged anywhere. <span class="mono">username</span> is unique so two accounts can't
             collide.
+          </p>
+          <p class="note">
+            What counts as an acceptable password is a separate question, answered in
+            <a href="../api/02-authentication.html#password-policy">the API authentication
+            guide</a> &mdash; long passphrases with spaces, not forced punctuation.
           </p>
         </div>
         <div class="qcard">
@@ -165,43 +584,142 @@
     </section>
 
     <section class="block" id="seed-data">
-      <div class="section-intro">
+      <div class="section-intro codey-left">
         <div class="intro-text">
-          <h2>Seeding roles and accounts <span class="tag">what actually gets inserted</span></h2>
+          <h2>Seeding, deriving, and guard rails <span class="tag">the end of the script</span></h2>
           <p class="dek">
-            After the tables exist, the script inserts the two roles, two development login
-            accounts, and the assignments connecting them &mdash; all idempotent, so running the
-            script twice never duplicates or errors.
+            After the tables exist, the script loads the data &mdash; and then checks its own work.
+            Two of the most useful lines in the whole file are assertions that do nothing at all
+            when everything is correct.
           </p>
         </div>
         <figure class="codey-figure">
-          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
-          <figcaption>safe to run more than once</figcaption>
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-catching net">
+          <figcaption>catching a silent failure</figcaption>
         </figure>
       </div>
+
+      <h2>A column the script computes for itself</h2>
+      <p class="dek">
+        <span class="mono">primary_metal</span> is already implied by
+        <span class="mono">alloy_elements</span> &mdash; it is whichever element has the largest
+        mass fraction. So the seed doesn't ask anyone to type it 75 times. It works it out.
+      </p>
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>UPDATE alloys a
+SET primary_metal = upper(majority.metal_name)
+FROM (
+    SELECT DISTINCT ON (ae.alloy_id)
+           ae.alloy_id,
+           e.name AS metal_name
+    FROM alloy_elements ae
+    INNER JOIN elements e ON e.atomic_number = ae.atomic_number
+    ORDER BY ae.alloy_id, ae.percent_of_alloy DESC, e.atomic_number
+) AS majority
+WHERE majority.alloy_id = a.alloy_id;
+
+-- Now that it is populated, make it mandatory.
+ALTER TABLE alloys ALTER COLUMN primary_metal SET NOT NULL;</pre>
+      <p class="note">
+        <b>Why <span class="mono">DISTINCT ON</span>.</b> It is a Postgres extension that keeps the
+        first row for each group &mdash; combined with
+        <span class="mono">ORDER BY ... percent_of_alloy DESC</span>, &ldquo;first&rdquo; means
+        &ldquo;largest share.&rdquo; That is also why the column is declared nullable in
+        <span class="mono">CREATE TABLE</span> and only made <span class="mono">NOT NULL</span>
+        here: it cannot be filled in until the compositions are loaded.
+      </p>
+      <p class="note">
+        The real win is that there is now <b>no opportunity</b> for the column and the composition
+        to disagree. A value you compute cannot drift from the thing you computed it from.
+      </p>
+
+      <h2>The guard rail that catches a silent failure</h2>
+      <p class="dek">
+        Look closely at how compositions are loaded. The component list is joined to
+        <span class="mono">elements</span> <i>by symbol</i>:
+      </p>
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>INSERT INTO alloy_elements (alloy_id, atomic_number, percent_of_alloy)
+SELECT a.alloy_id, e.atomic_number, d.pct
+FROM alloy_component_data d
+INNER JOIN alloys a ON a.name = d.alloy_name
+INNER JOIN elements e ON e.symbol = d.element_symbol
+ON CONFLICT (alloy_id, atomic_number)
+DO UPDATE SET percent_of_alloy = EXCLUDED.percent_of_alloy;</pre>
+      <p class="warn">
+        <b>An INNER JOIN drops what it cannot match.</b> Mistype a symbol &mdash;
+        <span class="mono">'Fe'</span> as <span class="mono">'Fee'</span> &mdash; and that component
+        is thrown away <i>before the foreign key ever sees it</i>. No error. The seed reports
+        success and the alloy is quietly missing its main metal. A foreign key cannot protect you
+        from a row that is never offered to it.
+      </p>
+      <p>
+        The fix is a post-condition. Every composition must sum to 100, so check that it does:
+      </p>
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>DO $$
+DECLARE
+    offenders text;
+BEGIN
+    SELECT string_agg(name || ' (' || total || '%)', ', ' ORDER BY name)
+    INTO offenders
+    FROM (
+        SELECT a.name, coalesce(sum(ae.percent_of_alloy), 0) AS total
+        FROM alloys a
+        LEFT JOIN alloy_elements ae ON ae.alloy_id = a.alloy_id
+        GROUP BY a.name
+        HAVING coalesce(sum(ae.percent_of_alloy), 0) &lt;&gt; 100
+    ) AS broken;
+
+    IF offenders IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Alloy compositions must sum to 100 percent. Broken: %', offenders;
+    END IF;
+END $$;</pre>
+      <p class="note">
+        <b>This is not hypothetical.</b> Running the alloy migration against a database that had
+        not yet been given iron and carbon produced <b>&ldquo;1018 Mild Steel&rdquo; with no iron
+        and no carbon</b>, totalling 0.77 percent, and left 20 alloys incomplete &mdash; with exit
+        code 0. The assertion turns that into a loud failure that names every offender and rolls
+        the whole thing back. There is a matching one for component weights.
+      </p>
+
       <div class="qgrid">
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">1. Roles</span><span class="qnum">INSERT INTO roles</span></div>
+          <div class="qhead"><span class="qtitle">Idempotent seeding</span><span class="qnum">ON CONFLICT</span></div>
           <pre class="code">INSERT INTO roles (name)
 VALUES ('Customer'), ('Admin')
 ON CONFLICT (name) DO NOTHING;</pre>
-        </div>
-        <div class="qcard">
-          <div class="qhead"><span class="qtitle">2. Two development accounts</span><span class="qnum">INSERT INTO users</span></div>
           <p class="desc">
-            Both accounts share the same password. Only the Argon2id hash is stored in the script
-            &mdash; the actual password, and how to log in with it, is covered on
-            <a href="02-docker-compose.html#accounts">the next page</a>.
+            <span class="mono">DO NOTHING</span> skips a row that already exists;
+            <span class="mono">DO UPDATE</span> overwrites it. The alloy and product seeds use
+            <span class="mono">DO UPDATE</span> so corrections to a recipe actually land on a
+            database that already has the row.
           </p>
         </div>
         <div class="qcard">
-          <div class="qhead"><span class="qtitle">3. Role assignments</span><span class="qnum">INSERT INTO user_roles</span></div>
+          <div class="qhead"><span class="qtitle">Seeding without hardcoded ids</span><span class="qnum">join on names</span></div>
           <p class="desc">
-            A single query joins a hand-written list of <span class="mono">(username,
-            role_name)</span> pairs against the rows that were just inserted, so the script never
-            has to hardcode numeric ids &mdash; it looks up <span class="mono">admin</span> &rarr;
-            <span class="mono">Admin</span> and <span class="mono">customer</span> &rarr;
-            <span class="mono">Customer</span> by name instead.
+            Every seed block writes human-readable names and joins them to look up the generated
+            ids &mdash; <span class="mono">admin</span> &rarr; <span class="mono">Admin</span>,
+            <span class="mono">'Washington Quarter (Clad)'</span> &rarr; its
+            <span class="mono">mint_product_id</span>. No numeric id is ever written by hand, which
+            is what lets the blocks be re-run in any order.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The script starts by dropping everything</span><span class="qnum">read this twice</span></div>
+          <pre class="code">DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS alloy_uses;
+DROP TABLE IF EXISTS alloy_elements;
+DROP TABLE IF EXISTS mint_product_components;
+DROP TABLE IF EXISTS coins;
+DROP TABLE IF EXISTS mint_products;
+DROP TABLE IF EXISTS alloys;
+DROP TABLE IF EXISTS elements;</pre>
+          <p class="warn">
+            <b>Never run <span class="mono">metals-db.sql</span> against a database you care
+            about.</b> It is a build-from-scratch script. Changing an existing database is what
+            <a href="03-migrations.html">migrations</a> are for.
           </p>
         </div>
       </div>
@@ -217,11 +735,21 @@ ON CONFLICT (name) DO NOTHING;</pre>
             <dt>Foreign key (FK)</dt>
             <dd>A column that must match a primary key value in another table &mdash; it's how Postgres enforces that <span class="mono">user_roles.user_id</span> can never point at a user that doesn't exist.</dd>
             <dt>Join / junction table</dt>
-            <dd>A table that exists only to connect two other tables in a many-to-many relationship. <span class="mono">user_roles</span> and <span class="mono">alloy_elements</span> are both examples.</dd>
+            <dd>A table that exists only to connect two other tables in a many-to-many relationship. <span class="mono">user_roles</span>, <span class="mono">alloy_elements</span> and <span class="mono">alloy_uses</span> are all examples.</dd>
+            <dt>Supertype / subtype</dt>
+            <dd>Shared facts in one table, facts that apply to only some rows in another, linked one-to-one. <span class="mono">mint_products</span> and <span class="mono">coins</span>. Also called class table inheritance.</dd>
+            <dt>Discriminator</dt>
+            <dd>The column that says which kind of thing a row is &mdash; here <span class="mono">product_type</span>. Repeating it in the subtype and pointing a composite foreign key at it is what stops the two disagreeing.</dd>
+            <dt>Derived column</dt>
+            <dd>A stored value computed from other data rather than entered. <span class="mono">primary_metal</span> is computed from <span class="mono">alloy_elements</span>. It trades a little duplication for much simpler queries &mdash; safe only because nobody types it.</dd>
+            <dt><span class="mono">CHECK</span> constraint</dt>
+            <dd>A rule every row must satisfy, enforced by the database. Used here to limit <span class="mono">product_type</span>, <span class="mono">alloy_family</span>, <span class="mono">use_code</span> and <span class="mono">component_role</span> to known values.</dd>
             <dt><span class="mono">ON DELETE CASCADE</span> vs <span class="mono">RESTRICT</span></dt>
             <dd>What happens to a row when the thing it references is deleted: <span class="mono">CASCADE</span> deletes it too; <span class="mono">RESTRICT</span> blocks the original delete instead.</dd>
-            <dt><span class="mono">ON CONFLICT ... DO NOTHING</span></dt>
-            <dd>Tells Postgres to silently skip an <span class="mono">INSERT</span> that would violate a uniqueness rule, instead of raising an error &mdash; what makes the seed data safe to load more than once.</dd>
+            <dt><span class="mono">ON CONFLICT</span></dt>
+            <dd><span class="mono">DO NOTHING</span> silently skips an <span class="mono">INSERT</span> that would break a uniqueness rule; <span class="mono">DO UPDATE</span> turns it into an update instead. Only rescues <i>uniqueness</i> violations &mdash; not <span class="mono">NOT NULL</span> or <span class="mono">CHECK</span>.</dd>
+            <dt>Post-condition / assertion</dt>
+            <dd>A check run after the work, which fails loudly if the result is wrong. The <span class="mono">DO $$ ... RAISE EXCEPTION</span> blocks at the end of the seed. Cheap insurance against a join that silently dropped data.</dd>
           </dl>
         </div>
       </div>

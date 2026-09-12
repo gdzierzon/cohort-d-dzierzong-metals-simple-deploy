@@ -18,7 +18,7 @@
         <h1>The Metals API: Endpoints, Authentication, and Structure</h1>
         <p class="lede">
           <span class="mono">metals_api/</span> is a Flask application that serves the metals
-          catalog &mdash; elements, alloys, alloy compositions, and coins &mdash; as JSON over HTTP.
+          catalog &mdash; elements, alloys, alloy compositions, and mint products &mdash; as JSON over HTTP.
           Every endpoint now requires a logged-in user, and creating, changing, or deleting data is
           restricted to accounts with the <span class="mono">Admin</span> role. Codey will cover this
           app in three parts: what the endpoints actually do, how the login system works (including
@@ -63,7 +63,7 @@
           <p class="ieyebrow">Section 1</p>
           <h3>The API Endpoints</h3>
           <p>
-            Every resource the API exposes &mdash; elements, alloys, alloy elements, coins &mdash; the
+            Every resource the API exposes &mdash; elements, alloys, alloy elements, mint products &mdash; the
             HTTP methods and paths for each, what a request body looks like, and how errors are
             reported.
           </p>

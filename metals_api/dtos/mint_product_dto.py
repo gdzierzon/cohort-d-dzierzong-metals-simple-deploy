@@ -21,6 +21,9 @@ MINT_PRODUCT_DECIMAL_FIELDS = (
 # Storage stays normalized; the request and response shapes stay convenient.
 COIN_ONLY_FIELDS = {"face_value", "face_value_currency_code", "is_legal_tender"}
 
+# ISO 4217 reserves 'XXX' for "no currency involved".
+NO_CURRENCY_CODE = "XXX"
+
 MINT_PRODUCT_FIELDS = {
     "name",
     "product_type",
@@ -96,9 +99,14 @@ def _shared_errors(data: dict) -> list[str]:
     if gross is not None and fine is not None and fine > gross:
         errors.append("fine_metal_weight_g must not exceed gross_weight_g.")
 
+    # ISO 4217 codes are all three letters, but a pre-ISO currency is recorded by
+    # its historic abbreviation and some are shorter - 'Kr' for the Austro-Hungarian
+    # krone. Two characters is the floor; the column holds three.
     currency_code = data.get("face_value_currency_code")
-    if currency_code is not None and (not isinstance(currency_code, str) or len(currency_code) != 3):
-        errors.append("face_value_currency_code must contain exactly 3 characters.")
+    if currency_code is not None and (
+        not isinstance(currency_code, str) or not 2 <= len(currency_code) <= 3
+    ):
+        errors.append("face_value_currency_code must contain 2 or 3 characters.")
 
     if "is_legal_tender" in data and data["is_legal_tender"] is not None:
         if not isinstance(data["is_legal_tender"], bool):
@@ -116,6 +124,19 @@ def _coin_consistency_errors(data: dict, product_type: object) -> list[str]:
         # The coins row requires a currency code, so a coin has to carry one.
         if not data.get("face_value_currency_code"):
             errors.append("face_value_currency_code is required when product_type is COIN.")
+        # Mirrors chk_coins_no_value_without_currency. 'XXX' is ISO 4217 for "no
+        # currency involved", so an amount beside it is a quantity of nothing: a
+        # ducat or a real carries a denomination with no ISO code, and the honest
+        # way to record that is to leave the amount empty. Checked here so the
+        # answer is a 400 naming the field rather than a 500 from the database.
+        if (
+            data.get("face_value_currency_code") == NO_CURRENCY_CODE
+            and data.get("face_value") is not None
+        ):
+            errors.append(
+                f"face_value must be empty when face_value_currency_code is "
+                f"'{NO_CURRENCY_CODE}', which means no currency at all."
+            )
     elif supplied:
         errors.append(
             "a "

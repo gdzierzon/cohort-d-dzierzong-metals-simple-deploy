@@ -45,6 +45,7 @@
       <li><a href="#routing">How a route resolves</a></li>
       <li><a href="#guards">The two guards</a></li>
       <li><a href="#catalog-vs-admin">Catalog pages vs. admin pages</a></li>
+      <li><a href="#filtering">Filtering, sorting, and remembering</a></li>
       <li><a href="#crud">The admin create/edit/delete flow</a></li>
     </ol>
   </nav>
@@ -169,6 +170,144 @@ export const requireAdmin = () => isAuthenticated() && isAdmin();</pre>
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="block" id="filtering">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Filtering and sorting a long list <span class="tag">the three catalog pages</span></h2>
+          <p class="dek">
+            All three catalog pages share one shape: fetch everything once, then filter and sort in
+            the browser. At 118 elements, 78 alloys and 48 mint products that is the right
+            trade-off &mdash; one request, then instant response to every click.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one fetch, many views</figcaption>
+        </figure>
+      </div>
+
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th style="width:11rem;">Page</th><th>Filters on</th><th>Sorts by</th></tr></thead>
+          <tbody>
+            <tr><td class="path">#/elements</td><td>Search, colour, and 10 category checkboxes in 3 groups. <b>Metals only by default.</b></td><td>Symbol (default), name, atomic number</td></tr>
+            <tr><td class="path">#/alloys</td><td>Search, colour, 9 base metals, and 17 uses in 5 groups</td><td>Name (default), base metal, catalog order</td></tr>
+            <tr><td class="path">#/coins</td><td>Search, issuer, metal, and 7 product forms</td><td>Name (default), metal, year, weight</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Hiding rows by default needs saying out loud</span><span class="qnum">a UX rule</span></div>
+          <p class="desc">
+            The elements page opens with non-metals unticked, which hides 27 of 118 rows. A list that
+            silently omits things reads as broken data, so the count line says
+            <span class="mono">Showing 91 of 118 elements &middot; 4 of 10 types hidden</span> and
+            offers a <b>Show all types</b> button beside it. If a default hides something, the page
+            has to admit it and offer one click out.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Two axes, two fieldsets</span><span class="qnum">alloys</span></div>
+          <p class="desc">
+            Base metal answers &ldquo;what is it made of&rdquo;; uses answer &ldquo;what is it
+            for.&rdquo; They are separate questions, so they are separate filters &mdash; and
+            because an alloy can have several uses, ticking <span class="mono">MARINE</span> and
+            <span class="mono">AEROSPACE</span> means <i>either</i>, matching how
+            <a href="../api/01-endpoints.html#alloys">the API's repeated query parameters</a> behave.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Filters built from the data</span><span class="qnum">coins</span></div>
+          <p class="desc">
+            The metal checkboxes on the coins page are generated from the metals actually present in
+            the response, not from a fixed list of twelve. A checkbox that can only ever return zero
+            results is worse than no checkbox.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Cards or a table</span><span class="qnum">both layouts</span></div>
+          <p class="desc">
+            Every catalog page has a Cards / Table toggle. Cards are better for browsing; the table
+            fits far more rows on screen and is better for comparing. Same filtered, sorted array
+            &mdash; two renderers.
+          </p>
+        </div>
+      </div>
+
+      <h2>Remembering what you picked <span class="tag">js/preferences.js</span></h2>
+      <p class="dek">
+        Leave a catalog page and come back, and your filters, sort order and layout are still set.
+        One small shared module does that for all three pages.
+      </p>
+      <pre class="code"><span class="filename">metals_ui/js/preferences.js</span>const STORAGE_VERSION = "v1";
+const keyFor = (name) => `metals-atlas:${name}:${STORAGE_VERSION}`;
+
+export function loadPreferences(name) {
+  try {
+    const stored = window.localStorage.getItem(keyFor(name));
+    if (!stored) return {};
+
+    const parsed = JSON.parse(stored);
+    return parsed &amp;&amp; typeof parsed === "object" &amp;&amp; !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}</pre>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why not the URL?</span><span class="qnum">the router decides</span></div>
+          <p class="desc">
+            <span class="mono">#/elements?sort=name</span> would be the obvious choice &mdash; except
+            <a href="#routing">this router matches on the whole hash</a>, so that string would fall
+            through to the not-found view. Putting the state in
+            <span class="mono">localStorage</span> needs no router change at all. It is also the
+            right <i>scope</i>: a display preference belongs to one reader in one browser, not to a
+            shareable link.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Every access is wrapped</span><span class="qnum">it really does throw</span></div>
+          <p class="warn">
+            <span class="mono">localStorage</span> does not merely return empty in a private window
+            &mdash; in some browsers, and with site data blocked, <i>touching it raises</i>. A
+            remembered filter is never worth breaking a page over, so both reading and writing sit
+            inside <span class="mono">try</span>/<span class="mono">catch</span> and fall back to
+            defaults.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Distrust what you stored</span><span class="qnum">validate on the way in</span></div>
+          <p class="desc">
+            Anything could be under that key &mdash; a hand-edited value, or JSON written by an
+            older version of the page. Only a plain object is accepted; an array, a string,
+            <span class="mono">null</span> or malformed JSON is treated as absent. The key carries a
+            version, so a future shape change retires old values instead of trying to migrate them.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The trap worth stealing</span><span class="qnum">restoreCodes</span></div>
+          <p class="desc">
+            Restoring a saved set of checkboxes whose values no longer exist would leave
+            <i>every box unchecked</i> and an empty page that looks broken. So a stored list is only
+            used if it still overlaps the available options &mdash; otherwise the markup defaults
+            win. A deliberately empty selection is still preserved, because the reader chose it.
+          </p>
+        </div>
+      </div>
+
+      <p class="note">
+        <b>One detail that bites.</b> The checkbox fieldsets sit <i>outside</i> the
+        <span class="mono">&lt;form&gt;</span>, so a native <span class="mono">type="reset"</span>
+        button never touches them &mdash; Clear has to restore them by hand. And because filtering
+        is live, the form gets a <span class="mono">submit</span> handler that calls
+        <span class="mono">preventDefault()</span>: pressing Enter in the search box would otherwise
+        reload the page out from under the hash router.
+      </p>
     </section>
 
     <section class="block" id="crud">

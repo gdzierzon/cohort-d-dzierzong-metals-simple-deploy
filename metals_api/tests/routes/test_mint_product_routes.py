@@ -116,6 +116,57 @@ def test_create_requires_a_currency_code_for_a_coin(client, monkeypatch):
     ]
 
 
+def test_create_rejects_a_face_value_against_no_currency(client, monkeypatch):
+    # Arrange - 'XXX' is ISO 4217 for "no currency involved", so an amount beside
+    # it is a quantity of nothing. Mirrors chk_coins_no_value_without_currency, so
+    # the answer names the field instead of being a 500 from the database.
+    create = MagicMock()
+    monkeypatch.setattr(mint_product_service, "create_mint_product", create)
+
+    # Act
+    response = client.post(
+        "/api/mint-products",
+        json={
+            "name": "Austrian 1 Ducat",
+            "product_type": "COIN",
+            "alloy_id": 1,
+            "face_value": 1,
+            "face_value_currency_code": "XXX",
+        },
+    )
+
+    # Assert
+    assert response.status_code == 400
+    assert "face_value must be empty" in response.get_json()["errors"][0]
+    create.assert_not_called()
+
+
+def test_create_allows_no_currency_with_no_face_value(
+    client, monkeypatch, mint_product_response_dto
+):
+    # Arrange - the legitimate shape for a ducat or a real: a denomination that
+    # exists but has no ISO code, so the amount is deliberately left empty.
+    monkeypatch.setattr(
+        mint_product_service,
+        "create_mint_product",
+        MagicMock(return_value=mint_product_response_dto),
+    )
+
+    # Act
+    response = client.post(
+        "/api/mint-products",
+        json={
+            "name": "Austrian 1 Ducat",
+            "product_type": "COIN",
+            "alloy_id": 1,
+            "face_value_currency_code": "XXX",
+        },
+    )
+
+    # Assert
+    assert response.status_code == 201
+
+
 def test_create_accepts_a_bc_year(client, monkeypatch, mint_product_response_dto):
     # Arrange - the old constraint stopped at 500 AD, which ruled out ancient coins.
     monkeypatch.setattr(

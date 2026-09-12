@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database Migrations</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<div class="crumbs"><a href="../index.html">Tutorials</a> &rsaquo; <a href="index.html">Database</a> &rsaquo; Migrations</div>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-top">
+      <div class="masthead-text">
+        <p class="eyebrow">Database &middot; Page 3 of 3</p>
+        <h1>Changing a Database That Already Has Data</h1>
+        <p class="lede">
+          <span class="mono">metals-db.sql</span> builds a database from nothing, and starts by
+          dropping every table. That is exactly what you cannot do to a deployed database with real
+          accounts in it. This page is about the other path.
+        </p>
+      </div>
+      <figure class="codey-figure">
+        <img src="../images/cropped/codey-pointer-at-side.png" alt="Codey the Sr Developer, standing with a pointer, ready to walk through the guide">
+      </figure>
+    </div>
+    <div class="factbar">
+      <span class="fact">Folder &rarr; <b>sql/migrations/</b></span>
+      <span class="fact">Files &rarr; <b>001, 002, 003</b></span>
+      <span class="fact">Rule &rarr; <b>in order, once each</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <a class="toc-back" href="index.html">&larr; Database overview</a>
+    <div class="toc-label">On this page</div>
+    <ol>
+      <li><a href="#why">Why you cannot just re-run the seed</a></li>
+      <li><a href="#three">The four migrations</a></li>
+      <li><a href="#idempotent">Writing one you can run twice</a></li>
+      <li><a href="#rename">Restructuring without losing data</a></li>
+      <li><a href="#bugs">Two bugs the rehearsals caught</a></li>
+      <li><a href="#rehearse">How to rehearse one safely</a></li>
+      <li><a href="#running">Running them for real</a></li>
+      <li><a href="#terms">Key terms</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section class="block" id="why">
+      <div class="purpose-band-row">
+        <div class="purpose-band">
+          <p class="purpose-label">Purpose of this page</p>
+          <p>Show how this project changes the shape of a live database without destroying what is in it, and what makes a migration safe to trust.</p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-catching net">
+          <figcaption>the destructive option</figcaption>
+        </figure>
+      </div>
+
+      <h2>The seed script is a demolition crew <span class="tag">read its first ten lines</span></h2>
+      <p class="dek">
+        Everything <a href="01-schema.html">the schema page</a> describes comes from a script that
+        opens like this:
+      </p>
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS alloy_uses;
+DROP TABLE IF EXISTS alloy_elements;
+DROP TABLE IF EXISTS mint_product_components;
+DROP TABLE IF EXISTS coins;
+DROP TABLE IF EXISTS mint_products;
+DROP TABLE IF EXISTS alloys;
+DROP TABLE IF EXISTS elements;</pre>
+
+      <p class="warn">
+        <b>Run that against your deployed database and you delete every registered account.</b>
+        The seed script is for building a fresh database &mdash; your laptop, a CI job, a brand new
+        Azure server. It is never the way to change one that is already in use.
+      </p>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">What a migration is</span><span class="qnum">the idea</span></div>
+          <p class="desc">
+            A small script that takes the database from one known shape to the next, preserving the
+            rows. Numbered, applied in order, and committed to the repository alongside the code
+            that expects the new shape.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Why hand-written here</span><span class="qnum">a teaching choice</span></div>
+          <p class="desc">
+            Real projects reach for a tool &mdash; <b>Alembic</b> in Python, with versioning and
+            auto-generated diffs. These four are written by hand so you can read exactly what
+            happens. Once you have felt the work, the tool makes more sense.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The golden rule</span><span class="qnum">order matters</span></div>
+          <p class="desc">
+            Apply <span class="mono">001</span>, then <span class="mono">002</span>, then
+            <span class="mono">003</span>, then <span class="mono">004</span>. Each one assumes the
+            previous has already run. They are not interchangeable and they are not optional.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="three">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>The four migrations <span class="tag">what each one does</span></h2>
+          <p class="dek">
+            Each corresponds to a real change made to this project after it had already been
+            deployed. The first three changed the shape of the database; the fourth only adds rows,
+            which is the easier and far more common kind.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-working-on-laptop.png" alt="Codey typing on a laptop">
+          <figcaption>one file per change</figcaption>
+        </figure>
+      </div>
+
+      <div class="tree-wrap">
+        <table class="tree">
+          <thead><tr><th>File</th><th>What it changes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="path">001_full_periodic_table.sql</td>
+              <td>
+                Widens <span class="mono">elements.density</span> from
+                <span class="mono">NUMERIC(8,2)</span> to <span class="mono">NUMERIC(10,6)</span>,
+                then upserts all 118 elements &mdash; adding 90 new ones and correcting values on
+                the 28 already there.
+              </td>
+            </tr>
+            <tr>
+              <td class="path">002_alloy_families_and_uses.sql</td>
+              <td>
+                Adds <span class="mono">alloys.alloy_family</span> and the
+                <span class="mono">alloy_uses</span> junction table, backfills the existing alloys,
+                and seeds 35 new ones with their compositions and uses.
+              </td>
+            </tr>
+            <tr>
+              <td class="path">003_mint_products_and_metals.sql</td>
+              <td>
+                Adds <span class="mono">alloys.primary_metal</span>, restructures
+                <span class="mono">coins</span> into the
+                <span class="mono">mint_products</span>&nbsp;+&nbsp;<span class="mono">coins</span>
+                supertype/subtype pair, adds
+                <span class="mono">mint_product_components</span>, and seeds 37 products.
+              </td>
+            </tr>
+            <tr>
+              <td class="path">004_world_bullion_products.sql</td>
+              <td>
+                Adds three coinage alloys, eleven more mint products &mdash; world bullion coins,
+                named rounds and a state-mint medal &mdash; and the <span class="mono">alloy_uses</span>
+                rows that 003 forgot to give its coinage alloys. Changes no table's shape at all.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        <b>Order is not a style preference.</b> 003's steel and stainless compositions reference
+        iron, carbon, vanadium and niobium &mdash; elements that only exist after 001 has run. Skip
+        001 and 003 cannot work. What <i>happens</i> when you skip it is
+        <a href="#bugs">the most interesting thing on this page</a>.
+      </p>
+    </section>
+
+    <section class="block" id="idempotent">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Writing one you can run twice <span class="tag">idempotency</span></h2>
+          <p class="dek">
+            You will lose track of whether a migration ran. Connections drop, scripts get
+            interrupted, someone re-runs it to be sure. A migration that is safe to repeat removes
+            that entire category of worry.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-sticky-note-reminder.png" alt="Codey holding up a sticky note">
+          <figcaption>safe to run again</figcaption>
+        </figure>
+      </div>
+
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Wrap it in a transaction</span><span class="qnum">BEGIN / COMMIT</span></div>
+          <pre class="code">BEGIN;
+  -- everything
+COMMIT;</pre>
+          <p class="desc">
+            All of it lands, or none of it does. A migration that fails halfway through and leaves
+            the database in an invented third shape is far worse than one that fails cleanly.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">IF NOT EXISTS everywhere</span><span class="qnum">DDL</span></div>
+          <pre class="code">ALTER TABLE alloys
+  ADD COLUMN IF NOT EXISTS primary_metal VARCHAR(20);
+
+CREATE TABLE IF NOT EXISTS mint_product_components (
+  ...
+);</pre>
+          <p class="desc">
+            Postgres supports this on most <span class="mono">CREATE</span> and some
+            <span class="mono">ALTER</span> statements. A second run prints a
+            <span class="mono">NOTICE</span> and moves on.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Drop a constraint before adding it</span><span class="qnum">no IF NOT EXISTS here</span></div>
+          <pre class="code">ALTER TABLE alloys
+  DROP CONSTRAINT IF EXISTS chk_alloy_primary_metal;
+ALTER TABLE alloys
+  ADD CONSTRAINT chk_alloy_primary_metal CHECK (...);</pre>
+          <p class="desc">
+            <span class="mono">ADD CONSTRAINT</span> has no <span class="mono">IF NOT
+            EXISTS</span> form, so a second run would fail with &ldquo;constraint already
+            exists.&rdquo; Dropping first makes the pair repeatable.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Upsert, never plain insert</span><span class="qnum">ON CONFLICT</span></div>
+          <pre class="code">INSERT INTO alloys (name, color, alloy_family, description)
+VALUES (...)
+ON CONFLICT (name) DO UPDATE SET
+    color = EXCLUDED.color,
+    alloy_family = EXCLUDED.alloy_family,
+    description = EXCLUDED.description;</pre>
+          <p class="desc">
+            <span class="mono">EXCLUDED</span> is the row that <i>would</i> have been inserted.
+            <span class="mono">DO UPDATE</span> means a corrected recipe actually reaches a database
+            that already has the row &mdash; which <span class="mono">DO NOTHING</span> would
+            silently skip.
+          </p>
+        </div>
+      </div>
+
+      <p class="warn">
+        <b>A trap worth remembering.</b> <span class="mono">ON CONFLICT</span> only rescues
+        <i>uniqueness</i> violations. A <span class="mono">NOT NULL</span> or
+        <span class="mono">CHECK</span> violation is raised while Postgres is still building the
+        proposed row &mdash; before it ever looks for a conflict. So an upsert that omits a
+        <span class="mono">NOT NULL</span> column fails even when every row already exists. That is
+        a real bug from this project; <a href="#bugs">see below</a>.
+      </p>
+    </section>
+
+    <section class="block" id="rename">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>Restructuring without losing data <span class="tag">003, step by step</span></h2>
+          <p class="dek">
+            Splitting <span class="mono">coins</span> into two tables is the hardest of the three,
+            because the rows have to survive. The trick is to <b>rename</b> rather than create and
+            copy.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>the same rows, a new shape</figcaption>
+        </figure>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <b>Rename the old table.</b> <span class="mono">ALTER TABLE coins RENAME TO
+          mint_products</span> keeps every row and every id. No data is copied, so nothing can be
+          lost in the copying.
+        </li>
+        <li>
+          <b>Rename the columns that changed meaning.</b>
+          <span class="mono">coin_id</span> &rarr; <span class="mono">mint_product_id</span>, and
+          <span class="mono">country</span> &rarr; <span class="mono">issuer</span>.
+        </li>
+        <li>
+          <b>Add the new columns with a backfilling default.</b>
+          <span class="mono">product_type</span> is added
+          <span class="mono">NOT NULL DEFAULT 'COIN'</span> &mdash; correct, because everything
+          already in the table <i>is</i> a coin. The default is then dropped so new rows must say
+          what they are.
+        </li>
+        <li>
+          <b>Create the new, narrow <span class="mono">coins</span> table.</b> The name is free
+          again now that the old one has been renamed.
+        </li>
+        <li>
+          <b>Copy the legal-tender columns across, then drop them.</b> In that order. Dropping
+          first would throw the data away.
+        </li>
+      </ol>
+
+      <pre class="code"><span class="filename">sql/migrations/003_mint_products_and_metals.sql</span>    INSERT INTO coins (mint_product_id, face_value, face_value_currency_code)
+    SELECT mint_product_id, face_value, face_value_currency_code
+    FROM mint_products;
+
+    ALTER TABLE mint_products
+        DROP COLUMN face_value,
+        DROP COLUMN face_value_currency_code;</pre>
+
+      <h2>But a rename cannot run twice</h2>
+      <p class="dek">
+        <span class="mono">ALTER TABLE coins RENAME TO mint_products</span> fails the second time
+        &mdash; there is no <span class="mono">coins</span> table to rename any more, and there is
+        no <span class="mono">IF EXISTS</span> that makes the whole sequence safe. So the entire
+        structural step is guarded inside a <span class="mono">DO</span> block that asks whether it
+        has already happened:
+      </p>
+      <pre class="code"><span class="filename">sql/migrations/003_mint_products_and_metals.sql</span>DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'mint_products'
+    ) THEN
+        RAISE NOTICE 'mint_products already exists; skipping the structural rename.';
+        RETURN;
+    END IF;
+
+    ALTER TABLE coins RENAME TO mint_products;
+    ...
+END $$;</pre>
+      <p class="note">
+        <span class="mono">information_schema</span> is the standard, queryable catalogue of what
+        exists in a database. Asking it &ldquo;is there a table called
+        <span class="mono">mint_products</span>?&rdquo; is the cleanest way to tell whether this
+        step has run, because the answer is yes only after it has.
+      </p>
+
+      <h2>One more thing the rename needed</h2>
+      <p class="warn">
+        The original <span class="mono">coins</span> table had <b>no unique constraint on
+        name</b>. The seed blocks upsert by name &mdash; so without adding
+        <span class="mono">UNIQUE (name)</span> during the migration, the seed would have inserted
+        a <b>second</b> &ldquo;Morgan Silver Dollar&rdquo; beside the one already in the table.
+        Nothing would have errored. You would just quietly have two.
+      </p>
+    </section>
+
+    <section class="block" id="bugs">
+      <div class="section-intro">
+        <div class="intro-text">
+          <h2>Two bugs the rehearsals caught <span class="tag">the useful part</span></h2>
+          <p class="dek">
+            Neither of these was found by reading the SQL. Both were found by running it against a
+            copy of the real database and checking the result &mdash; which is the whole argument
+            for rehearsing.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-bug-hunting-net.png" alt="Codey holding a bug-catching net">
+          <figcaption>found by running it, not reading it</figcaption>
+        </figure>
+      </div>
+
+      <h2>Bug 1: a success that wasn't <span class="tag">exit code 0</span></h2>
+      <p>
+        Migration 002 was run against a database where 001 had been skipped, so iron and carbon did
+        not exist yet. It reported <b>success</b>. Here is what it had actually stored:
+      </p>
+      <pre class="code">        name         | pct_total | elements
+---------------------+-----------+----------
+ 1018 Mild Steel     |     0.770 |        2
+ 304 Stainless Steel |    28.750 |        4
+ Gray Cast Iron      |     2.800 |        2
+ M2 High-Speed Steel |    15.000 |        3
+
+alloys with broken composition: 20</pre>
+      <p class="warn">
+        <b>&ldquo;1018 Mild Steel&rdquo; with no iron and no carbon</b>, totalling 0.77 percent.
+        Twenty alloys silently incomplete. Exit code 0.
+      </p>
+      <p>
+        The cause is in the seed pattern itself. Compositions are built by joining a list of
+        symbols to the <span class="mono">elements</span> table:
+      </p>
+      <pre class="code"><span class="filename">sql/metals-db.sql</span>FROM alloy_component_data d
+INNER JOIN alloys a ON a.name = d.alloy_name
+INNER JOIN elements e ON e.symbol = d.element_symbol</pre>
+      <p>
+        An <span class="mono">INNER JOIN</span> <b>discards rows it cannot match</b>. The component
+        is thrown away before the insert happens, so the foreign key never gets the chance to
+        object. <i>A constraint cannot protect you from a row that is never offered to it.</i> The
+        same hole swallows a mistyped symbol on any database, fully migrated or not.
+      </p>
+      <p>
+        The fix is a post-condition: assert the arithmetic still works, and fail loudly when it
+        doesn't.
+      </p>
+      <pre class="code"><span class="filename">sql/migrations/003_mint_products_and_metals.sql</span>    IF offenders IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Alloy compositions must sum to 100 percent. Broken: %', offenders;
+    END IF;</pre>
+      <p class="note">
+        With the assertion in place the same run fails with <span class="mono">exit code 3</span>,
+        names all twenty offenders and their totals, and &mdash; because it is inside the
+        transaction &mdash; rolls back completely. The database is left exactly as it was.
+      </p>
+
+      <h2>Bug 2: the upsert that could not be repeated <span class="tag">NOT NULL</span></h2>
+      <p>
+        003 makes <span class="mono">primary_metal</span> <span class="mono">NOT NULL</span> once it
+        has derived every value. Replaying the migration then failed:
+      </p>
+      <pre class="code">ERROR:  null value in column "primary_metal" of relation "alloys"
+        violates not-null constraint</pre>
+      <p>
+        Which looks impossible &mdash; every alloy already existed, so the upsert should have taken
+        the <span class="mono">DO UPDATE</span> branch and never inserted anything. The reason is
+        the trap from the previous section: <b><span class="mono">ON CONFLICT</span> only handles
+        uniqueness violations.</b> The <span class="mono">NOT NULL</span> check happens while the
+        candidate row is being assembled, before Postgres looks for a conflict at all. The alloys
+        insert does not list <span class="mono">primary_metal</span> &mdash; it is derived later
+        &mdash; so the candidate row had a null in it and was rejected on the spot.
+      </p>
+      <pre class="code"><span class="filename">sql/migrations/003_mint_products_and_metals.sql</span>ALTER TABLE alloys ALTER COLUMN primary_metal DROP NOT NULL;</pre>
+      <p class="desc">
+        One line near the top, relaxing the column on every run &mdash; and the existing
+        <span class="mono">SET NOT NULL</span> further down puts it back after the derivation. The
+        migration replays cleanly, and the column ends up mandatory either way.
+      </p>
+
+      <p class="note">
+        <b>Honest limit.</b> Re-running the <i>newest</i> migration is supported. Re-running an
+        <i>older</i> one after a newer one is not: replaying 002 once 003 has tightened that column
+        fails, because 002 predates it. It fails loudly and rolls back, which is the right
+        behaviour &mdash; but it is not a recovery path.
+      </p>
+    </section>
+
+    <section class="block" id="rehearse">
+      <div class="section-intro codey-left">
+        <div class="intro-text">
+          <h2>How to rehearse one safely <span class="tag">do this every time</span></h2>
+          <p class="dek">
+            Never let production be the first database a migration touches. Rebuild the
+            <i>current deployed shape</i> locally, migrate that, and check the result.
+          </p>
+        </div>
+        <figure class="codey-figure">
+          <img src="../images/cropped/codey-debugging-magnifying-glass.png" alt="Codey inspecting something with a magnifying glass">
+          <figcaption>a copy, not the real thing</figcaption>
+        </figure>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <b>Get the old schema.</b> <span class="mono">git show &lt;commit&gt;:sql/metals-db.sql</span>
+          prints the version of the seed that matches what is deployed.
+        </li>
+        <li><b>Create a scratch database</b> in your local Postgres container and load that old seed into it.</li>
+        <li><b>Record the before state</b> &mdash; row counts, and the ids and values you expect to survive.</li>
+        <li><b>Run the migrations in order</b> with <span class="mono">-v ON_ERROR_STOP=1</span>.</li>
+        <li><b>Compare.</b> Did the counts move the way you expected? Did the old rows keep their ids? Is anything orphaned?</li>
+        <li><b>Run them all again.</b> This is where you find out whether they are really repeatable.</li>
+        <li><b>Drop the scratch database</b> and only then touch the real one.</li>
+      </ol>
+
+      <pre class="code">docker compose exec db psql -U postgres -c "CREATE DATABASE metals_rehearsal;"
+git show HEAD~5:sql/metals-db.sql > old-seed.sql
+docker compose exec -T db psql -U postgres -d metals_rehearsal -f - &lt; old-seed.sql</pre>
+
+      <p class="note">
+        <b>What the real rehearsal proved.</b> Starting from 26 elements, 29 alloys and 7 coins, the
+        four migrations produced 118 elements, 78 alloys, 48 mint products, 30 coins and 16
+        component rows &mdash; with all seven original coins keeping <b>their ids and their face
+        values</b>, the Krugerrand's meaningful null intact, and users and roles untouched. Each was
+        then run again with no change &mdash; with one exception, below, that is worth knowing about.
+      </p>
+      <p class="note">
+        <b>004 was rehearsed a second way.</b> Because it only adds rows, a fresh
+        <span class="mono">metals-db.sql</span> and an already-deployed database brought up to date
+        with <span class="mono">004</span> should end up holding <i>identical data</i>. That is
+        checkable, so it was checked: both were fingerprinted &mdash; every product with its weights,
+        alloy and coin facts, and every alloy with its full composition and use list &mdash; and
+        compared row by row. All 48 products and all 78 alloys matched. Two paths to the same place
+        is the property a migration is supposed to have, and comparing them is how you find out that
+        it does.
+      </p>
+      <p class="warn">
+        <b>The exception, and it is the same trap twice.</b> Replaying <span class="mono">002</span>
+        on a database that has already reached <span class="mono">003</span> <b>fails</b> &mdash;
+        exit 3, rolled back, nothing changed. The reason is
+        <a href="#bugs">the <span class="mono">NOT NULL</span> bug above</a> wearing a different hat:
+        <span class="mono">003</span> adds <span class="mono">alloys.primary_metal</span> as
+        <span class="mono">NOT NULL</span>, and 002's alloy <span class="mono">INSERT</span> cannot
+        supply a column that did not exist when 002 was written. Its
+        <span class="mono">ON CONFLICT</span> cannot save it, because a
+        <span class="mono">NOT NULL</span> breach is raised while the candidate row is still being
+        assembled. This is <i>not</i> a defect to go and fix: migrations are applied <b>once, in
+        order</b>, and the reason real tooling keeps a version table is precisely so that an earlier
+        one is never re-run after a later one. &ldquo;Idempotent&rdquo; means safe to re-run
+        <i>at its own point in the sequence</i> &mdash; which is exactly what you need when a
+        migration dies half way and you have to run it again.
+      </p>
+    </section>
+
+    <section class="block" id="running">
+      <h2>Running them for real <span class="tag">against Azure</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">The command</span><span class="qnum">one file at a time</span></div>
+          <pre class="code">psql "host=&lt;prefix&gt;-pg.postgres.database.azure.com port=5432 dbname=metals user=metalsadmin sslmode=require" `
+     -W -v ON_ERROR_STOP=1 -f sql/migrations/001_full_periodic_table.sql</pre>
+          <p class="desc">
+            Then 002, 003 and 004 in turn. <span class="mono">-W</span> prompts for the password
+            rather than putting it in your shell history.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">ON_ERROR_STOP=1</span><span class="qnum">not optional</span></div>
+          <p class="warn">
+            Without it, <span class="mono">psql</span> prints an error and <b>carries on running
+            the rest of the file</b>. Combined with the transaction, this flag is what turns any
+            failure into a clean, complete rollback.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Then redeploy the API</span><span class="qnum">easy to forget</span></div>
+          <p class="desc">
+            The running container holds the <i>old</i> SQLAlchemy models. Until the new image ships,
+            it does not know about the new columns or tables &mdash; and in the case of 001, would
+            keep rounding densities on every write. Migration and deploy belong together.
+          </p>
+        </div>
+        <div class="qcard">
+          <div class="qhead"><span class="qtitle">Firewall</span><span class="qnum">if it just hangs</span></div>
+          <p class="desc">
+            Your current IP needs a rule on the Postgres server
+            (<span class="mono">LocalClient-*</span> in
+            <a href="../terraform/05-database.html">terraform/database.tf</a>). If your address has
+            changed since you last applied, re-apply with the new
+            <span class="mono">client_ip</span>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="terms">
+      <h2>Key terms <span class="tag">glossary</span></h2>
+      <div class="qgrid">
+        <div class="qcard">
+          <dl class="def">
+            <dt>Migration</dt>
+            <dd>A numbered script that moves a database from one shape to the next while keeping its data. Applied in order, once each, and committed beside the code that needs the new shape.</dd>
+            <dt>Idempotent</dt>
+            <dd>Safe to run more than once with the same end result. Achieved with <span class="mono">IF NOT EXISTS</span>, drop-then-add for constraints, upserts instead of inserts, and guards around anything that cannot repeat.</dd>
+            <dt>Upsert</dt>
+            <dd>An <span class="mono">INSERT</span> that becomes an update when the row already exists &mdash; <span class="mono">ON CONFLICT ... DO UPDATE</span>. <span class="mono">EXCLUDED</span> refers to the row that would have been inserted.</dd>
+            <dt>Transaction</dt>
+            <dd><span class="mono">BEGIN</span> &hellip; <span class="mono">COMMIT</span>. Everything inside either lands together or is rolled back together, so a failure cannot leave a half-migrated database.</dd>
+            <dt>Backfill</dt>
+            <dd>Filling a newly added column for rows that already exist &mdash; with a <span class="mono">DEFAULT</span>, an <span class="mono">UPDATE</span>, or a derivation &mdash; before making it mandatory.</dd>
+            <dt>Post-condition</dt>
+            <dd>A check after the work that fails loudly if the result is wrong. The defence against joins that silently drop rows.</dd>
+            <dt><span class="mono">information_schema</span></dt>
+            <dd>The standard catalogue of what exists in a database. Queryable, which is how a migration can ask whether a step has already run.</dd>
+            <dt>Rehearsal</dt>
+            <dd>Running a migration against a throwaway copy of the current deployed shape, and checking the result, before touching anything real.</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-nav">
+      <a class="prev" href="02-docker-compose.html"><span class="pn-label">&larr; Back</span>Running it locally</a>
+      <a class="next" href="../ui/index.html"><span class="pn-label">Next &rarr;</span>The UI</a>
+    </div>
+
+  </main>
+</div>
+
+<div class="codey-signoff">
+  <img src="../images/cropped/codey-thumbs-up.png" alt="Codey giving a thumbs up">
+  <p>Rehearse it, assert the result, and production becomes the boring part.</p>
+</div>
+
+<footer class="page">
+  File reference: <span class="mono">sql/migrations/</span>
+</footer>
+
+</body>
+</html>

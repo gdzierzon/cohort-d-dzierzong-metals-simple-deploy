@@ -114,7 +114,8 @@ def test_mint_product_dtos_validate_business_input_shape():
         "product_type": "COIN",
         "alloy_id": 0,
         "year_introduced": 400,
-        "face_value_currency_code": "US",
+        # A single character is too short for any currency code, ISO or historic.
+        "face_value_currency_code": "U",
     }
     update_data = {}
 
@@ -126,7 +127,7 @@ def test_mint_product_dtos_validate_business_input_shape():
     assert errors == [
         "name must be a non-empty string.",
         "alloy_id must be a positive integer.",
-        "face_value_currency_code must contain exactly 3 characters.",
+        "face_value_currency_code must contain 2 or 3 characters.",
     ]
     assert update_errors == [
         "At least one field must be provided."
