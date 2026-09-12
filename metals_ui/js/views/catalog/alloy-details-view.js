@@ -5,10 +5,10 @@ import { getMintProductsByAlloy } from "../../api/coins-api.js";
 
 const alloyImageDirectory = "./assets/images/alloys";
 const elementImageDirectory = "./assets/images/elements";
-const fallbackAlloyImage = `${alloyImageDirectory}/aluminum-alloy.png`;
-const fallbackElementImage = `${elementImageDirectory}/generic.png`;
+const fallbackAlloyImage = "./assets/images/no-image.png";
+const fallbackElementImage = "./assets/images/no-image.png";
 const coinImageDirectory = "./assets/images/coins";
-const fallbackCoinImage = `${coinImageDirectory}/american-gold-eagle-1-oz.png`;
+const fallbackCoinImage = "./assets/images/no-image.png";
 const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 
 export function alloyDetailsView({ alloyId } = {}) {
@@ -51,7 +51,7 @@ function createAlloyDetails(alloy, composition, elements, coins) {
   const image = document.createElement("img");
   image.src = `${alloyImageDirectory}/${slugify(alloy.name)}.png`;
   image.alt = `${alloy.name} polished alloy bar on slate`;
-  addImageFallback(image, fallbackAlloyImage, "Polished alloy bar on slate");
+  addImageFallback(image, fallbackAlloyImage, "No image available");
 
   const content = document.createElement("div");
   content.className = "alloy-details-hero__content";
@@ -94,7 +94,7 @@ function createCompositionCard({ component, element }) {
   image.src = `${elementImageDirectory}/${element.symbol}.png`;
   image.alt = `${element.name} specimen on slate`;
   image.loading = "lazy";
-  addImageFallback(image, fallbackElementImage, "Generic atomic element illustration");
+  addImageFallback(image, fallbackElementImage, "No image available");
   card.querySelector(".composition-card__number").textContent = `Atomic no. ${element.atomic_number}`;
   card.querySelector(".composition-card__percent").textContent = `${percentFormatter.format(Number(component.percent_of_alloy))}%`;
   card.querySelector("h3").textContent = element.name;
@@ -111,7 +111,7 @@ function createCoinCard(coin) {
   image.src = `${coinImageDirectory}/${slugify(coin.name)}.png`;
   image.alt = `${coin.name} proof obverse and reverse`;
   image.loading = "lazy";
-  addImageFallback(image, fallbackCoinImage, "Proof coin obverse and reverse");
+  addImageFallback(image, fallbackCoinImage, "No image available");
   card.querySelector(".coin-card__country").textContent = coin.country || "Country not specified";
   card.querySelector("h3").textContent = coin.name;
   card.querySelector(".coin-card__mint").textContent = coin.mint || "Mint not specified";

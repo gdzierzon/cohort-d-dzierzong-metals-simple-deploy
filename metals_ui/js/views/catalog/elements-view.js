@@ -8,7 +8,7 @@ const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 
 // once a value is that small.
 const smallNumberFormatter = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 2 });
 const elementImageDirectory = "./assets/images/elements";
-const fallbackElementImage = `${elementImageDirectory}/generic.png`;
+const fallbackElementImage = "./assets/images/no-image.png";
 
 // The ten categories the API returns, grouped the way the periodic table groups
 // them. Metals are on by default because this catalog is about metals and the
@@ -416,7 +416,7 @@ function createElementCard(element) {
     "error",
     () => {
       image.src = fallbackElementImage;
-      image.alt = "Generic atomic element illustration";
+      image.alt = "No image available";
     },
     { once: true },
   );

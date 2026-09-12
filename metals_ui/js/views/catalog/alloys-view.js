@@ -3,7 +3,7 @@ import { ALLOY_FAMILIES, ALLOY_USES, ALLOY_USE_GROUPS } from "../../constants/al
 import { loadPreferences, restoreCodes, savePreferences } from "../../preferences.js";
 
 const alloyImageDirectory = "./assets/images/alloys";
-const fallbackAlloyImage = `${alloyImageDirectory}/aluminum-alloy.png`;
+const fallbackAlloyImage = "./assets/images/no-image.png";
 const PREFERENCES_NAME = "alloys-view";
 
 const SORTERS = {
@@ -394,7 +394,7 @@ function createAlloyCard(alloy) {
   image.loading = "lazy";
   image.addEventListener("error", () => {
     image.src = fallbackAlloyImage;
-    image.alt = "Polished alloy bar on slate";
+    image.alt = "No image available";
   }, { once: true });
 
   const family = document.createElement("span");

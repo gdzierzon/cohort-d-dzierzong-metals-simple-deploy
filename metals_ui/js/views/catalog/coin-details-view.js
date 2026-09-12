@@ -1,10 +1,11 @@
 import { getAlloy } from "../../api/alloys-api.js";
 import { getMintProduct } from "../../api/coins-api.js";
+import { mintProductImageFilename, slugify } from "../../constants/mint-product-images.js";
 
 const coinImageDirectory = "./assets/images/coins";
 const alloyImageDirectory = "./assets/images/alloys";
-const fallbackCoinImage = `${coinImageDirectory}/american-gold-eagle-1-oz.png`;
-const fallbackAlloyImage = `${alloyImageDirectory}/aluminum-alloy.png`;
+const fallbackCoinImage = "./assets/images/no-image.png";
+const fallbackAlloyImage = "./assets/images/no-image.png";
 // ISO 4217 reserves 'XXX' for "no currency involved".
 const NO_CURRENCY_CODE = "XXX";
 
@@ -33,9 +34,9 @@ function createDetails(coin, alloy) {
   const hero = document.createElement("section");
   hero.className = "coin-details-hero";
   const image = document.createElement("img");
-  image.src = `${coinImageDirectory}/${slugify(coin.name)}.png`;
+  image.src = `${coinImageDirectory}/${mintProductImageFilename(coin.name)}`;
   image.alt = `${coin.name} proof obverse and reverse`;
-  addFallback(image, fallbackCoinImage, "Proof coin obverse and reverse");
+  addFallback(image, fallbackCoinImage, "No image available");
   const content = document.createElement("article");
   content.className = "coin-details-hero__content";
   content.innerHTML = `<p class="details-content__eyebrow"><span class="details-content__label"></span> <span></span></p><h1></h1><p class="coin-details-hero__origin"></p><dl class="details-facts"><dt>Form</dt><dd></dd><dt>Metal</dt><dd></dd><dt>Mint</dt><dd></dd><dt>Introduced</dt><dd></dd><dt>Gross weight</dt><dd></dd><dt>Fine metal</dt><dd></dd><dt>Face value</dt><dd></dd><dt>Legal tender</dt><dd></dd></dl>`;
@@ -113,7 +114,7 @@ function createAlloyCard(alloy) {
   const image = card.querySelector("img");
   image.src = `${alloyImageDirectory}/${slugify(alloy.name)}.png`;
   image.alt = `${alloy.name} polished alloy bar on slate`;
-  addFallback(image, fallbackAlloyImage, "Polished alloy bar on slate");
+  addFallback(image, fallbackAlloyImage, "No image available");
   card.querySelector("h3").textContent = alloy.name;
   card.querySelector(".coin-alloy-card__color").textContent = formatLabel(alloy.color) || "Color not specified";
   card.querySelector(".coin-alloy-card__description").textContent = alloy.description || "A metal blend in the Metals Atlas collection.";
@@ -137,5 +138,4 @@ function formatFaceValue(coin) {
   return `${code || ""} ${formatNumber(coin.face_value)}`.trim();
 }
 function formatYear(year) { return year < 0 ? `${Math.abs(year)} BC` : String(year); }
-function slugify(value) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
 function formatLabel(value) { return value ? value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) : ""; }

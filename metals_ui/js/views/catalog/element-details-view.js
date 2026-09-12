@@ -2,7 +2,7 @@ import { getElement } from "../../api/elements-api.js";
 
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const elementImageDirectory = "./assets/images/elements";
-const fallbackElementImage = `${elementImageDirectory}/generic.png`;
+const fallbackElementImage = "./assets/images/no-image.png";
 
 export function elementDetailsView({ atomicNumber } = {}) {
   const atomicNumberValue = Number(atomicNumber);
@@ -42,7 +42,7 @@ function createDetails(element) {
   image.alt = element.symbol === "Co" ? "Silvery cobalt metal beside a rich blue crystal on slate" : `${element.name} specimen on slate`;
   image.addEventListener("error", () => {
     image.src = fallbackElementImage;
-    image.alt = "Generic atomic element illustration";
+    image.alt = "No image available";
   }, { once: true });
   visual.append(image);
 

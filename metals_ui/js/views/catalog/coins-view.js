@@ -1,9 +1,10 @@
 import { getMintProducts } from "../../api/coins-api.js";
 import { METAL_ORDER, PRODUCT_TYPES } from "../../constants/mint-product-metadata.js";
+import { mintProductImageFilename } from "../../constants/mint-product-images.js";
 import { loadPreferences, restoreCodes, savePreferences } from "../../preferences.js";
 
 const coinImageDirectory = "./assets/images/coins";
-const fallbackCoinImage = `${coinImageDirectory}/american-gold-eagle-1-oz.png`;
+const fallbackCoinImage = "./assets/images/no-image.png";
 const PREFERENCES_NAME = "coins-view";
 // ISO 4217 reserves 'XXX' for "no currency involved".
 const NO_CURRENCY_CODE = "XXX";
@@ -413,14 +414,14 @@ function createProductCard(product) {
   card.innerHTML = `<img><div class="coin-card__body"><p class="coin-card__chips"></p><h2></h2><p class="coin-card__mint"></p><dl class="coin-card__facts"><dt>Introduced</dt><dd></dd><dt>Weight</dt><dd></dd><dt>Fine metal</dt><dd></dd><dt>Alloy</dt><dd></dd><dt>Face value</dt><dd></dd></dl></div>`;
 
   const image = card.querySelector("img");
-  image.src = `${coinImageDirectory}/${slugify(product.name)}.png`;
+  image.src = `${coinImageDirectory}/${mintProductImageFilename(product.name)}`;
   image.alt = `${product.name} obverse and reverse`;
   image.loading = "lazy";
   image.addEventListener(
     "error",
     () => {
       image.src = fallbackCoinImage;
-      image.alt = "Proof coin obverse and reverse";
+      image.alt = "No image available";
     },
     { once: true },
   );
@@ -499,8 +500,4 @@ function formatNumber(value) {
 
 function formatLabel(value) {
   return value ? value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase()) : "";
-}
-
-function slugify(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
