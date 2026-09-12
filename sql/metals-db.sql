@@ -7,7 +7,9 @@ DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS alloy_uses;
 DROP TABLE IF EXISTS alloy_elements;
+DROP TABLE IF EXISTS mint_product_components;
 DROP TABLE IF EXISTS coins;
+DROP TABLE IF EXISTS mint_products;
 DROP TABLE IF EXISTS alloys;
 DROP TABLE IF EXISTS elements;
  
@@ -43,7 +45,32 @@ CREATE TABLE alloys (
     -- question with many answers per alloy, which is why it lives in
     -- alloy_uses rather than in a second column here.
     alloy_family VARCHAR(40) NOT NULL,
+    -- The single metal this alloy is mostly made of - finer than alloy_family,
+    -- which collapses gold, silver, platinum and palladium into PRECIOUS. This
+    -- is what "a gold coin" or "a brass token" actually means, and coins read it
+    -- through their alloy rather than storing their own copy.
+    --
+    -- Nullable here only because it is DERIVED: the seed fills it from the
+    -- majority element in alloy_elements once compositions are loaded, then sets
+    -- NOT NULL. Computing it beats typing it 75 times - there is no opportunity
+    -- for the column and the composition to disagree.
+    primary_metal VARCHAR(20),
     description TEXT,
+
+    CONSTRAINT chk_alloy_primary_metal CHECK (primary_metal IN (
+        'ALUMINUM',
+        'COPPER',
+        'GOLD',
+        'IRON',
+        'MAGNESIUM',
+        'NICKEL',
+        'PALLADIUM',
+        'PLATINUM',
+        'SILVER',
+        'TIN',
+        'TITANIUM',
+        'ZINC'
+    )),
 
     CONSTRAINT chk_alloy_family CHECK (alloy_family IN (
         'PRECIOUS',
@@ -87,25 +114,128 @@ CREATE TABLE user_roles (
         ON DELETE RESTRICT
 );
 
-CREATE TABLE coins (
-    coin_id SERIAL PRIMARY KEY,
-    name VARCHAR(120) NOT NULL,
-    country VARCHAR(80),
+-- Anything struck or pressed from metal: coins, rounds, bars, ingots, medals,
+-- tokens, and gold-foil notes. This is the supertype; what every one of them has
+-- in common is a metal composition and a weight.
+CREATE TABLE mint_products (
+    mint_product_id SERIAL PRIMARY KEY,
+    -- Unique so the seeds can upsert by name instead of inserting blindly, the
+    -- same way alloys does. Without it, re-running a seed quietly doubles the
+    -- catalog.
+    name VARCHAR(120) NOT NULL UNIQUE,
+    product_type VARCHAR(20) NOT NULL,
+    -- A sovereign state for coins, a private mint for rounds and bars.
+    issuer VARCHAR(80),
     mint VARCHAR(120),
     year_introduced SMALLINT,
-    alloy_id INTEGER NOT NULL,
+    -- Everything the piece weighs, including any non-metal carrier.
     gross_weight_g NUMERIC(10,4),
-    face_value NUMERIC(12,2),
-    face_value_currency_code CHAR(3),
+    -- The actual metal in it. Usually gross_weight_g x fineness, but NOT for a
+    -- goldback, where most of the weight is polymer and the gold is a thin foil
+    -- layer - so it is recorded rather than derived.
+    fine_metal_weight_g NUMERIC(10,4),
+    -- The predominant alloy by weight. Multi-layer pieces list their layers in
+    -- mint_product_components; this still points at the one that dominates.
+    alloy_id INTEGER NOT NULL,
 
-    CONSTRAINT fk_coins_alloy
+    CONSTRAINT fk_mint_products_alloy
         FOREIGN KEY (alloy_id)
         REFERENCES alloys (alloy_id)
         ON DELETE RESTRICT,
 
-    CONSTRAINT chk_coins_year_introduced
-        CHECK (year_introduced IS NULL OR year_introduced BETWEEN 500 AND 3000)
+    CONSTRAINT chk_mint_products_type CHECK (product_type IN (
+        'COIN',
+        'ROUND',
+        'BAR',
+        'INGOT',
+        'MEDAL',
+        'TOKEN',
+        'NOTE'
+    )),
+
+    -- Widened from the original 500-3000: a Roman denarius predates 500 AD, and
+    -- SMALLINT holds negative years for BC dates without complaint.
+    CONSTRAINT chk_mint_products_year
+        CHECK (year_introduced IS NULL OR year_introduced BETWEEN -3000 AND 3000),
+
+    CONSTRAINT chk_mint_products_weights
+        CHECK (fine_metal_weight_g IS NULL
+               OR gross_weight_g IS NULL
+               OR fine_metal_weight_g <= gross_weight_g),
+
+    -- Redundant on its own - mint_product_id is already unique - but required so
+    -- the coins subtype below can point a composite foreign key at it.
+    CONSTRAINT uq_mint_products_type UNIQUE (mint_product_id, product_type)
 );
+
+-- The coin subtype: the things that are legal tender. Its existence is what says
+-- "this is money", which is why there is no is_coin flag anywhere.
+CREATE TABLE coins (
+    -- Primary key and foreign key at once. That pairing is what makes this 1:1 -
+    -- a product can have at most one coins row, and none at all if it is a bar.
+    mint_product_id INTEGER PRIMARY KEY,
+    -- Carried so the composite foreign key below can check it. Pinned to 'COIN'.
+    product_type VARCHAR(20) NOT NULL DEFAULT 'COIN',
+    -- Nullable for one real reason: a Krugerrand is legal tender with no
+    -- denomination printed on it - its value is the gold price. That is a fact
+    -- about the coin, not missing data.
+    face_value NUMERIC(12,2),
+    face_value_currency_code CHAR(3) NOT NULL,
+    is_legal_tender BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT chk_coins_product_type CHECK (product_type = 'COIN'),
+
+    -- Points at the UNIQUE above, so a coins row can only ever attach to a
+    -- product whose type is COIN. Changing that product to a BAR while this row
+    -- exists is refused by the database - no trigger needed.
+    CONSTRAINT fk_coins_mint_product
+        FOREIGN KEY (mint_product_id, product_type)
+        REFERENCES mint_products (mint_product_id, product_type)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+-- How a multi-layer piece is actually built: a clad quarter, a plated cent, a
+-- bimetallic 2 euro. Solid pieces have no rows here at all - their alloy_id says
+-- everything there is to say.
+CREATE TABLE mint_product_components (
+    mint_product_id INTEGER NOT NULL,
+    alloy_id INTEGER NOT NULL,
+    component_role VARCHAR(20) NOT NULL,
+    -- Left NULL where the split between layers is not something we can state
+    -- accurately. Better an honest gap than an invented number.
+    percent_of_weight NUMERIC(6,3),
+
+    CONSTRAINT pk_mint_product_components
+        PRIMARY KEY (mint_product_id, alloy_id, component_role),
+
+    CONSTRAINT fk_mint_product_components_product
+        FOREIGN KEY (mint_product_id)
+        REFERENCES mint_products (mint_product_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_mint_product_components_alloy
+        FOREIGN KEY (alloy_id)
+        REFERENCES alloys (alloy_id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT chk_mint_product_component_role CHECK (component_role IN (
+        'CORE',
+        'CLADDING',
+        'PLATING',
+        'RING',
+        'CENTER',
+        'LEAF'
+    )),
+
+    CONSTRAINT chk_mint_product_component_percent
+        CHECK (percent_of_weight IS NULL
+               OR (percent_of_weight > 0 AND percent_of_weight <= 100))
+);
+
+CREATE INDEX idx_mint_products_alloy_id ON mint_products (alloy_id);
+CREATE INDEX idx_mint_products_product_type ON mint_products (product_type);
+CREATE INDEX idx_mint_product_components_alloy_id ON mint_product_components (alloy_id);
 
 CREATE TABLE alloy_elements (
     alloy_id SMALLINT NOT NULL,
@@ -409,7 +539,20 @@ VALUES
     ('Zamak 3', 'silver gray', 'ZINC', 'The default zinc die-casting alloy for housings and hardware.'),
     ('Zamak 5', 'silver gray', 'ZINC', 'Copper-bearing zinc die-cast alloy with higher strength.'),
     ('AZ91D Magnesium', 'dull silver', 'MAGNESIUM', 'Common magnesium die-casting alloy for light housings.'),
-    ('AZ31B Magnesium', 'dull silver', 'MAGNESIUM', 'Wrought magnesium sheet and extrusion alloy.')
+    ('AZ31B Magnesium', 'dull silver', 'MAGNESIUM', 'Wrought magnesium sheet and extrusion alloy.'),
+    -- Coinage and bullion alloys. Circulating coins are mostly base metal, and
+    -- clad coins need the plating and the core as separate alloys.
+    ('Commercial Pure Copper', 'reddish', 'COPPER', 'Unalloyed copper used for coin cores, plating, and bullion rounds.'),
+    ('Cupronickel 75/25', 'silvery', 'COPPER', 'The US five cent alloy, also the cladding on US dimes and quarters.'),
+    ('Nickel Brass', 'pale gold', 'COPPER', 'Hard brass for circulating coins such as the euro ring and old UK threepence.'),
+    ('Nordic Gold', 'golden', 'COPPER', 'Tarnish-resistant gold-colored coinage alloy used for euro cent coins.'),
+    ('Manganese Brass', 'golden', 'COPPER', 'Golden dollar cladding, chosen to match an older coin on vending sensors.'),
+    ('Coinage Zinc Core', 'bluish silver', 'ZINC', 'The zinc core inside a modern copper-plated US cent.'),
+    ('Coinage Steel Core', 'dark gray', 'FERROUS', 'Low-carbon steel core used under plating in low-value circulating coins.'),
+    ('Coinage Aluminum', 'silver gray', 'ALUMINUM', 'Near-pure aluminum for very low denomination circulating coins.'),
+    ('Fine Silver 999', 'bright silver', 'PRECIOUS', 'Investment-grade silver for rounds and bars.'),
+    ('Fine Platinum 9995', 'silvery white', 'PRECIOUS', 'Investment-grade platinum for bars and coins.'),
+    ('Fine Palladium 9995', 'silvery white', 'PRECIOUS', 'Investment-grade palladium for bars and coins.')
 ON CONFLICT (name) DO UPDATE SET
     color = EXCLUDED.color,
     alloy_family = EXCLUDED.alloy_family,
@@ -681,7 +824,38 @@ WITH alloy_component_data (alloy_name, element_symbol, pct) AS (
         ('AZ91D Magnesium', 'Mn', 0.300),
         ('AZ31B Magnesium', 'Mg', 96.000),
         ('AZ31B Magnesium', 'Al', 3.000),
-        ('AZ31B Magnesium', 'Zn', 1.000)
+        ('AZ31B Magnesium', 'Zn', 1.000),
+
+        -- Coinage and bullion alloys.
+        ('Commercial Pure Copper', 'Cu', 99.950),
+        ('Commercial Pure Copper', 'O', 0.050),
+        ('Cupronickel 75/25', 'Cu', 75.000),
+        ('Cupronickel 75/25', 'Ni', 25.000),
+        ('Nickel Brass', 'Cu', 75.000),
+        ('Nickel Brass', 'Zn', 20.000),
+        ('Nickel Brass', 'Ni', 5.000),
+        ('Nordic Gold', 'Cu', 89.000),
+        ('Nordic Gold', 'Al', 5.000),
+        ('Nordic Gold', 'Zn', 5.000),
+        ('Nordic Gold', 'Sn', 1.000),
+        ('Manganese Brass', 'Cu', 77.000),
+        ('Manganese Brass', 'Zn', 12.000),
+        ('Manganese Brass', 'Mn', 7.000),
+        ('Manganese Brass', 'Ni', 4.000),
+        ('Coinage Zinc Core', 'Zn', 99.200),
+        ('Coinage Zinc Core', 'Cu', 0.800),
+        ('Coinage Steel Core', 'Fe', 99.600),
+        ('Coinage Steel Core', 'Mn', 0.320),
+        ('Coinage Steel Core', 'C', 0.080),
+        ('Coinage Aluminum', 'Al', 99.500),
+        ('Coinage Aluminum', 'Fe', 0.300),
+        ('Coinage Aluminum', 'Si', 0.200),
+        ('Fine Silver 999', 'Ag', 99.900),
+        ('Fine Silver 999', 'Cu', 0.100),
+        ('Fine Platinum 9995', 'Pt', 99.950),
+        ('Fine Platinum 9995', 'Ir', 0.050),
+        ('Fine Palladium 9995', 'Pd', 99.950),
+        ('Fine Palladium 9995', 'Ru', 0.050)
 )
 INSERT INTO alloy_elements (alloy_id, atomic_number, percent_of_alloy)
 SELECT
@@ -716,6 +890,58 @@ BEGIN
     IF offenders IS NOT NULL THEN
         RAISE EXCEPTION
             'Alloy compositions must sum to 100 percent. Broken: %', offenders;
+    END IF;
+END $$;
+
+-- Derive primary_metal from the composition rather than repeating it by hand.
+-- DISTINCT ON with the ORDER BY below picks the single element with the largest
+-- mass fraction for each alloy.
+UPDATE alloys a
+SET primary_metal = upper(majority.metal_name)
+FROM (
+    SELECT DISTINCT ON (ae.alloy_id)
+           ae.alloy_id,
+           e.name AS metal_name
+    FROM alloy_elements ae
+    INNER JOIN elements e ON e.atomic_number = ae.atomic_number
+    ORDER BY ae.alloy_id, ae.percent_of_alloy DESC, e.atomic_number
+) AS majority
+WHERE majority.alloy_id = a.alloy_id;
+
+-- Now that it is populated, make it mandatory. Anything added later has to pass
+-- the CHECK and cannot be left empty.
+ALTER TABLE alloys ALTER COLUMN primary_metal SET NOT NULL;
+
+-- The families were typed by hand, so confirm each one still agrees with the
+-- metal just computed. This is the assertion that keeps "COPPER family" and
+-- "mostly copper" from drifting apart - and it is what catches a brass being
+-- filed under PRECIOUS by accident.
+DO $$
+DECLARE
+    mismatches text;
+BEGIN
+    SELECT string_agg(name || ' (' || alloy_family || ' / ' || primary_metal || ')', ', ' ORDER BY name)
+    INTO mismatches
+    FROM alloys
+    WHERE (alloy_family, primary_metal) NOT IN (
+        ('ALUMINUM', 'ALUMINUM'),
+        ('COPPER', 'COPPER'),
+        ('FERROUS', 'IRON'),
+        ('MAGNESIUM', 'MAGNESIUM'),
+        ('NICKEL', 'NICKEL'),
+        ('TIN', 'TIN'),
+        ('TITANIUM', 'TITANIUM'),
+        ('ZINC', 'ZINC'),
+        -- PRECIOUS is the one family that spans several metals.
+        ('PRECIOUS', 'GOLD'),
+        ('PRECIOUS', 'SILVER'),
+        ('PRECIOUS', 'PLATINUM'),
+        ('PRECIOUS', 'PALLADIUM')
+    );
+
+    IF mismatches IS NOT NULL THEN
+        RAISE EXCEPTION
+            'alloy_family disagrees with the majority element. Offenders: %', mismatches;
     END IF;
 END $$;
 
@@ -856,44 +1082,229 @@ FROM alloy_use_data d
 INNER JOIN alloys a ON a.name = d.alloy_name
 ON CONFLICT (alloy_id, use_code) DO NOTHING;
 
--- Common precious metal coins.
+-- Mint products: coins, rounds, bars, ingots, medals, tokens, and goldbacks.
 -- Uses alloy names already seeded above.
-INSERT INTO coins (
+--
+-- alloy_id is the predominant alloy BY WEIGHT, which is occasionally not the one
+-- you see: a clad US quarter is mostly its pure copper core, not the cupronickel
+-- on the outside. Layers are recorded in mint_product_components below.
+--
+-- fine_metal_weight_g is filled in only where it means something - bullion and
+-- precious coins. For a circulating base-metal coin nobody asks how much copper
+-- is in it, so it stays NULL rather than carrying a number no one wants.
+INSERT INTO mint_products (
     name,
-    country,
+    product_type,
+    issuer,
     mint,
     year_introduced,
-    alloy_id,
     gross_weight_g,
-    face_value,
-    face_value_currency_code
+    fine_metal_weight_g,
+    alloy_id
 )
 SELECT
     v.name,
-    v.country,
+    v.product_type,
+    v.issuer,
     v.mint,
     v.year_introduced,
-    a.alloy_id,
     v.gross_weight_g,
-    v.face_value,
-    v.face_value_currency_code
+    v.fine_metal_weight_g,
+    a.alloy_id
 FROM (
     VALUES
-        ('American Gold Eagle (1 oz)', 'United States', 'United States Mint', 1986, '22K Gold Coin Alloy', 33.9305, 50.00, 'USD'),
-        ('Morgan Silver Dollar', 'United States', 'United States Mint', 1878, 'Coin Silver', 26.7300, 1.00, 'USD'),
-        ('Peace Silver Dollar', 'United States', 'United States Mint', 1921, 'Coin Silver', 26.7300, 1.00, 'USD'),
-        ('Franklin Half Dollar', 'United States', 'United States Mint', 1948, 'Coin Silver', 12.5000, 0.50, 'USD'),
-        ('Krugerrand (1 oz)', 'South Africa', 'South African Mint', 1967, '22K Gold Coin Alloy', 33.9300, NULL, 'ZAR'),
-        ('Gold Britannia (1 oz)', 'United Kingdom', 'The Royal Mint', 1987, '22K Gold Coin Alloy', 34.0500, 100.00, 'GBP'),
-        ('Gold Maple Leaf (1 oz)', 'Canada', 'Royal Canadian Mint', 1979, 'Fine Gold 24K', 31.1035, 50.00, 'CAD')
+        -- Precious bullion coins.
+        ('American Gold Eagle (1 oz)', 'COIN', 'United States', 'United States Mint', 1986, 33.9305, 31.1035, '22K Gold Coin Alloy'),
+        ('American Silver Eagle (1 oz)', 'COIN', 'United States', 'United States Mint', 1986, 31.1035, 31.1035, 'Fine Silver 999'),
+        ('American Platinum Eagle (1 oz)', 'COIN', 'United States', 'United States Mint', 1997, 31.1035, 31.1035, 'Fine Platinum 9995'),
+        ('Krugerrand (1 oz)', 'COIN', 'South Africa', 'South African Mint', 1967, 33.9300, 31.1035, '22K Gold Coin Alloy'),
+        ('Gold Britannia (1 oz)', 'COIN', 'United Kingdom', 'The Royal Mint', 1987, 34.0500, 31.1035, '22K Gold Coin Alloy'),
+        ('Gold Maple Leaf (1 oz)', 'COIN', 'Canada', 'Royal Canadian Mint', 1979, 31.1035, 31.1035, 'Fine Gold 24K'),
+        ('Silver Maple Leaf (1 oz)', 'COIN', 'Canada', 'Royal Canadian Mint', 1988, 31.1035, 31.1035, 'Fine Silver 999'),
+
+        -- Historic US silver.
+        ('Morgan Silver Dollar', 'COIN', 'United States', 'United States Mint', 1878, 26.7300, 24.0570, 'Coin Silver'),
+        ('Peace Silver Dollar', 'COIN', 'United States', 'United States Mint', 1921, 26.7300, 24.0570, 'Coin Silver'),
+        ('Franklin Half Dollar', 'COIN', 'United States', 'United States Mint', 1948, 12.5000, 11.2500, 'Coin Silver'),
+
+        -- Circulating US base metal. The cent and the clad coins are layered.
+        ('Lincoln Cent (Copper-Plated Zinc)', 'COIN', 'United States', 'United States Mint', 1982, 2.5000, NULL, 'Coinage Zinc Core'),
+        ('Jefferson Nickel', 'COIN', 'United States', 'United States Mint', 1938, 5.0000, NULL, 'Cupronickel 75/25'),
+        ('Roosevelt Dime (Clad)', 'COIN', 'United States', 'United States Mint', 1965, 2.2680, NULL, 'Commercial Pure Copper'),
+        ('Washington Quarter (Clad)', 'COIN', 'United States', 'United States Mint', 1965, 5.6700, NULL, 'Commercial Pure Copper'),
+        ('Sacagawea Dollar', 'COIN', 'United States', 'United States Mint', 2000, 8.1000, NULL, 'Manganese Brass'),
+
+        -- Circulating Europe, including two bimetallic coins.
+        ('2 Euro', 'COIN', 'Euro area', 'Various national mints', 2002, 8.5000, NULL, 'Nickel Brass'),
+        ('1 Euro', 'COIN', 'Euro area', 'Various national mints', 2002, 7.5000, NULL, 'Cupronickel 75/25'),
+        ('20 Euro Cent', 'COIN', 'Euro area', 'Various national mints', 2002, 5.7400, NULL, 'Nordic Gold'),
+        ('1 Euro Cent', 'COIN', 'Euro area', 'Various national mints', 2002, 2.3000, NULL, 'Coinage Steel Core'),
+        ('Two Pounds', 'COIN', 'United Kingdom', 'The Royal Mint', 1998, 12.0000, NULL, 'Nickel Brass'),
+        ('Brass Threepence', 'COIN', 'United Kingdom', 'The Royal Mint', 1937, 6.8000, NULL, 'Nickel Brass'),
+        ('1 Lira', 'COIN', 'Italy', 'Istituto Poligrafico e Zecca dello Stato', 1946, 0.6250, NULL, 'Coinage Aluminum'),
+
+        -- Ancient and colonial. Both predate ISO currency codes.
+        ('Roman Denarius', 'COIN', 'Roman Republic', 'Rome', -211, 3.9000, 3.7378, 'Britannia Silver'),
+        ('8 Reales', 'COIN', 'Spanish Empire', 'Mexico City Mint', 1732, 27.0700, 24.3630, 'Coin Silver'),
+
+        -- Privately minted rounds. Coin-shaped, but not money.
+        ('1 oz Silver Round', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Silver 999'),
+        ('1 oz Copper Round', 'ROUND', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Commercial Pure Copper'),
+
+        -- Bars.
+        ('1 oz Gold Bar', 'BAR', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Gold 24K'),
+        ('10 oz Silver Bar', 'BAR', NULL, 'Private mint', NULL, 311.0350, 311.0350, 'Fine Silver 999'),
+        ('1 kg Silver Bar', 'BAR', NULL, 'Private mint', NULL, 1000.0000, 1000.0000, 'Fine Silver 999'),
+        ('1 oz Platinum Bar', 'BAR', NULL, 'Private mint', NULL, 31.1035, 31.1035, 'Fine Platinum 9995'),
+        ('100 g Palladium Bar', 'BAR', NULL, 'Private mint', NULL, 100.0000, 100.0000, 'Fine Palladium 9995'),
+        ('Copper Ingot (5 lb)', 'INGOT', NULL, 'Private refiner', NULL, 2267.9600, 2267.9600, 'Commercial Pure Copper'),
+
+        -- Not currency, not bullion.
+        ('Bronze Commemorative Medal', 'MEDAL', NULL, 'Private mint', NULL, 45.0000, NULL, 'Tin Bronze'),
+        ('Brass Arcade Token', 'TOKEN', NULL, 'Private mint', NULL, 4.5000, NULL, 'Yellow Brass'),
+
+        -- Goldbacks: polymer notes carrying a measured gold leaf. Gross weight is
+        -- mostly polymer, so fine_metal_weight_g is the only figure that matters -
+        -- one "goldback" is 1/1000 troy ounce of 24K gold.
+        ('Utah Goldback 1', 'NOTE', 'Utah', 'Goldback Inc.', 2019, NULL, 0.0311, 'Fine Gold 24K'),
+        ('Utah Goldback 50', 'NOTE', 'Utah', 'Goldback Inc.', 2019, NULL, 1.5552, 'Fine Gold 24K'),
+        ('Nevada Goldback 5', 'NOTE', 'Nevada', 'Goldback Inc.', 2020, NULL, 0.1555, 'Fine Gold 24K')
 ) AS v(
     name,
-    country,
+    product_type,
+    issuer,
     mint,
     year_introduced,
-    alloy_name,
     gross_weight_g,
-    face_value,
-    face_value_currency_code
+    fine_metal_weight_g,
+    alloy_name
 )
-INNER JOIN alloys a ON a.name = v.alloy_name;
+INNER JOIN alloys a ON a.name = v.alloy_name
+ON CONFLICT (name) DO UPDATE SET
+    product_type = EXCLUDED.product_type,
+    issuer = EXCLUDED.issuer,
+    mint = EXCLUDED.mint,
+    year_introduced = EXCLUDED.year_introduced,
+    gross_weight_g = EXCLUDED.gross_weight_g,
+    fine_metal_weight_g = EXCLUDED.fine_metal_weight_g,
+    alloy_id = EXCLUDED.alloy_id;
+
+-- The coin subtype. Only the legal tender pieces get a row here; rounds, bars,
+-- medals, tokens and goldbacks deliberately have none.
+--
+-- face_value_currency_code uses 'XXX', the ISO 4217 code for "no currency", for
+-- pieces that predate the standard. is_legal_tender records whether the piece
+-- would still be accepted as money today - historic US coins technically would,
+-- a Roman denarius would not.
+INSERT INTO coins (mint_product_id, face_value, face_value_currency_code, is_legal_tender)
+SELECT
+    p.mint_product_id,
+    v.face_value,
+    v.face_value_currency_code,
+    v.is_legal_tender
+FROM (
+    VALUES
+        ('American Gold Eagle (1 oz)', 50.00, 'USD', TRUE),
+        ('American Silver Eagle (1 oz)', 1.00, 'USD', TRUE),
+        ('American Platinum Eagle (1 oz)', 100.00, 'USD', TRUE),
+        -- No denomination is struck on a Krugerrand; its value is the gold price.
+        ('Krugerrand (1 oz)', NULL, 'ZAR', TRUE),
+        ('Gold Britannia (1 oz)', 100.00, 'GBP', TRUE),
+        ('Gold Maple Leaf (1 oz)', 50.00, 'CAD', TRUE),
+        ('Silver Maple Leaf (1 oz)', 5.00, 'CAD', TRUE),
+        ('Morgan Silver Dollar', 1.00, 'USD', TRUE),
+        ('Peace Silver Dollar', 1.00, 'USD', TRUE),
+        ('Franklin Half Dollar', 0.50, 'USD', TRUE),
+        ('Lincoln Cent (Copper-Plated Zinc)', 0.01, 'USD', TRUE),
+        ('Jefferson Nickel', 0.05, 'USD', TRUE),
+        ('Roosevelt Dime (Clad)', 0.10, 'USD', TRUE),
+        ('Washington Quarter (Clad)', 0.25, 'USD', TRUE),
+        ('Sacagawea Dollar', 1.00, 'USD', TRUE),
+        ('2 Euro', 2.00, 'EUR', TRUE),
+        ('1 Euro', 1.00, 'EUR', TRUE),
+        ('20 Euro Cent', 0.20, 'EUR', TRUE),
+        ('1 Euro Cent', 0.01, 'EUR', TRUE),
+        ('Two Pounds', 2.00, 'GBP', TRUE),
+        -- Pre-decimal threepence, expressed in decimal pounds.
+        ('Brass Threepence', 0.0125, 'GBP', FALSE),
+        ('1 Lira', 1.00, 'ITL', FALSE),
+        ('Roman Denarius', NULL, 'XXX', FALSE),
+        ('8 Reales', NULL, 'XXX', FALSE)
+) AS v(name, face_value, face_value_currency_code, is_legal_tender)
+INNER JOIN mint_products p ON p.name = v.name
+ON CONFLICT (mint_product_id) DO UPDATE SET
+    face_value = EXCLUDED.face_value,
+    face_value_currency_code = EXCLUDED.face_value_currency_code,
+    is_legal_tender = EXCLUDED.is_legal_tender;
+
+-- How the layered pieces are built. Percentages are derived from each coin's
+-- published overall composition: for the clad quarter, cupronickel cladding is
+-- 25 percent nickel and the coin is 8.33 percent nickel overall, so the cladding
+-- must be 8.33 / 25 = one third of the weight. Where no such figure can be
+-- worked out - the bimetallic ring-to-centre split - the percentage is left NULL
+-- rather than guessed.
+WITH component_data (product_name, alloy_name, component_role, percent_of_weight) AS (
+    VALUES
+        -- 97.5% Zn overall, core is 99.2% Zn: 97.5 / 99.2 = 98.286% core.
+        ('Lincoln Cent (Copper-Plated Zinc)', 'Coinage Zinc Core', 'CORE', 98.286),
+        ('Lincoln Cent (Copper-Plated Zinc)', 'Commercial Pure Copper', 'PLATING', 1.714),
+
+        -- 8.33% Ni overall, cladding is 25% Ni: one third cladding, two thirds core.
+        ('Roosevelt Dime (Clad)', 'Cupronickel 75/25', 'CLADDING', 33.333),
+        ('Roosevelt Dime (Clad)', 'Commercial Pure Copper', 'CORE', 66.667),
+        ('Washington Quarter (Clad)', 'Cupronickel 75/25', 'CLADDING', 33.333),
+        ('Washington Quarter (Clad)', 'Commercial Pure Copper', 'CORE', 66.667),
+
+        -- 2% Ni overall, manganese brass is 4% Ni: an even split. The two halves
+        -- weigh the same, so "predominant alloy" is a coin toss here - alloy_id
+        -- names the brass because that is the part you can see.
+        ('Sacagawea Dollar', 'Manganese Brass', 'CLADDING', 50.000),
+        ('Sacagawea Dollar', 'Commercial Pure Copper', 'CORE', 50.000),
+
+        -- Bimetallic. Ring and centre swap alloys between the 1 and 2 euro.
+        ('2 Euro', 'Nickel Brass', 'RING', NULL),
+        ('2 Euro', 'Cupronickel 75/25', 'CENTER', NULL),
+        ('1 Euro', 'Cupronickel 75/25', 'RING', NULL),
+        ('1 Euro', 'Nickel Brass', 'CENTER', NULL),
+        ('Two Pounds', 'Nickel Brass', 'RING', NULL),
+        ('Two Pounds', 'Cupronickel 75/25', 'CENTER', NULL),
+
+        -- Copper-plated steel.
+        ('1 Euro Cent', 'Coinage Steel Core', 'CORE', NULL),
+        ('1 Euro Cent', 'Commercial Pure Copper', 'PLATING', NULL)
+)
+INSERT INTO mint_product_components (mint_product_id, alloy_id, component_role, percent_of_weight)
+SELECT
+    p.mint_product_id,
+    a.alloy_id,
+    d.component_role,
+    d.percent_of_weight
+FROM component_data d
+INNER JOIN mint_products p ON p.name = d.product_name
+INNER JOIN alloys a ON a.name = d.alloy_name
+ON CONFLICT (mint_product_id, alloy_id, component_role)
+DO UPDATE SET percent_of_weight = EXCLUDED.percent_of_weight;
+
+-- Same guard as the alloy compositions, for the same reason: both joins above
+-- would silently drop a row whose product or alloy name is misspelled. Layer
+-- weights only have to add up where they were stated at all.
+DO $$
+DECLARE
+    offenders text;
+BEGIN
+    SELECT string_agg(name || ' (' || total || '%)', ', ' ORDER BY name)
+    INTO offenders
+    FROM (
+        SELECT p.name, sum(c.percent_of_weight) AS total
+        FROM mint_products p
+        INNER JOIN mint_product_components c ON c.mint_product_id = p.mint_product_id
+        GROUP BY p.name
+        HAVING count(*) FILTER (WHERE c.percent_of_weight IS NULL) = 0
+           AND sum(c.percent_of_weight) <> 100
+    ) AS broken;
+
+    IF offenders IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Stated component weights must sum to 100 percent. Broken: %', offenders;
+    END IF;
+END $$;

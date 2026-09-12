@@ -5,7 +5,7 @@ from flask import Flask
 from routes.auth_routes import auth_blueprint
 from routes.alloy_element_routes import alloy_element_blueprint
 from routes.alloy_routes import alloy_blueprint
-from routes.coin_routes import coin_blueprint
+from routes.mint_product_routes import coin_blueprint, mint_product_blueprint
 from routes.element_routes import element_blueprint
 from routes.user_routes import user_blueprint
 
@@ -22,6 +22,7 @@ def create_app() -> Flask:
     app.register_blueprint(element_blueprint)
     app.register_blueprint(alloy_blueprint)
     app.register_blueprint(alloy_element_blueprint)
+    app.register_blueprint(mint_product_blueprint)
     app.register_blueprint(coin_blueprint)
     app.register_blueprint(user_blueprint)
 

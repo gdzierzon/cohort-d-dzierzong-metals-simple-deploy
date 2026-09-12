@@ -523,6 +523,47 @@
   color: var(--color-muted);
 }
 
+/* The metal a piece is mostly made of. Tinted toward the real metal where there
+   is an obvious colour for it, so a gold coin reads gold at a glance. */
+.metal-chip {
+  display: inline-block;
+  border: 1px solid var(--color-border-subtle);
+  border-color: color-mix(in srgb, var(--chip) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+  color: var(--chip);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.metal-chip { --chip: var(--color-muted); }
+.metal-chip[data-metal="GOLD"] { --chip: #e2bf7a; }
+.metal-chip[data-metal="SILVER"] { --chip: #cfd6da; }
+.metal-chip[data-metal="PLATINUM"] { --chip: #dfe6e8; }
+.metal-chip[data-metal="PALLADIUM"] { --chip: #c9d4d6; }
+.metal-chip[data-metal="COPPER"] { --chip: #e0916a; }
+.metal-chip[data-metal="NICKEL"] { --chip: #a9c9a2; }
+.metal-chip[data-metal="IRON"] { --chip: #9fb4c9; }
+.metal-chip[data-metal="ZINC"] { --chip: #9fd0e8; }
+.metal-chip[data-metal="ALUMINUM"] { --chip: #b9c2c7; }
+.metal-chip[data-metal="TIN"] { --chip: #c4b8d8; }
+.metal-chip[data-metal="TITANIUM"] { --chip: #8fc7c2; }
+.metal-chip[data-metal="MAGNESIUM"] { --chip: #d79bc4; }
+
+.category-filter__option input:not(:checked) + .metal-chip {
+  border-color: var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.category-filter__option input:not(:checked) + .use-chip {
+  opacity: 0.45;
+}
+
+.coin-card__chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
+
 /* Uses are plain and uniform - the family chip is the one that carries colour,
    and a card with four coloured use chips next to it turns into confetti. */
 .alloy-card__uses { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 1rem; }

@@ -5,7 +5,7 @@ export function navigation() {
     ? `<span>Signed in as ${state.currentUser.username}</span><a href="#/logout">Log out</a>`
     : `<a class="button" href="#/login">Log in</a>`;
   const adminLink = isAdmin() ? `<a href="#/admin">Administration</a>` : "";
-  const catalogLinks = `<a href="#/elements">Elements</a><a href="#/alloys">Alloys</a><a href="#/coins">Coins</a>`;
+  const catalogLinks = `<a href="#/elements">Elements</a><a href="#/alloys">Alloys</a><a href="#/coins">Coins &amp; Bullion</a>`;
 
   return `
     <header class="site-header">

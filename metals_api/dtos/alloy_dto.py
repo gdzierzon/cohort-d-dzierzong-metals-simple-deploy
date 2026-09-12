@@ -198,6 +198,8 @@ class AlloyResponseDTO(DataTransferObject):
     name: str
     color: str | None
     alloy_family: str
+    # Derived from the composition by the seed, never typed in.
+    primary_metal: str
     description: str | None
     uses: list[str] = field(default_factory=list)
 
@@ -208,6 +210,7 @@ class AlloyResponseDTO(DataTransferObject):
             name=alloy.name,
             color=alloy.color,
             alloy_family=alloy.alloy_family,
+            primary_metal=alloy.primary_metal,
             description=alloy.description,
             uses=sorted(link.use_code for link in alloy.use_links),
         )

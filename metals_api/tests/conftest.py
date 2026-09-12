@@ -81,6 +81,7 @@ def alloy_response_dto():
         name="Bronze",
         color="bronze",
         alloy_family="COPPER",
+        primary_metal="COPPER",
         description="Copper alloy",
         uses=["BEARING", "DECORATIVE"],
     )
@@ -98,17 +99,51 @@ def alloy_element_response_dto():
 
 
 @pytest.fixture
-def coin_response_dto():
-    from dtos import CoinResponseDTO
+def mint_product_response_dto():
+    from dtos import MintProductResponseDTO
 
-    return CoinResponseDTO(
-        coin_id=1,
+    return MintProductResponseDTO(
+        mint_product_id=1,
         name="Test Coin",
-        country="USA",
+        product_type="COIN",
+        issuer="USA",
         mint="Test Mint",
         year_introduced=2000,
-        alloy_id=2,
         gross_weight_g=Decimal("10"),
+        fine_metal_weight_g=Decimal("9"),
+        alloy_id=2,
+        alloy_name="Coin Silver",
+        alloy_family="PRECIOUS",
+        primary_metal="SILVER",
+        is_coin=True,
         face_value=Decimal("1"),
         face_value_currency_code="USD",
+        is_legal_tender=True,
+        components=[],
+    )
+
+
+@pytest.fixture
+def bar_response_dto():
+    """A product with no coins row - nothing about it is legal tender."""
+    from dtos import MintProductResponseDTO
+
+    return MintProductResponseDTO(
+        mint_product_id=2,
+        name="10 oz Silver Bar",
+        product_type="BAR",
+        issuer=None,
+        mint="Private mint",
+        year_introduced=None,
+        gross_weight_g=Decimal("311.035"),
+        fine_metal_weight_g=Decimal("311.035"),
+        alloy_id=3,
+        alloy_name="Fine Silver 999",
+        alloy_family="PRECIOUS",
+        primary_metal="SILVER",
+        is_coin=False,
+        face_value=None,
+        face_value_currency_code=None,
+        is_legal_tender=None,
+        components=[],
     )

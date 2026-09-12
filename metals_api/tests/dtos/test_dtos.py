@@ -3,12 +3,12 @@ from decimal import Decimal
 from dtos import (
     CreateAlloyDTO,
     CreateAlloyElementDTO,
-    CreateCoinDTO,
     CreateElementDTO,
+    CreateMintProductDTO,
     UpdateAlloyDTO,
     UpdateAlloyElementDTO,
-    UpdateCoinDTO,
     UpdateElementDTO,
+    UpdateMintProductDTO,
 )
 
 
@@ -106,10 +106,12 @@ def test_alloy_element_dtos_validate_percentage_range():
     ]
 
 
-def test_coin_dtos_validate_business_input_shape():
-    # Arrange
+def test_mint_product_dtos_validate_business_input_shape():
+    # Arrange - note year 400 is now VALID: the old 500-3000 window ruled out
+    # ancient coinage, and a Roman denarius is -211.
     create_data = {
         "name": "",
+        "product_type": "COIN",
         "alloy_id": 0,
         "year_introduced": 400,
         "face_value_currency_code": "US",
@@ -117,21 +119,28 @@ def test_coin_dtos_validate_business_input_shape():
     update_data = {}
 
     # Act
-    errors = CreateCoinDTO.validate(
-        create_data
-    )
-    update_errors = UpdateCoinDTO.validate(update_data)
+    errors = CreateMintProductDTO.validate(create_data)
+    update_errors = UpdateMintProductDTO.validate(update_data)
 
     # Assert
     assert errors == [
         "name must be a non-empty string.",
         "alloy_id must be a positive integer.",
-        "year_introduced must be between 500 and 3000.",
         "face_value_currency_code must contain exactly 3 characters.",
     ]
     assert update_errors == [
         "At least one field must be provided."
     ]
+
+
+def test_mint_product_rejects_an_unknown_product_type():
+    # Act
+    errors = CreateMintProductDTO.validate(
+        {"name": "Mystery", "product_type": "WIDGET", "alloy_id": 1}
+    )
+
+    # Assert
+    assert any("product_type must be one of" in error for error in errors)
 
 
 def test_every_create_dto_rejects_non_object_json():
@@ -140,7 +149,7 @@ def test_every_create_dto_rejects_non_object_json():
         CreateElementDTO,
         CreateAlloyDTO,
         CreateAlloyElementDTO,
-        CreateCoinDTO,
+        CreateMintProductDTO,
     )
 
     # Act

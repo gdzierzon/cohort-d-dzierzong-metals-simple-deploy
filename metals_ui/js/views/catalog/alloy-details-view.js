@@ -1,7 +1,7 @@
 import { getAlloyElements } from "../../api/alloy-elements-api.js";
 import { getAlloy } from "../../api/alloys-api.js";
 import { getElements } from "../../api/elements-api.js";
-import { getCoinsByAlloy } from "../../api/coins-api.js";
+import { getMintProductsByAlloy } from "../../api/coins-api.js";
 
 const alloyImageDirectory = "./assets/images/alloys";
 const elementImageDirectory = "./assets/images/elements";
@@ -35,7 +35,7 @@ export async function bindAlloyDetailsView() {
       getAlloy(alloyId),
       getAlloyElements(alloyId),
       getElements(),
-      getCoinsByAlloy(alloyId),
+      getMintProductsByAlloy(alloyId),
     ]);
     container.replaceChildren(createAlloyDetails(alloy, composition, elements, coins));
   } catch (error) {
@@ -79,7 +79,7 @@ function createAlloyDetails(alloy, composition, elements, coins) {
   coinsSection.className = "alloy-coins";
   coinsSection.innerHTML = `<div class="alloy-composition__heading"><div><p class="catalog-intro__eyebrow">Coinage</p><h2>Coins using this alloy</h2></div><p></p></div><div class="coin-grid"></div>`;
   coinsSection.querySelector(".alloy-composition__heading > p").textContent = `${coins.length} ${coins.length === 1 ? "coin" : "coins"}`;
-  coinsSection.querySelector(".coin-grid").replaceChildren(...(coins.length ? coins.map(createCoinCard) : [createStatus("No coins currently use this alloy.")]));
+  coinsSection.querySelector(".coin-grid").replaceChildren(...(coins.length ? coins.map(createCoinCard) : [createStatus("Nothing in the catalog currently uses this alloy.")]));
 
   fragment.append(hero, compositionSection, coinsSection);
   return fragment;
@@ -105,7 +105,7 @@ function createCompositionCard({ component, element }) {
 function createCoinCard(coin) {
   const card = document.createElement("a");
   card.className = "coin-card coin-card--compact";
-  card.href = `#/coins/${coin.coin_id}`;
+  card.href = `#/coins/${coin.mint_product_id}`;
   card.innerHTML = `<img><div class="coin-card__body"><span class="coin-card__country"></span><h3></h3><p class="coin-card__mint"></p><span class="composition-card__link">View coin <span aria-hidden="true">›</span></span></div>`;
   const image = card.querySelector("img");
   image.src = `${coinImageDirectory}/${slugify(coin.name)}.png`;

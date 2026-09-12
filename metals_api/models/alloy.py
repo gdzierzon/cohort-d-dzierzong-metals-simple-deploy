@@ -11,7 +11,8 @@ from models.base import Base
 if TYPE_CHECKING:
     from models.alloy_element import AlloyElement
     from models.alloy_use import AlloyUse
-    from models.coin import Coin
+    from models.mint_product import MintProduct
+    from models.mint_product_component import MintProductComponent
 
 
 class Alloy(Base):
@@ -30,10 +31,23 @@ class Alloy(Base):
         String(40),
         nullable=False,
     )
+    # The single metal this alloy is mostly made of - finer than alloy_family,
+    # which collapses gold, silver, platinum and palladium into PRECIOUS. The
+    # seed derives it from alloy_elements, so it always agrees with the
+    # composition. Coins read their metal through this rather than storing it.
+    primary_metal: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
     description: Mapped[str | None] = mapped_column(Text)
 
     # linked relationships
-    coins: Mapped[list[Coin]] = relationship(
+    mint_products: Mapped[list[MintProduct]] = relationship(
+        back_populates="alloy",
+        passive_deletes=True,
+    )
+
+    mint_product_component_links: Mapped[list[MintProductComponent]] = relationship(
         back_populates="alloy",
         passive_deletes=True,
     )

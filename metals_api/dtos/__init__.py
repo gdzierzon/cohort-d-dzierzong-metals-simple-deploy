@@ -8,10 +8,11 @@ from dtos.alloy_element_dto import (
     CreateAlloyElementDTO,
     UpdateAlloyElementDTO,
 )
-from dtos.coin_dto import (
-    CoinResponseDTO,
-    CreateCoinDTO,
-    UpdateCoinDTO,
+from dtos.mint_product_dto import (
+    CreateMintProductDTO,
+    MintProductComponentResponseDTO,
+    MintProductResponseDTO,
+    UpdateMintProductDTO,
 )
 from dtos.element_dto import (
     CreateElementDTO,
@@ -24,16 +25,17 @@ from dtos.auth_dto import LoginDTO, RegisterDTO
 __all__ = [
     "AlloyElementResponseDTO",
     "AlloyResponseDTO",
-    "CoinResponseDTO",
     "CreateAlloyDTO",
     "CreateAlloyElementDTO",
-    "CreateCoinDTO",
     "CreateElementDTO",
+    "CreateMintProductDTO",
     "ElementResponseDTO",
     "LoginDTO",
+    "MintProductComponentResponseDTO",
+    "MintProductResponseDTO",
     "RegisterDTO",
     "UpdateAlloyDTO",
     "UpdateAlloyElementDTO",
-    "UpdateCoinDTO",
     "UpdateElementDTO",
+    "UpdateMintProductDTO",
 ]
