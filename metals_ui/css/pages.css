@@ -332,8 +332,119 @@
 }
 
 .catalog-toolbar__count { color: var(--color-muted); font-size: 0.9rem; white-space: nowrap; }
+.catalog-toolbar__note { color: var(--color-gold); }
+
+/* With 118 elements the filters scroll out of view, so the toolbar follows. */
+.catalog-toolbar--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0.9rem 0;
+  background: var(--color-page);
+}
+
+.catalog-filter__toggle {
+  min-height: 2.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.catalog-filter__toggle:hover { border-color: var(--color-gold); color: var(--color-text); }
+
+.catalog-filter__toggle[aria-pressed="true"] {
+  border-color: var(--color-gold);
+  background: var(--color-surface-raised);
+  color: var(--color-gold-bright);
+}
+
+.catalog-filter__views { display: flex; gap: 0.35rem; }
+
+.category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  background: var(--color-page-soft);
+}
+
+.category-filter legend { padding: 0 0.4rem; color: var(--color-muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.category-filter__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+
+.category-filter__group-toggle {
+  border: 0;
+  border-right: 1px solid var(--color-border-subtle);
+  padding: 0.2rem 0.7rem 0.2rem 0;
+  background: transparent;
+  color: var(--color-gold-bright);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.category-filter__option { display: inline-flex; align-items: center; gap: 0.35rem; }
+.category-filter__option input { accent-color: var(--color-gold); }
+.category-filter__option input:not(:checked) + .category-chip { border-color: var(--color-border-subtle); background: transparent; color: var(--color-muted); }
+
+/* One hue per category so a chip is recognisable before it is read. */
+.category-chip {
+  display: inline-block;
+  /* Plain values first so browsers without color-mix() still get a chip. */
+  border: 1px solid var(--color-border-subtle);
+  border-color: color-mix(in srgb, var(--chip) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+  color: var(--chip);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.category-chip { --chip: var(--color-muted); }
+.category-chip[data-category="ALKALI_METAL"] { --chip: #f2a197; }
+.category-chip[data-category="ALKALINE_EARTH_METAL"] { --chip: #e8b45f; }
+.category-chip[data-category="TRANSITION_METAL"] { --chip: #e2bf7a; }
+.category-chip[data-category="POST_TRANSITION_METAL"] { --chip: #a9c9a2; }
+.category-chip[data-category="LANTHANIDE"] { --chip: #c4a8e0; }
+.category-chip[data-category="ACTINIDE"] { --chip: #d79bc4; }
+.category-chip[data-category="METALLOID"] { --chip: #8fc7c2; }
+.category-chip[data-category="NONMETAL"] { --chip: #8fb5d8; }
+.category-chip[data-category="HALOGEN"] { --chip: #9fd0e8; }
+.category-chip[data-category="NOBLE_GAS"] { --chip: #b6b0e8; }
 
 .element-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; }
+
+/* The compact alternative to the card grid: every element on one screen. */
+.element-table-wrap { overflow-x: auto; border: 1px solid var(--color-border-subtle); border-radius: var(--radius); }
+.element-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+.element-table th,
+.element-table td { padding: 0.55rem 0.85rem; text-align: left; white-space: nowrap; }
+
+.element-table thead th {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.element-table tbody tr { border-top: 1px solid var(--color-border-subtle); }
+.element-table tbody tr:hover { background: var(--color-surface); }
+.element-table tbody th { color: var(--color-gold-bright); font-family: var(--font-display); font-size: 1.1rem; }
+.element-table tbody th a { color: inherit; text-decoration: none; }
+.element-table tbody th a:hover { text-decoration: underline; }
+.element-table td { color: #e5e1d8; }
 
 .alloy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; }
 .coin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }

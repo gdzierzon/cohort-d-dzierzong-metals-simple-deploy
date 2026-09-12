@@ -29,7 +29,7 @@ class Element(Base):
     melting_point_f: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     boiling_point_f: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     color: Mapped[str | None] = mapped_column(String(50))
-    density: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    density: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     category: Mapped[str | None] = mapped_column(String(40))
     state_at_room_temp: Mapped[str | None] = mapped_column(String(20))
     
