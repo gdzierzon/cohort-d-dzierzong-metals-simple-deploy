@@ -10,6 +10,7 @@ from models.base import Base
 # import only for Pylance - ommitted for deployed code
 if TYPE_CHECKING:
     from models.alloy_element import AlloyElement
+    from models.alloy_use import AlloyUse
     from models.coin import Coin
 
 
@@ -23,6 +24,12 @@ class Alloy(Base):
         unique=True,
     )
     color: Mapped[str | None] = mapped_column(String(50))
+    # The base metal by mass fraction. Not nullable: the database enforces both
+    # presence and the allowed values, so a bad family fails at the insert.
+    alloy_family: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+    )
     description: Mapped[str | None] = mapped_column(Text)
 
     # linked relationships
@@ -32,6 +39,12 @@ class Alloy(Base):
     )
     
     element_links: Mapped[list[AlloyElement]] = relationship(
+        back_populates="alloy",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    use_links: Mapped[list[AlloyUse]] = relationship(
         back_populates="alloy",
         cascade="all, delete-orphan",
         passive_deletes=True,

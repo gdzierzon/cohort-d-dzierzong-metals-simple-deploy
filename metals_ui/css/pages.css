@@ -149,6 +149,13 @@
 .admin-field option { background: #202526; color: var(--color-text); }
 .admin-checkbox { display: flex; align-items: center; gap: 0.55rem; min-height: 2.8rem; }
 .admin-checkbox input { width: 1.1rem; height: 1.1rem; accent-color: var(--color-gold); }
+
+/* A list-valued field. It is a fieldset, so the label is a legend rather than
+   the span the other admin fields use. */
+.admin-checkgroup { min-width: 0; border: 1px solid var(--color-border-subtle); border-radius: 0.45rem; padding: 0.9rem 1rem; }
+.admin-checkgroup legend { padding: 0 0.4rem; color: #e2ddd3; font-size: 0.88rem; }
+.admin-checkgroup__options { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0 1rem; }
+.admin-checkgroup .admin-checkbox { min-height: 2.1rem; }
 .admin-form__message { grid-column: 1 / -1; min-height: 1.3rem; color: var(--color-muted); }
 .admin-form__message--error { color: #ffb7af; }
 .admin-form__submit { grid-column: 1 / -1; justify-self: start; min-width: 11rem; }
@@ -477,7 +484,52 @@
 .alloy-card__image { display: block; width: 100%; aspect-ratio: 1 / 0.82; object-fit: cover; border-bottom: 1px solid var(--color-border-subtle); }
 .alloy-card__body { padding: 1.4rem; }
 
-.alloy-card__id { color: var(--color-muted); font-size: 0.78rem; }
+/* One hue per base metal, matching the element chips in spirit. */
+.family-chip {
+  display: inline-block;
+  /* Plain values first so browsers without color-mix() still get a chip. */
+  border: 1px solid var(--color-border-subtle);
+  border-color: color-mix(in srgb, var(--chip) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+  color: var(--chip);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.family-chip { --chip: var(--color-muted); }
+.family-chip[data-family="PRECIOUS"] { --chip: #e2bf7a; }
+.family-chip[data-family="COPPER"] { --chip: #e0916a; }
+.family-chip[data-family="FERROUS"] { --chip: #9fb4c9; }
+.family-chip[data-family="ALUMINUM"] { --chip: #b9c2c7; }
+.family-chip[data-family="NICKEL"] { --chip: #a9c9a2; }
+.family-chip[data-family="TITANIUM"] { --chip: #8fc7c2; }
+.family-chip[data-family="TIN"] { --chip: #c4b8d8; }
+.family-chip[data-family="ZINC"] { --chip: #9fd0e8; }
+.family-chip[data-family="MAGNESIUM"] { --chip: #d79bc4; }
+
+.category-filter__option input:not(:checked) + .family-chip {
+  border-color: var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-muted);
+}
+
+/* Uses are plain and uniform - the family chip is the one that carries colour,
+   and a card with four coloured use chips next to it turns into confetti. */
+.alloy-card__uses { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 1rem; }
+
+.use-chip {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
 .alloy-card h2 {
   margin-top: 1.2rem;

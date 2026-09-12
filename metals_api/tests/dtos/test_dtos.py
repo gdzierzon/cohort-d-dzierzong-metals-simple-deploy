@@ -74,7 +74,8 @@ def test_alloy_dtos_validate_names_and_updates():
 
     # Assert
     assert create_errors == [
-        "name must be a non-empty string."
+        "name must be a non-empty string.",
+        "alloy_family is required.",
     ]
     assert update_errors == [
         "At least one field must be provided."

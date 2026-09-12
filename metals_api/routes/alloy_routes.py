@@ -14,12 +14,17 @@ alloy_blueprint = Blueprint(
 
 
 # http://localhost:5000/api/alloys
+# http://localhost:5000/api/alloys?family=FERROUS&family=NICKEL&use=AEROSPACE
 @alloy_blueprint.get("")
 @require_auth
 def get_all_alloys():
+    # getlist so the filters can repeat: ?family=FERROUS&family=COPPER means
+    # either family, matching how the catalog page ticks several at once.
     alloys = service.list_alloys(
         name=request.args.get("name"),
         color=request.args.get("color"),
+        families=request.args.getlist("family") or None,
+        uses=request.args.getlist("use") or None,
     )
     return jsonify([dto.to_dictionary() for dto in alloys]), 200
 

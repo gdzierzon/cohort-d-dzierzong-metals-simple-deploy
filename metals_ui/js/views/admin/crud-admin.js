@@ -54,7 +54,16 @@ export async function bindAdminCrud(config) {
 
   const startEdit = (item) => {
     editing = item;
-    config.fields.forEach((field) => setFieldValue(form.elements[field.name], item[field.name], field));
+    config.fields.forEach((field) => {
+      if (field.type === "multicheckbox") {
+        const selected = new Set(item[field.name] ?? []);
+        form.querySelectorAll(`input[name="${field.name}"]`).forEach((input) => {
+          input.checked = selected.has(input.value);
+        });
+        return;
+      }
+      setFieldValue(form.elements[field.name], item[field.name], field);
+    });
     setLockedFields(form, config, true);
     title.textContent = `Edit ${config.singular}`;
     submit.textContent = `Save changes`;
@@ -101,6 +110,10 @@ function renderField(field) {
   const max = field.max == null ? "" : ` max="${field.max}"`;
   const step = field.step == null ? "" : ` step="${field.step}"`;
   if (field.type === "checkbox") return `<label class="admin-checkbox"><input name="${field.name}" type="checkbox"> <span>${field.label}</span></label>`;
+  // A field whose value is a list, posted as a JSON array. Several same-named
+  // checkboxes mean form.elements[name] is a RadioNodeList, so this type is
+  // special-cased in buildPayload and startEdit rather than read through .value.
+  if (field.type === "multicheckbox") return `<fieldset class="admin-field admin-field--wide admin-checkgroup"><legend>${field.label}</legend><div class="admin-checkgroup__options">${(field.options || []).map((option) => `<label class="admin-checkbox"><input name="${field.name}" type="checkbox" value="${option.value}"> <span>${option.label}</span></label>`).join("")}</div></fieldset>`;
   if (field.type === "textarea") return `<label class="admin-field admin-field--wide"><span>${field.label}</span><textarea name="${field.name}" rows="3"${required}></textarea></label>`;
   if (field.type === "select") return `<label class="admin-field"><span>${field.label}</span><select name="${field.name}"${required}><option value="">${field.placeholder || "Select…"}</option>${(field.options || []).map((option) => `<option value="${option.value}">${option.label}</option>`).join("")}</select></label>`;
   return `<label class="admin-field${field.wide ? " admin-field--wide" : ""}"><span>${field.label}</span><input name="${field.name}" type="${field.type || "text"}"${required}${min}${max}${step}></label>`;
@@ -124,6 +137,12 @@ function buildPayload(form, fields, editing) {
   const payload = {};
   fields.forEach((field) => {
     if (editing && field.createOnly) return;
+    if (field.type === "multicheckbox") {
+      payload[field.name] = [...form.querySelectorAll(`input[name="${field.name}"]:checked`)].map(
+        (input) => input.value,
+      );
+      return;
+    }
     const control = form.elements[field.name];
     if (field.type === "checkbox") payload[field.name] = control.checked;
     else if (control.value === "") payload[field.name] = field.required ? control.value : null;

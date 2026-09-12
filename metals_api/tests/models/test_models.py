@@ -1,6 +1,6 @@
 from sqlalchemy.orm import configure_mappers
 
-from models import Alloy, AlloyElement, Base, Coin, Element, Role, User
+from models import Alloy, AlloyElement, AlloyUse, Base, Coin, Element, Role, User
 
 
 def test_all_models_are_registered_with_shared_metadata():
@@ -8,6 +8,7 @@ def test_all_models_are_registered_with_shared_metadata():
     expected_tables = {
         "alloys",
         "alloy_elements",
+        "alloy_uses",
         "coins",
         "elements",
         "roles",

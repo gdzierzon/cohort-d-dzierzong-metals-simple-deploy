@@ -12,7 +12,7 @@ def test_list_alloys_uses_mocked_database_session(monkeypatch, mocked_session_fa
     # Arrange
     session, session_factory, _ = mocked_session_factory
     get_alloys = MagicMock(
-        return_value=[Alloy(alloy_id=2, name="Bronze")]
+        return_value=[Alloy(alloy_id=2, name="Bronze", alloy_family="COPPER")]
     )
     monkeypatch.setattr(alloy_service, "SessionFactory", session_factory)
     monkeypatch.setattr(
@@ -26,7 +26,25 @@ def test_list_alloys_uses_mocked_database_session(monkeypatch, mocked_session_fa
 
     # Assert
     assert result[0].name == "Bronze"
-    get_alloys.assert_called_once_with(session, "bronze", "brown")
+    assert result[0].alloy_family == "COPPER"
+    get_alloys.assert_called_once_with(session, "bronze", "brown", None, None)
+
+
+def test_list_alloys_passes_family_and_use_filters(monkeypatch, mocked_session_factory):
+    # Arrange
+    session, session_factory, _ = mocked_session_factory
+    get_alloys = MagicMock(
+        return_value=[Alloy(alloy_id=5, name="304 Stainless Steel", alloy_family="FERROUS")]
+    )
+    monkeypatch.setattr(alloy_service, "SessionFactory", session_factory)
+    monkeypatch.setattr(alloy_service.alloy_repository, "get_alloys", get_alloys)
+
+    # Act
+    result = alloy_service.list_alloys(families=["FERROUS"], uses=["MEDICAL"])
+
+    # Assert
+    assert result[0].alloy_family == "FERROUS"
+    get_alloys.assert_called_once_with(session, None, None, ["FERROUS"], ["MEDICAL"])
 
 
 def test_create_alloy_rejects_duplicate_name(monkeypatch, mocked_session_factory):
@@ -41,7 +59,7 @@ def test_create_alloy_rejects_duplicate_name(monkeypatch, mocked_session_factory
 
     # Act
     with pytest.raises(BusinessValidationError) as error:
-        alloy_service.create_alloy(CreateAlloyDTO("Bronze"))
+        alloy_service.create_alloy(CreateAlloyDTO("Bronze", "COPPER"))
 
     # Assert
     assert error.value.errors == [

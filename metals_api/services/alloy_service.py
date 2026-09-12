@@ -5,9 +5,14 @@ from repositories import alloy_repository
 from services.exceptions import BusinessValidationError
 
 
-def list_alloys(name: str | None = None, color: str | None = None) -> list[AlloyResponseDTO]:
+def list_alloys(
+    name: str | None = None,
+    color: str | None = None,
+    families: list[str] | None = None,
+    uses: list[str] | None = None,
+) -> list[AlloyResponseDTO]:
     with SessionFactory() as session:
-        alloys = alloy_repository.get_alloys(session, name, color)
+        alloys = alloy_repository.get_alloys(session, name, color, families, uses)
         return [
             AlloyResponseDTO.from_model(alloy)
             for alloy in alloys
@@ -30,8 +35,16 @@ def create_alloy(dto: CreateAlloyDTO) -> AlloyResponseDTO:
                 ["An alloy with this name already exists."]
             )
 
-        alloy = Alloy(**dto.to_dictionary())
+        # uses live in their own table, so they cannot be passed to Alloy().
+        fields = dto.to_dictionary()
+        use_codes = list(fields.pop("uses", ()) or ())
+
+        alloy = Alloy(**fields)
         alloy = alloy_repository.add_alloy(session, alloy)
+
+        if use_codes:
+            alloy_repository.set_alloy_uses(session, alloy, use_codes)
+
         return AlloyResponseDTO.from_model(alloy)
 
 
@@ -51,13 +64,18 @@ def change_alloy(alloy_id: int, dto: UpdateAlloyDTO) -> AlloyResponseDTO | None:
                     ["An alloy with this name already exists."]
                 )
 
-        alloy = alloy_repository.update_alloy(
-            session,
-            alloy_id,
-            dto.to_dictionary(exclude_none=True),
-        )
+        changes = dto.to_dictionary(exclude_none=True)
+        # Pulled out before the column update: None means "leave uses alone",
+        # and exclude_none has already dropped it in that case. An empty list
+        # survives, and means "remove every use".
+        use_codes = changes.pop("uses", None)
+
+        alloy = alloy_repository.update_alloy(session, alloy_id, changes)
         if alloy is None:
             return None
+
+        if use_codes is not None:
+            alloy_repository.set_alloy_uses(session, alloy, list(use_codes))
 
         return AlloyResponseDTO.from_model(alloy)
 
